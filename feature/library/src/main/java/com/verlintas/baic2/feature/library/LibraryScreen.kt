@@ -1300,7 +1300,7 @@ private fun CuratorRunRow(run: CuratorRun) {
             else -> R.string.library_curator_trigger_other
         },
     )
-    val text = if (run.succeeded) {
+    val base = if (run.succeeded) {
         stringResource(
             R.string.library_curator_run,
             MemoryText.formatDateTime(run.ranAt),
@@ -1317,6 +1317,11 @@ private fun CuratorRunRow(run: CuratorRun) {
             trigger,
             run.error ?: "unparseable plan",
         )
+    }
+    val text = base + if (run.reviewed > 0) {
+        stringResource(R.string.library_curator_reviewed, run.reviewed)
+    } else {
+        ""
     }
     Text(
         text = text,

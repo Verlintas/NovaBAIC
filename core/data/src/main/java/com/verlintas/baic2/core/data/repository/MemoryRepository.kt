@@ -23,6 +23,7 @@ import androidx.room.withTransaction
 import com.verlintas.baic2.core.data.db.Baic2Database
 import com.verlintas.baic2.core.data.db.CoreMemoryEntity
 import com.verlintas.baic2.core.data.db.CuratorRunEntity
+import com.verlintas.baic2.core.data.db.MemoryAliasEntity
 import com.verlintas.baic2.core.data.db.MemoryHoldEntity
 import com.verlintas.baic2.core.data.db.NoteEntity
 import com.verlintas.baic2.core.data.db.NoteLinkEntity
@@ -30,6 +31,7 @@ import com.verlintas.baic2.core.data.db.NoteRevisionEntity
 import com.verlintas.baic2.core.data.mapper.ChatMapper
 import com.verlintas.baic2.core.model.CoreMemory
 import com.verlintas.baic2.core.model.CuratorRun
+import com.verlintas.baic2.core.model.MemoryAlias
 import com.verlintas.baic2.core.model.MemoryBackup
 import com.verlintas.baic2.core.model.MemoryBackupCodec
 import com.verlintas.baic2.core.model.MemoryBackupCore
@@ -37,6 +39,7 @@ import com.verlintas.baic2.core.model.MemoryBackupHold
 import com.verlintas.baic2.core.model.MemoryBackupNote
 import com.verlintas.baic2.core.model.MemoryConsolidator
 import com.verlintas.baic2.core.model.MemoryHold
+import com.verlintas.baic2.core.model.MemoryReview
 import com.verlintas.baic2.core.model.MemoryScoring
 import com.verlintas.baic2.core.model.MemoryStatus
 import com.verlintas.baic2.core.model.MemoryText
@@ -44,6 +47,7 @@ import com.verlintas.baic2.core.model.Note
 import com.verlintas.baic2.core.model.NoteKind
 import com.verlintas.baic2.core.model.NoteRevision
 import com.verlintas.baic2.core.model.NoteSource
+import com.verlintas.baic2.core.model.ReviewCandidate
 import com.verlintas.baic2.core.model.ScoredNote
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -332,6 +336,7 @@ class MemoryRepository @Inject constructor(
                 revised = run.revised,
                 forgotten = run.forgotten,
                 rehearsed = run.rehearsed,
+                reviewed = run.reviewed,
                 parsed = run.parsed,
                 error = run.error,
             ),
@@ -345,6 +350,66 @@ class MemoryRepository @Inject constructor(
 
     /** Epoch of the newest consolidation pass; 0 when none ever ran. */
     suspend fun lastCuratorRunAt(): Long = db.curatorRunDao().latestRanAt() ?: 0L
+
+    /** Dream-cycle candidates: contradictions, expiring values, cold traces. */
+    suspend fun selfReviewCandidates(now: Long, limit: Int = 8): List<ReviewCandidate> =
+        MemoryReview.candidates(
+            db.noteDao().getActive(PAGE_SIZE).map(mapper::noteToModel),
+            now,
+            limit,
+        )
+
+    /** "妈妈 -> 张兰": how the user refers to something vs. its stored name. */
+    suspend fun setAlias(alias: String, entity: String): Boolean {
+        val a = alias.trim()
+        val e = entity.trim()
+        if (a.isEmpty() || e.isEmpty() || a.equals(e, ignoreCase = true)) return false
+        db.memoryAliasDao().upsert(
+            MemoryAliasEntity(alias = a, entity = e, createdAt = System.currentTimeMillis()),
+        )
+        return true
+    }
+
+    suspend fun removeAlias(alias: String): Boolean {
+        val a = alias.trim()
+        if (a.isEmpty()) return false
+        val existed = db.memoryAliasDao().getAll().any { it.alias.equals(a, ignoreCase = true) }
+        if (existed) db.memoryAliasDao().delete(a)
+        return existed
+    }
+
+    suspend fun aliases(): List<MemoryAlias> =
+        db.memoryAliasDao().getAll().map {
+            MemoryAlias(alias = it.alias, entity = it.entity, createdAt = it.createdAt)
+        }
+
+    private suspend fun expandAliases(names: List<String>): List<String> {
+        val map = db.memoryAliasDao().getAll().associate { it.alias.lowercase() to it.entity }
+        if (map.isEmpty()) return names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        return names.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .flatMap { name ->
+                val canonical = map[name.lowercase()]
+                if (canonical == null) sequenceOf(name) else sequenceOf(name, canonical)
+            }
+            .distinct()
+            .toList()
+    }
+
+    /** Active notes about a name (aliases expanded), newest first. No side effects. */
+    suspend fun notesForEntity(raw: String, limit: Int = 80): List<Note> {
+        val names = expandAliases(listOf(raw))
+        if (names.isEmpty()) return emptyList()
+        val merged = LinkedHashMap<Long, Note>()
+        names.forEach { name ->
+            db.noteDao().getByEntity(MemoryText.entityLikePattern(name), limit)
+                .forEach { row -> merged[row.id] = mapper.noteToModel(row) }
+        }
+        return merged.values
+            .sortedByDescending { it.whenAt ?: it.updatedAt }
+            .take(limit)
+    }
 
     /** Cheap snapshot for the always-on memory state line. */
     suspend fun memoryStatus(lastUserActivityAt: Long? = null): MemoryStatus {
@@ -382,6 +447,7 @@ class MemoryRepository @Inject constructor(
         revised = entity.revised,
         forgotten = entity.forgotten,
         rehearsed = entity.rehearsed,
+        reviewed = entity.reviewed,
         parsed = entity.parsed,
         error = entity.error,
     )
@@ -597,12 +663,8 @@ class MemoryRepository @Inject constructor(
         limit: Int = 6,
         feedback: Boolean = true,
     ): List<ScoredNote> {
-        val names = entities.asSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .take(6)
-            .toList()
+        // Aliases resolve to the canonical name the notes are filed under.
+        val names = expandAliases(entities).take(6)
         if (names.isEmpty()) return emptyList()
         val merged = LinkedHashMap<Long, Note>()
         names.forEach { entity ->
@@ -621,12 +683,13 @@ class MemoryRepository @Inject constructor(
     }
 
     /** Distinct entity names known to memory, for context-dependent priming. */
-    suspend fun knownEntities(): List<String> =
-        db.noteDao().activeEntityBlobs()
+    suspend fun knownEntities(): List<String> {
+        val names = db.noteDao().activeEntityBlobs()
             .asSequence()
             .flatMap { MemoryText.decodeEntities(it).asSequence() }
-            .distinct()
-            .toList()
+        val aliasKeys = db.memoryAliasDao().getAll().asSequence().map { it.alias }
+        return (names + aliasKeys).distinct().toList()
+    }
 
     /**
      * Cue-driven recall. When [spread] is on, the top cue hits act as seeds and

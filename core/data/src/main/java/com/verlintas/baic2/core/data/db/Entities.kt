@@ -169,8 +169,17 @@ data class CuratorRunEntity(
     val revised: Int,
     val forgotten: Int,
     val rehearsed: Int,
+    val reviewed: Int,
     val parsed: Boolean,
     val error: String?,
+)
+
+/** "妈妈 -> 张兰": how the user refers to something vs. its stored name. */
+@Entity(tableName = "memory_aliases")
+data class MemoryAliasEntity(
+    @PrimaryKey val alias: String,
+    val entity: String,
+    val createdAt: Long,
 )
 
 @Entity(

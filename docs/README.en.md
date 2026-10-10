@@ -30,7 +30,7 @@ BetterAIChat2 is the successor rewrite (codename Nova) of [BetterAIChat](https:/
 
 It is a **local-first** AI agent — API keys are encrypted with the Android Keystore and stay on the device. There is no cloud, no telemetry, and no account. Through **function calling**, the AI actually operates your phone: read the screen, tap, type, browse files, set reminders, and run automations.
 
-- **It really touches the device**: 56 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, and Shizuku shell
+- **It really touches the device**: 57 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, and Shizuku shell
 - **No model lock-in**: DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / any compatible gateway — switch any time
 - **Four modes**: from plain chat, to read-only research, to per-call confirmation, to budgeted autonomous runs
 - **Unattended operation**: scheduled tasks, foreground services, subagents, remote MCP tools, and Skills
@@ -93,7 +93,7 @@ Things to try (`Act` / `Max` mode):
 - Three protocol adapters: OpenAI-compatible, Anthropic Messages, and Google Gemini; unified retries, error classification, and rate-limit handling
 - Attachments: images (vision models), text files, Word / Excel / PDF (parsed on-device; PDFs are rasterized and OCR'd)
 - Voice input, hands-free conversation, message reading (TTS), and an audio-transcription tool
-- **Biomimetic memory**: a constant-size core (about you / what's ongoing), correctable on the spot with `core_memory_update`; cross-conversation episodic recall (`memory_search` / `memory_read`, speaker-weighted, entity-aware, ranked with weak-match labels); deliberate note-taking with in-place updates, batch writes and forgetting (`memory_write` / `memory_forget`, soft or hard); **privacy holds** (`memory_hold`: "don't record this" becomes executable state that both the writer and the curator must respect); `memory_overview` for a one-call map; two-hop Hebbian spreading activation, prospective time-based priming, spaced-repetition strength, pattern-completion reconsolidation, **source monitoring** (user > assistant > external), **entity memory**, **sleep maintenance** (rehearsing fading notes, pruning unused ones) and **suppression fingerprints**. Rewritten notes keep their **version history** (visible in the Library) and can be **permanently erased** with a long-press. Every note cites its **evidence** (the conversation and message it came from), perishable facts carry an **expiry**, recall supports **time travel** (`at=` replays the version that was true then) and contradictions are surfaced instead of silently kept. The Library also offers **JSON export/import** for notes, core memory and holds, plus the **curator log** (an empty plan and a failed run no longer look the same). Raw history is never summarized away; context compression (>85% automatic) still creates a **reversible snapshot**
+- **Biomimetic memory**: a constant-size core (about you / what's ongoing), correctable on the spot with `core_memory_update`; cross-conversation episodic recall (`memory_search` / `memory_read`, speaker-weighted, entity-aware, ranked with weak-match labels); deliberate note-taking with in-place updates, batch writes and forgetting (`memory_write` / `memory_forget`, soft or hard); **privacy holds** (`memory_hold`: "don't record this" becomes executable state that both the writer and the curator must respect); **aliases** (`memory_alias`: "妈妈" resolves to "张兰" for entity recall and priming, pinyin included); `memory_overview` for a one-call map; two-hop Hebbian spreading activation, prospective time-based priming, spaced-repetition strength, pattern-completion reconsolidation, **source monitoring** (user > assistant > external), **entity memory**, **sleep maintenance** (rehearsing fading notes, pruning unused ones) and **suppression fingerprints**. Rewritten notes keep their **version history** (visible in the Library) and can be **permanently erased** with a long-press. Every note cites its **evidence** (the conversation and message it came from), perishable facts carry an **expiry**, recall supports **time travel** (`at=` replays the version that was true then) and contradictions are surfaced instead of silently kept. The Library also offers **JSON export/import** for notes, core memory and holds, plus the **curator log** (an empty plan and a failed run no longer look the same). Raw history is never summarized away; context compression (>85% automatic) still creates a **reversible snapshot**
 - Context meter: live token usage and percentage; AI-generated titles; conversation search, starred messages, Markdown export
 
 ### Agents & modes
@@ -107,7 +107,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 | `Act` | Executes tools, confirming each call |
 | `Max` | Autonomous runs: persistent Run records, budgets (60 rounds / 160 tool calls / 60 minutes), runs in background |
 
-### AI × device (56 built-in tools)
+### AI × device (57 built-in tools)
 
 **Perception & UI automation (accessibility + vision)**
 
@@ -221,7 +221,7 @@ core:runtime       reserved runtime layer (scheduling currently lives in device:
 core:designsystem  design tokens and components
 feature:*          chat / conversations / tasks / settings / agents / library
 device:api|impl    capture / OCR / accessibility / speech / reminders / run notifications
-tools              56 built-in tools + automations + skills + subagents
+tools              57 built-in tools + automations + skills + subagents
 mcp                remote MCP client         eval          scenario evaluation harness
 ```
 

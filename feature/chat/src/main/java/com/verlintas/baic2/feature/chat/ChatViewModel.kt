@@ -1211,6 +1211,7 @@ class ChatViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val fading = memoryRepository.rehearsalCandidates(now)
         val holds = memoryRepository.listHolds()
+        val review = memoryRepository.selfReviewCandidates(now, REVIEW_CANDIDATES)
         val raw = try {
             auxiliaryTasks.complete(
                 config = config,
@@ -1221,6 +1222,7 @@ class ChatViewModel @Inject constructor(
                     coreBlocks = MemoryPrompt.coreBlocks(core),
                     fading = MemoryPrompt.fading(fading, now),
                     holds = MemoryPrompt.holds(holds),
+                    selfReview = MemoryPrompt.review(review, now),
                 ),
                 maxTokens = 900,
                 temperature = 0.2,
@@ -1234,6 +1236,7 @@ class ChatViewModel @Inject constructor(
                 notesScanned = notes.size,
                 parsed = false,
                 error = e.message ?: "consolidation request failed",
+                reviewed = review.size,
             )
             return null
         }
@@ -1246,6 +1249,7 @@ class ChatViewModel @Inject constructor(
                 notesScanned = notes.size,
                 parsed = false,
                 error = "the model replied without a plan JSON",
+                reviewed = review.size,
             )
             return null
         }
@@ -1300,6 +1304,9 @@ class ChatViewModel @Inject constructor(
         if (plan.coreUser != null || plan.coreContext != null) {
             memoryRepository.setCore(user = plan.coreUser, context = plan.coreContext)
         }
+        plan.aliases.forEach { alias ->
+            memoryRepository.setAlias(alias.alias, alias.entity)
+        }
         logCuratorRun(
             trigger = trigger,
             messages = messages,
@@ -1309,6 +1316,7 @@ class ChatViewModel @Inject constructor(
             revised = revised,
             forgotten = forgotten,
             rehearsed = rehearsed,
+            reviewed = review.size,
         )
         return CuratorOutcome(added, revised, forgotten)
     }
@@ -1324,6 +1332,7 @@ class ChatViewModel @Inject constructor(
         revised: Int = 0,
         forgotten: Int = 0,
         rehearsed: Int = 0,
+        reviewed: Int = 0,
     ) {
         runCatching {
             memoryRepository.recordCuratorRun(
@@ -1339,6 +1348,7 @@ class ChatViewModel @Inject constructor(
                     revised = revised,
                     forgotten = forgotten,
                     rehearsed = rehearsed,
+                    reviewed = reviewed,
                     parsed = parsed,
                     error = error,
                 ),
@@ -1479,6 +1489,7 @@ class ChatViewModel @Inject constructor(
         /** A marathon foreground session still consolidates after this gap. */
         private const val TIME_CURATE_MS = 12 * 3_600_000L
         private const val CURATOR_NOTES = 60
+        private const val REVIEW_CANDIDATES = 8
         private const val PREFETCH_LIMIT = 4
         private const val UPCOMING_LIMIT = 2
         private const val STALE_TOOL_RESULT_MS = 3_600_000L

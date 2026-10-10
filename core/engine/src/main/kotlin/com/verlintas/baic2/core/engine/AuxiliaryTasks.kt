@@ -56,18 +56,25 @@ data class CuratorRevise(
     val importance: Int?,
 )
 
+/** How the user refers to something vs. its stored name ("妈妈" -> "张兰"). */
+data class CuratorAlias(
+    val alias: String,
+    val entity: String,
+)
+
 data class CuratorPlan(
     val remember: List<CuratorNote> = emptyList(),
     val revise: List<CuratorRevise> = emptyList(),
     val forget: List<Long> = emptyList(),
     /** Fading notes the rehearsal decided to keep: they get reinforced. */
     val rehearseKeep: List<Long> = emptyList(),
+    val aliases: List<CuratorAlias> = emptyList(),
     val coreUser: String? = null,
     val coreContext: String? = null,
 ) {
     val isEmpty: Boolean
         get() = remember.isEmpty() && revise.isEmpty() && forget.isEmpty() &&
-            rehearseKeep.isEmpty() && coreUser == null && coreContext == null
+            rehearseKeep.isEmpty() && aliases.isEmpty() && coreUser == null && coreContext == null
 }
 
 /**
@@ -134,6 +141,7 @@ class AuxiliaryTasks(
             "\"when\":\"2026-09-12\",\"expires\":\"12h\",\"source\":\"user\",\"entities\":[\"张伟\"]}]," +
             "\"revise\":[{\"id\":12,\"content\":\"...\",\"importance\":4}]," +
             "\"forget\":[9],\"rehearse_keep\":[7]," +
+            "\"aliases\":[{\"alias\":\"妈妈\",\"entity\":\"张兰\"}]," +
             "\"core_user\":\"...\",\"core_context\":\"...\"}\n\n" +
             "Rules:\n" +
             "- remember: at most 5 durable, high-value items (stable preferences, ongoing projects, " +
@@ -147,6 +155,11 @@ class AuxiliaryTasks(
             "a duration like 12h/3d or a date; durable facts must omit it.\n" +
             "- numbers: never remember tool counts, version numbers, prices or other values a new " +
             "release can change - they rot; if one truly matters, qualify it with a date.\n" +
+            "- aliases: when the conversation shows how the user refers to someone or something " +
+            "(\"我妈张兰\", \"my buddy Li\"), map alias -> stored name, including pinyin/latin " +
+            "spellings they might type; at most 5, never invented.\n" +
+            "- self-review: for the candidates below, verify against the conversation and then " +
+            "confirm (rehearse_keep), sharpen (revise), or retire (forget) each one.\n" +
             "- revise: fix or sharpen an existing note by its #id when new information updates it; " +
             "prefer revise over remember whenever a note already covers the topic, even if the " +
             "wording differs; include only the fields that change.\n" +
@@ -183,12 +196,15 @@ class AuxiliaryTasks(
             coreBlocks: String,
             fading: String = "(none)",
             holds: String = "(none)",
+            selfReview: String = "(none)",
         ): String =
             buildString {
                 append("Core memory now:\n").append(coreBlocks).append("\n\n")
                 append("Existing notes:\n").append(inventory).append("\n\n")
                 append("Fading notes (rehearsal):\n").append(fading).append("\n\n")
                 append("Holds (never record anything matching these):\n").append(holds).append("\n\n")
+                append("Self-review candidates (dream cycle - faint, cold or contradictory):\n")
+                    .append(selfReview).append("\n\n")
                 append("Recent conversation (oldest first):\n").append(transcript)
             }
 
@@ -247,11 +263,22 @@ class AuxiliaryTasks(
             val rehearseKeep = (element["rehearse_keep"] as? JsonArray).orEmpty()
                 .mapNotNull { (it as? JsonPrimitive)?.longOrNull?.takeIf { id -> id > 0 } }
                 .take(MAX_REHEARSE)
+            val aliases = (element["aliases"] as? JsonArray).orEmpty()
+                .mapNotNull { item ->
+                    val objectItem = item as? JsonObject ?: return@mapNotNull null
+                    val alias = objectItem.string("alias")?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: return@mapNotNull null
+                    val entity = objectItem.string("entity")?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: return@mapNotNull null
+                    CuratorAlias(alias = alias.take(40), entity = entity.take(40))
+                }
+                .take(MAX_ALIASES)
             return CuratorPlan(
                 remember = remember,
                 revise = revise,
                 forget = forget,
                 rehearseKeep = rehearseKeep,
+                aliases = aliases,
                 coreUser = element.string("core_user")?.trim()?.takeIf { it.isNotEmpty() }
                     ?.take(MAX_CORE_CHARS),
                 coreContext = element.string("core_context")?.trim()?.takeIf { it.isNotEmpty() }
@@ -300,6 +327,7 @@ class AuxiliaryTasks(
         private const val MAX_REVISE = 6
         private const val MAX_FORGET = 8
         private const val MAX_REHEARSE = 8
+        private const val MAX_ALIASES = 5
         private const val MAX_ENTITIES = 6
         private const val MAX_NOTE_CHARS = 400
         private const val MAX_CORE_CHARS = 600

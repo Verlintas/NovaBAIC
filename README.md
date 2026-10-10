@@ -30,7 +30,7 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
 
 它是**本地优先**的 AI 智能体 —— API Key 经 Android Keystore 加密留在设备上，没有云端、没有遥测、不需要账号；AI 通过**函数调用**真实操作你的手机：看屏、点击、输入、读写文件、设置提醒、跑自动化。
 
-- **真操作设备**：56 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理与 Shizuku shell
+- **真操作设备**：57 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理与 Shizuku shell
 - **不锁定模型**：DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / 任意兼容网关，随时切换
 - **四种模式**：从纯聊天到逐项确认，再到带预算约束的自主运行
 - **无人值守**：定时任务、前台服务、子代理、MCP 远程工具、Skills 技能
@@ -93,7 +93,7 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
 - 三家协议适配：OpenAI 兼容、Anthropic Messages、Google Gemini；统一重试、错误分类与速率限制处理
 - 附件：图片（视觉模型）、文本文件、Word / Excel / PDF（本地解析，PDF 栅格化后 OCR）
 - 语音输入、免手对话、消息朗读；语音转写工具
-- **仿生记忆**：常驻核心记忆（关于你 / 正在进行，占用恒定，可被 `core_memory_update` 当场纠正）+ 跨会话情景检索（`memory_search` / `memory_read`，按说话人加权、支持实体检索、带排名与弱匹配标注）+ 主动记录/原地更新/遗忘（`memory_write` 支持批量与 `replaces` 原地改写、`memory_forget` 软删/硬删）；**隐私保留**（`memory_hold`：用户说"别记"就变成可执行状态，curator 与写入路径强制遵守）；`memory_overview` 一键总览；联想链接（两跳扩散唤醒）、前瞻记忆、间隔重复、模式补全、**来源监控**、**实体记忆**、**睡眠维护**（预演+修剪）、**抑制指纹**；笔记改写保留**历史版本**（库内可查），可长按**彻底删除**；每条笔记带**出处**（可从库内回到原话）、易腐事实带**过期**、检索支持**时间旅行**（`at=` 回放当时版本）、冲突会显式提示（而不是悄悄留两条）；库内可**导出/导入**记忆 JSON、查看**策展人日志**（空计划与运行失败不再混淆）；原文永不摘要化；上下文压缩（>85% 自动，压缩前生成**可回滚快照**）
+- **仿生记忆**：常驻核心记忆（关于你 / 正在进行，占用恒定，可被 `core_memory_update` 当场纠正）+ 跨会话情景检索（`memory_search` / `memory_read`，按说话人加权、支持实体检索、带排名与弱匹配标注）+ 主动记录/原地更新/遗忘（`memory_write` 支持批量与 `replaces` 原地改写、`memory_forget` 软删/硬删）；**隐私保留**（`memory_hold`：用户说"别记"就变成可执行状态，curator 与写入路径强制遵守）；**别名**（`memory_alias`："妈妈"→"张兰"，实体召回与预取自动归一，拼音拼写也行）；`memory_overview` 一键总览；联想链接（两跳扩散唤醒）、前瞻记忆、间隔重复、模式补全、**来源监控**、**实体记忆**、**睡眠维护**（预演+修剪）、**抑制指纹**；笔记改写保留**历史版本**（库内可查），可长按**彻底删除**；每条笔记带**出处**（可从库内回到原话）、易腐事实带**过期**、检索支持**时间旅行**（`at=` 回放当时版本）、冲突会显式提示（而不是悄悄留两条）；库内可**导出/导入**记忆 JSON、查看**策展人日志**（空计划与运行失败不再混淆）；原文永不摘要化；上下文压缩（>85% 自动，压缩前生成**可回滚快照**）
 - 上下文占用表：实时显示 token 用量与百分比；AI 自动标题；对话搜索、收藏、Markdown 导出分享
 
 ### Agents 与模式
@@ -107,7 +107,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 | `Act` | 执行工具，逐项确认 |
 | `Max` | 自主运行：持久化 Run、预算约束（60 轮 / 160 次工具调用 / 60 分钟）、可后台 |
 
-### AI × 设备（56 个内置工具）
+### AI × 设备（57 个内置工具）
 
 **看屏与操作（无障碍 + 视觉）**
 
@@ -221,7 +221,7 @@ core:runtime       运行层预留（当前调度实现位于 device:impl / tool
 core:designsystem  设计系统 token 与组件
 feature:*          chat / conversations / tasks / settings / agents / library
 device:api|impl    截图 / OCR / 无障碍 / 语音 / 提醒 / 运行通知
-tools              56 个内置工具 + 自动化 + 技能 + 子代理
+tools              57 个内置工具 + 自动化 + 技能 + 子代理
 mcp                远程 MCP 客户端             eval          场景评测 harness
 ```
 

@@ -183,6 +183,9 @@ class MemorySearchTool(
                     }
                     if (at == null) closestBlock(query)?.let { append('\n').append(it).append('\n') }
                 }
+                if (entity != null && at == null) {
+                    entityTimeline(entity, now)?.let { append('\n').append(it).append('\n') }
+                }
                 if (hits.isNotEmpty()) {
                     append("\nMessages (ranked; user turns weigh double; scores relative within this set; ")
                         .append("use memory_read with conversation_id + message_id for more):\n")
@@ -219,6 +222,54 @@ class MemorySearchTool(
     }
 
     /** Never an empty exit: the closest notes by text similarity, clearly weak. */
+    /**
+     * "关于某人的一切": current facts first, then the history behind them.
+     * Read-only; aliases resolve to the stored name before querying.
+     */
+    private suspend fun entityTimeline(entity: String, now: Long): String? {
+        val all = memoryRepository.notesForEntity(entity, limit = 80)
+        if (all.isEmpty()) return null
+        val aliases = memoryRepository.aliases()
+            .filter { it.entity.equals(entity, ignoreCase = true) }
+            .map { it.alias }
+        val current = all.filter { !it.isExpired(now) }
+            .sortedWith(
+                compareByDescending<Note> { it.pinned }
+                    .thenByDescending { it.importance }
+                    .thenByDescending { it.updatedAt },
+            )
+            .take(6)
+        val currentIds = current.map { it.id }.toSet()
+        val history = all.filter { it.id !in currentIds }
+            .sortedByDescending { it.whenAt ?: it.updatedAt }
+            .take(8)
+        return buildString {
+            append("Timeline for ").append(entity)
+            if (aliases.isNotEmpty()) {
+                append(" (also known as: ").append(aliases.joinToString(", ")).append(')')
+            }
+            append(" - ").append(all.size).append(" notes:\n")
+            if (current.isNotEmpty()) {
+                append("Current:\n")
+                current.forEach { note ->
+                    append("- #").append(note.id).append(" [").append(note.kind.wire())
+                        .append(" i").append(note.importance).append("] ")
+                        .append(note.content.replace('\n', ' ').take(160)).append('\n')
+                }
+            }
+            if (history.isNotEmpty()) {
+                append("History (newest first):\n")
+                history.forEach { note ->
+                    val whenLabel = note.whenAt?.let { MemoryText.dateOnly(it) }
+                        ?: MemoryText.dateOnly(note.updatedAt)
+                    append("- ").append(whenLabel).append(" #").append(note.id)
+                        .append(" [").append(note.kind.wire()).append("] ")
+                        .append(note.content.replace('\n', ' ').take(160)).append('\n')
+                }
+            }
+        }.trim()
+    }
+
     private suspend fun closestBlock(query: String): String? {
         if (query.isBlank()) return null
         val closest = memoryRepository.closestNotes(query)
@@ -677,6 +728,52 @@ class MemoryHoldTool(
     }
 }
 
+/** "妈妈" -> "张兰": keep how the user refers to people and things. */
+class MemoryAliasTool(
+    private val memoryRepository: MemoryRepository,
+) : DeviceTool {
+
+    override val spec = ToolSpec(
+        name = "memory_alias",
+        description = "Map how the user refers to someone or something to the canonical name it " +
+            "is stored under (妈妈 -> 张兰). Aliases feed entity recall and priming, and can be " +
+            "pinyin or latin spellings the user is likely to type. Only store aliases the user " +
+            "actually uses; don't invent them. Use remove=true to delete one.",
+        parametersJson = """
+            {"type":"object","properties":{
+              "alias":{"type":"string","description":"what the user says, e.g. 妈妈 or zhanglan"},
+              "entity":{"type":"string","description":"the stored name it refers to, e.g. 张兰"},
+              "remove":{"type":"boolean","description":"set true to delete this alias instead"}
+            },"required":["alias"]}
+        """.trimIndent(),
+        alwaysAvailable = true,
+    )
+
+    override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
+        val alias = arguments.string("alias")?.trim().orEmpty()
+        if (alias.isEmpty()) return ToolResult.Failure("Missing 'alias' argument")
+        val remove = (arguments["remove"] as? JsonPrimitive)?.booleanOrNull == true
+        if (remove) {
+            return if (memoryRepository.removeAlias(alias)) {
+                ToolResult.Success("Alias '$alias' removed.")
+            } else {
+                ToolResult.Failure("No alias '$alias' is stored.")
+            }
+        }
+        val entity = arguments.string("entity")?.trim().orEmpty()
+        if (entity.isEmpty()) {
+            return ToolResult.Failure("Provide 'entity' (the stored name) or remove=true.")
+        }
+        return if (memoryRepository.setAlias(alias, entity)) {
+            ToolResult.Success(
+                "Alias stored: '$alias' -> '$entity'. Recall and priming now treat them as one.",
+            )
+        } else {
+            ToolResult.Failure("Alias and entity must be non-empty and different.")
+        }
+    }
+}
+
 /** Fix the always-on core the moment the user corrects it. */
 class CoreMemoryUpdateTool(
     private val memoryRepository: MemoryRepository,
@@ -757,6 +854,7 @@ class MemoryOverviewTool(
         val core = memoryRepository.getCore()
         val notes = memoryRepository.listActive(500)
         val holds = memoryRepository.listHolds()
+        val aliases = memoryRepository.aliases()
         val now = System.currentTimeMillis()
         val counts = notes.groupingBy { it.kind }.eachCount()
             .entries.sortedByDescending { it.value }
@@ -781,6 +879,11 @@ class MemoryOverviewTool(
                 if (counts.isNotEmpty()) append(" (").append(counts).append(')')
                 append('\n')
                 if (entities.isNotEmpty()) append("Entities: ").append(entities).append('\n')
+                if (aliases.isNotEmpty()) {
+                    append("Aliases: ").append(
+                        aliases.take(10).joinToString(", ") { "${it.alias}→${it.entity}" },
+                    ).append('\n')
+                }
                 append("Holds (never record): ").append(holds.size)
                 if (holds.isNotEmpty()) {
                     append(" - ").append(holds.take(3).joinToString("; ") { it.content })

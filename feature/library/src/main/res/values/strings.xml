@@ -27,6 +27,7 @@
     <string name="library_curator_trigger_time">定时固化</string>
     <string name="library_curator_trigger_manual">手动整理</string>
     <string name="library_curator_trigger_other">自动</string>
+    <string name="library_curator_reviewed"> · 复查 %1$d</string>
     <string name="library_import_title">导入结果</string>
     <string name="library_import_result">已导入 %1$d 条 · 合并 %2$d 条 · 跳过 %3$d 条 · 新增 hold %4$d 条</string>
     <string name="library_import_failed">文件无法解析，未导入任何内容</string>

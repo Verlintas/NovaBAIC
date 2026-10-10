@@ -35,6 +35,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         NoteRevisionEntity::class,
         MemoryHoldEntity::class,
         CuratorRunEntity::class,
+        MemoryAliasEntity::class,
         CoreMemoryEntity::class,
         PlanEntity::class,
         AutomationEntity::class,
@@ -42,7 +43,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SnapshotEntity::class,
         ScheduledTaskEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 abstract class Baic2Database : RoomDatabase() {
@@ -65,6 +66,8 @@ abstract class Baic2Database : RoomDatabase() {
 
     abstract fun curatorRunDao(): CuratorRunDao
 
+    abstract fun memoryAliasDao(): MemoryAliasDao
+
     abstract fun coreMemoryDao(): CoreMemoryDao
 
     abstract fun planDao(): PlanDao
@@ -78,6 +81,25 @@ abstract class Baic2Database : RoomDatabase() {
     abstract fun scheduledTaskDao(): ScheduledTaskDao
 
     companion object {
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // "妈妈" -> "张兰": alias resolution for recall and priming.
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS memory_aliases (
+                        alias TEXT PRIMARY KEY NOT NULL,
+                        entity TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                // The dream cycle reviews a handful of notes per pass.
+                db.execSQL(
+                    "ALTER TABLE curator_runs ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         val MIGRATION_18_19 = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Consolidation becomes observable: what ran, what it changed,

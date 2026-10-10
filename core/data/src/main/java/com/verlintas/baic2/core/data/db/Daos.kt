@@ -606,6 +606,19 @@ interface CuratorRunDao {
 }
 
 @Dao
+interface MemoryAliasDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: MemoryAliasEntity)
+
+    @Query("DELETE FROM memory_aliases WHERE alias = :alias COLLATE NOCASE")
+    suspend fun delete(alias: String)
+
+    @Query("SELECT * FROM memory_aliases ORDER BY alias ASC")
+    suspend fun getAll(): List<MemoryAliasEntity>
+}
+
+@Dao
 interface NoteLinkDao {
 
     @Insert

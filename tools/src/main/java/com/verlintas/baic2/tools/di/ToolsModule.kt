@@ -350,6 +350,12 @@ object ToolsModule {
 
     @Provides
     @IntoSet
+    fun memoryAliasTool(
+        memoryRepository: com.verlintas.baic2.core.data.repository.MemoryRepository,
+    ): DeviceTool = com.verlintas.baic2.tools.memory.MemoryAliasTool(memoryRepository)
+
+    @Provides
+    @IntoSet
     fun coreMemoryUpdateTool(
         memoryRepository: com.verlintas.baic2.core.data.repository.MemoryRepository,
     ): DeviceTool = com.verlintas.baic2.tools.memory.CoreMemoryUpdateTool(memoryRepository)

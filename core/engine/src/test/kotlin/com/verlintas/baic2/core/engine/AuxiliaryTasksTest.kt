@@ -180,4 +180,21 @@ class AuxiliaryTasksTest {
         assertEquals(listOf("张伟", "咖啡", "x", "y", "z", "w"), plan.remember[0].entities)
         assertEquals(listOf(3L, 4L), plan.rehearseKeep)
     }
+
+    @Test
+    fun parseCuratorPlanReadsAliases() {
+        val raw = """
+            {"aliases":[{"alias":"妈妈","entity":"张兰"},{"alias":"zhanglan","entity":"张兰"},
+             {"alias":"","entity":"x"},{"alias":"noEntity","entity":""}],
+             "remember":[]}
+        """.trimIndent()
+
+        val plan = AuxiliaryTasks.parseCuratorPlan(raw)
+
+        assertEquals(
+            listOf(CuratorAlias("妈妈", "张兰"), CuratorAlias("zhanglan", "张兰")),
+            plan.aliases,
+        )
+        assertTrue(!plan.isEmpty)
+    }
 }

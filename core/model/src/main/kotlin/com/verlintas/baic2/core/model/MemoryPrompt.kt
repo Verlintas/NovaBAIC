@@ -181,6 +181,18 @@ object MemoryPrompt {
      * Sleep rehearsal feed: valuable traces whose retrievability is fading -
      * the curator decides keep (reinforce), revise or forget.
      */
+    /**
+     * Dream-cycle feed: notes worth a second look (contradictions, expired
+     * values, cold traces) with the reason each was picked.
+     */
+    fun review(candidates: List<ReviewCandidate>, now: Long): String =
+        candidates.joinToString("\n") { candidate ->
+            val note = candidate.note
+            val age = MemoryText.relativeTime(now, note.whenAt ?: note.updatedAt)
+            "#${note.id} i${note.importance} (${note.kind.wire()}, ${candidate.reason}, $age): " +
+                note.content.replace('\n', ' ').take(MAX_INVENTORY_LINE)
+        }.ifBlank { "(none)" }
+
     fun fading(notes: List<Note>, now: Long): String =
         notes.joinToString("\n") { note ->
             val recall = (MemoryScoring.retrievability(note, now) * 100).toInt()
