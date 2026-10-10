@@ -62,14 +62,17 @@
 
   /* ---------- hero demo timeline ---------- */
   var demo = {
-    msg: document.querySelector(".d-msg"),
     think: document.querySelector(".d-think"),
     thinkText: document.querySelector(".d-think-text"),
     answer: document.querySelector(".d-answer"),
     lines: Array.prototype.slice.call(document.querySelectorAll(".d-answer > *")),
+    steps: Array.prototype.slice.call(document.querySelectorAll(".demo-body [data-step]")),
     replay: document.getElementById("demo-replay")
   };
-  var THINK_TEXT = "The user wants a weekend trip plan. Keep it scannable: a table, a checklist, one practical tip.";
+  demo.steps.sort(function (a, b) {
+    return Number(a.getAttribute("data-step")) - Number(b.getAttribute("data-step"));
+  });
+  var THINK_TEXT = "Quiet weekend: check the weather first, then plan the west shore. Crowds are the constraint — remember it.";
   var demoRunning = false;
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -88,9 +91,7 @@
   }
 
   function resetDemo() {
-    [demo.msg, demo.think, demo.answer].forEach(function (el) {
-      if (el) el.classList.remove("show");
-    });
+    demo.steps.forEach(function (el) { el.classList.remove("show"); });
     if (demo.think) demo.think.classList.remove("is-done");
     if (demo.thinkText) demo.thinkText.textContent = "";
     demo.lines.forEach(function (l) { l.classList.remove("show"); });
@@ -100,15 +101,13 @@
   function finishDemoInstant() {
     if (demo.thinkText) demo.thinkText.textContent = THINK_TEXT;
     if (demo.think) demo.think.classList.add("is-done");
-    [demo.msg, demo.think, demo.answer].forEach(function (el) {
-      if (el) el.classList.add("show");
-    });
+    demo.steps.forEach(function (el) { el.classList.add("show"); });
     demo.lines.forEach(function (l) { l.classList.add("show"); });
     if (demo.replay) demo.replay.classList.add("show");
   }
 
   function playDemo() {
-    if (demoRunning || !demo.msg) return;
+    if (demoRunning || !demo.steps.length) return;
     demoRunning = true;
     resetDemo();
 
@@ -119,22 +118,28 @@
     }
 
     (async function () {
-      await sleep(450);
-      if (!demoRunning) return;
-      demo.msg.classList.add("show");
-      await sleep(650);
-      if (!demoRunning) return;
-      demo.think.classList.add("show");
-      await typeInto(demo.thinkText, THINK_TEXT, 14);
-      await sleep(320);
-      demo.think.classList.add("is-done");
-      await sleep(220);
-      demo.answer.classList.add("show");
-      for (var i = 0; i < demo.lines.length; i++) {
-        demo.lines[i].classList.add("show");
-        await sleep(170);
+      await sleep(350);
+      for (var i = 0; i < demo.steps.length; i++) {
+        if (!demoRunning) return;
+        var el = demo.steps[i];
+        el.classList.add("show");
+        if (el === demo.think) {
+          await sleep(240);
+          await typeInto(demo.thinkText, THINK_TEXT, 12);
+          await sleep(280);
+          demo.think.classList.add("is-done");
+          await sleep(200);
+        } else if (el === demo.answer) {
+          for (var j = 0; j < demo.lines.length; j++) {
+            if (!demoRunning) return;
+            demo.lines[j].classList.add("show");
+            await sleep(140);
+          }
+          await sleep(120);
+        } else {
+          await sleep(430);
+        }
       }
-      await sleep(150);
       demo.replay.classList.add("show");
       demoRunning = false;
     })();

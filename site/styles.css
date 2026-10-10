@@ -205,14 +205,29 @@ h1 {
   font-family: var(--mono); font-size: 10.5px; color: var(--faint);
   margin-top: 6px; white-space: nowrap; overflow: hidden; min-height: 14px;
 }
+.d-tool {
+  border: 1px solid var(--border-soft); border-radius: 12px;
+  padding: 8px 10px; background: var(--panel);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.d-tool-head { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; }
+.d-tool-name { color: var(--primary); }
+.d-tool-args {
+  flex: 1; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.d-tool-ok { color: var(--teal); }
+.d-tool-result {
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .d-answer { display: flex; flex-direction: column; gap: 7px; }
 .d-h { font-weight: 700; font-size: 14px; margin: 0; }
 .d-sub { color: var(--muted); font-size: 12.5px; margin: 0; }
 .d-sub b, .d-h b { color: var(--text); }
 .d-line { font-size: 12.5px; color: var(--text); margin: 0; font-family: var(--mono); }
 /* staged reveal */
-.d-msg, .d-think, .d-answer { opacity: 0; transform: translateY(8px); transition: opacity .35s ease, transform .35s ease; }
-.d-msg.show, .d-think.show, .d-answer.show { opacity: 1; transform: none; }
+.d-msg, .d-think, .d-tool, .d-answer { opacity: 0; transform: translateY(8px); transition: opacity .35s ease, transform .35s ease; }
+.d-msg.show, .d-think.show, .d-tool.show, .d-answer.show { opacity: 1; transform: none; }
 .d-answer > * { opacity: 0; transform: translateY(6px); transition: opacity .3s ease, transform .3s ease; }
 .d-answer > *.show { opacity: 1; transform: none; }
 .d-replay {
@@ -481,7 +496,7 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .reveal { opacity: 1; transform: none; transition: none; }
-  .d-msg, .d-think, .d-answer, .d-answer > * { opacity: 1; transform: none; transition: none; }
+  .d-msg, .d-think, .d-tool, .d-answer, .d-answer > * { opacity: 1; transform: none; transition: none; }
   .d-dots i { animation: none; opacity: 1; }
   .poster:hover, .btn:hover { transform: none; }
 }
