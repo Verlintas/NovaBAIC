@@ -123,6 +123,9 @@ class RunService : Service() {
         /** Read by MainActivity to deep-link into the Tasks run detail. */
         const val EXTRA_OPEN_RUN_ID = "open_run_id"
 
+        /** Read by MainActivity to deep-link into a specific conversation. */
+        const val EXTRA_OPEN_CONVERSATION_ID = "open_conversation_id"
+
         internal const val CHANNEL_ID = "baic2_runs"
         private const val NOTIFICATION_ID = 43
 

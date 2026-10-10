@@ -106,5 +106,52 @@ class AndroidRunNotifier @Inject constructor(
     private companion object {
         const val DONE_CHANNEL_ID = "baic2_runs_done"
         const val FINISHED_NOTIFICATION_ID = 46
+        const val CONVERSATION_NOTIFICATION_ID = 47
+    }
+
+    @SuppressLint("MissingPermission") // POST_NOTIFICATIONS is checked below.
+    override fun notifyConversationFinished(title: String, conversationId: Long) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(DONE_CHANNEL_ID) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    DONE_CHANNEL_ID,
+                    context.getString(R.string.run_channel_done),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ),
+            )
+        }
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(RunService.EXTRA_OPEN_CONVERSATION_ID, conversationId)
+            } ?: return
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            CONVERSATION_NOTIFICATION_ID,
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, DONE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentTitle(context.getString(R.string.run_reply_ready))
+            .setContentText(title)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(title))
+            .setContentIntent(contentIntent)
+            .setAutoCancel(true)
+            .build()
+        val canNotify = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        if (canNotify) {
+            runCatching {
+                NotificationManagerCompat.from(context).notify(CONVERSATION_NOTIFICATION_ID, notification)
+            }
+        }
     }
 }

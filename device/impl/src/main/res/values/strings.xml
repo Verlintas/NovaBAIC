@@ -8,6 +8,7 @@
     <string name="run_channel">Agent 任务</string>
     <string name="run_channel_done">Agent 任务结果</string>
     <string name="run_finished">AI 任务完成</string>
+    <string name="run_reply_ready">回复已完成</string>
     <string name="run_interrupted">AI 任务已中断</string>
     <string name="projection_title">BAIC2 屏幕捕获</string>
     <string name="projection_text">正在用于屏幕分析与 OCR</string>

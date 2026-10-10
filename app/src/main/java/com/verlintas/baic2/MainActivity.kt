@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val pendingRunId = androidx.compose.runtime.mutableStateOf<Long?>(null)
+    private val pendingConversationId = androidx.compose.runtime.mutableStateOf<Long?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -64,6 +65,11 @@ class MainActivity : ComponentActivity() {
         // fresh launch (or via onNewIntent), never twice.
         pendingRunId.value = if (savedInstanceState == null) {
             intent?.getLongExtra(EXTRA_OPEN_RUN_ID, -1L)?.takeIf { it >= 0L }
+        } else {
+            null
+        }
+        pendingConversationId.value = if (savedInstanceState == null) {
+            intent?.getLongExtra(EXTRA_OPEN_CONVERSATION_ID, -1L)?.takeIf { it >= 0L }
         } else {
             null
         }
@@ -88,6 +94,8 @@ class MainActivity : ComponentActivity() {
                 Baic2App(
                     initialRunId = pendingRunId.value,
                     onRunDeepLinkConsumed = { pendingRunId.value = null },
+                    initialConversationId = pendingConversationId.value,
+                    onConversationDeepLinkConsumed = { pendingConversationId.value = null },
                 )
             }
         }
@@ -117,6 +125,8 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingRunId.value = intent.getLongExtra(EXTRA_OPEN_RUN_ID, -1L).takeIf { it >= 0L }
+        pendingConversationId.value = intent.getLongExtra(EXTRA_OPEN_CONVERSATION_ID, -1L)
+            .takeIf { it >= 0L }
     }
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -137,3 +147,6 @@ private fun Context.withLocale(locale: Locale): Context {
 
 /** Mirrors RunService.EXTRA_OPEN_RUN_ID (device:impl cannot see app classes). */
 private const val EXTRA_OPEN_RUN_ID = "open_run_id"
+
+/** Mirrors RunService.EXTRA_OPEN_CONVERSATION_ID. */
+private const val EXTRA_OPEN_CONVERSATION_ID = "open_conversation_id"

@@ -122,6 +122,10 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY id ASC")
     suspend fun getByConversation(conversationId: Long): List<MessageEntity>
 
+    /** Newest message of a role strictly before [before], across conversations. */
+    @Query("SELECT MAX(createdAt) FROM messages WHERE role = :role AND createdAt < :before")
+    suspend fun latestAtBefore(role: String, before: Long): Long?
+
     @Query(
         "SELECT * FROM messages WHERE conversationId = :conversationId " +
             "AND id >= :afterId AND id < :beforeId ORDER BY id ASC",
@@ -583,6 +587,22 @@ interface MemoryHoldDao {
 
     @Query("DELETE FROM memory_holds WHERE id = :id")
     suspend fun delete(id: Long)
+}
+
+@Dao
+interface CuratorRunDao {
+
+    @Insert
+    suspend fun insert(entity: CuratorRunEntity): Long
+
+    @Query("SELECT * FROM curator_runs ORDER BY ranAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<CuratorRunEntity>
+
+    @Query("SELECT * FROM curator_runs ORDER BY ranAt DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<CuratorRunEntity>>
+
+    @Query("SELECT MAX(ranAt) FROM curator_runs")
+    suspend fun latestRanAt(): Long?
 }
 
 @Dao

@@ -76,6 +76,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +84,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,7 +97,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.verlintas.baic2.core.data.repository.MemoryRepository
 import com.verlintas.baic2.core.model.Automation
+import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.McpServer
 import com.verlintas.baic2.core.model.MemoryHold
 import com.verlintas.baic2.core.model.MemoryText
@@ -110,6 +114,7 @@ import com.verlintas.baic2.designsystem.Baic2Spacing
 import com.verlintas.baic2.designsystem.component.AuroraSurface
 import com.verlintas.baic2.designsystem.component.MemoryRing
 import com.verlintas.baic2.designsystem.component.pressScale
+import kotlinx.coroutines.launch
 
 private object LibraryRoute {
     const val ROOT = "library_root"
@@ -340,6 +345,69 @@ private fun MemoryPage(
     var editingNote by remember { mutableStateOf<Note?>(null) }
     var editingCoreSlot by remember { mutableStateOf<String?>(null) }
     var hardDeleteTarget by remember { mutableStateOf<Note?>(null) }
+    var importResult by remember { mutableStateOf<MemoryRepository.ImportResult?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Memory as a safety feature: notes + core + holds export to a readable
+    // JSON file, and a backup merges back through the normal write protocol.
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val json = viewModel.exportMemory()
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(json.toByteArray(Charsets.UTF_8))
+                    }
+                }
+            }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val text = runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
+                importResult = if (text == null) {
+                    MemoryRepository.ImportResult(valid = false)
+                } else {
+                    viewModel.importMemory(text)
+                }
+            }
+        }
+    }
+
+    importResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = { importResult = null },
+            title = { Text(stringResource(R.string.library_import_title)) },
+            text = {
+                Text(
+                    if (!result.valid) {
+                        stringResource(R.string.library_import_failed)
+                    } else {
+                        stringResource(
+                            R.string.library_import_result,
+                            result.imported,
+                            result.merged,
+                            result.skipped,
+                            result.holds,
+                        )
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { importResult = null }) {
+                    Text(stringResource(R.string.library_import_ok))
+                }
+            },
+        )
+    }
 
     editingNote?.let { note ->
         NoteEditDialog(
@@ -440,6 +508,31 @@ private fun MemoryPage(
                 }
             }
         }
+        item(key = "memory-io") {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Baic2Spacing.sm),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        exportLauncher.launch(
+                            "baic2-memory-${MemoryText.dateOnly(System.currentTimeMillis())}.json",
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.library_memory_export))
+                }
+                OutlinedButton(
+                    onClick = {
+                        importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.library_memory_import))
+                }
+            }
+        }
         item(key = "core-user") {
             CoreMemoryCard(
                 label = stringResource(R.string.library_core_user),
@@ -469,6 +562,19 @@ private fun MemoryPage(
                     onLift = { viewModel.liftHold(hold.id) },
                     modifier = Modifier.animateItem(),
                 )
+            }
+        }
+        if (state.curatorRuns.isNotEmpty()) {
+            item(key = "curator-title") {
+                Text(
+                    text = stringResource(R.string.library_curator_title),
+                    style = Baic2Mono.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = Baic2Spacing.xs, top = Baic2Spacing.sm),
+                )
+            }
+            items(state.curatorRuns, key = { "curator-${it.id}" }) { run ->
+                CuratorRunRow(run)
             }
         }
         item(key = "memory-search") {
@@ -1180,6 +1286,47 @@ private fun CoreEditDialog(
                 Text(stringResource(R.string.library_cancel))
             }
         },
+    )
+}
+
+@Composable
+private fun CuratorRunRow(run: CuratorRun) {
+    val trigger = stringResource(
+        when (run.trigger) {
+            "idle" -> R.string.library_curator_trigger_idle
+            "overflow" -> R.string.library_curator_trigger_overflow
+            "time" -> R.string.library_curator_trigger_time
+            "manual" -> R.string.library_curator_trigger_manual
+            else -> R.string.library_curator_trigger_other
+        },
+    )
+    val text = if (run.succeeded) {
+        stringResource(
+            R.string.library_curator_run,
+            MemoryText.formatDateTime(run.ranAt),
+            trigger,
+            run.messages,
+            run.added,
+            run.revised,
+            run.forgotten,
+        )
+    } else {
+        stringResource(
+            R.string.library_curator_run_failed,
+            MemoryText.formatDateTime(run.ranAt),
+            trigger,
+            run.error ?: "unparseable plan",
+        )
+    }
+    Text(
+        text = text,
+        style = Baic2Mono.label,
+        color = if (run.succeeded) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.error
+        },
+        modifier = Modifier.padding(horizontal = Baic2Spacing.xs, vertical = 2.dp),
     )
 }
 

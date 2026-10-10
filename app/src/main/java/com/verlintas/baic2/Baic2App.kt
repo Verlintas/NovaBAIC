@@ -137,6 +137,8 @@ private enum class Baic2Destination(
 fun Baic2App(
     initialRunId: Long? = null,
     onRunDeepLinkConsumed: () -> Unit = {},
+    initialConversationId: Long? = null,
+    onConversationDeepLinkConsumed: () -> Unit = {},
 ) {
     var destination by rememberSaveable { mutableStateOf(Baic2Destination.Chats) }
     var dockOpen by rememberSaveable { mutableStateOf(false) }
@@ -160,6 +162,15 @@ fun Baic2App(
     // Notification tap on a running task opens its run detail.
     LaunchedEffect(initialRunId) {
         if (initialRunId != null) destination = Baic2Destination.Tasks
+    }
+
+    // Notification tap on a finished reply opens that conversation.
+    LaunchedEffect(initialConversationId) {
+        if (initialConversationId != null) {
+            pendingConversationId = initialConversationId
+            destination = Baic2Destination.Chats
+            onConversationDeepLinkConsumed()
+        }
     }
 
     BackHandler(enabled = dockOpen) { dockOpen = false }

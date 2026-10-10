@@ -101,6 +101,7 @@
     <string name="chat_skill_none">No completed tool sequence to record</string>
     <string name="chat_memory_saved">Memory consolidated: %1$d new, %2$d updated, %3$d archived (Library → Biomimetic memory)</string>
     <string name="chat_memory_none">Nothing new worth keeping yet</string>
+    <string name="chat_memory_failed">Consolidation failed (see Library → Biomimetic memory → curator log)</string>
     <string name="chat_run_done_title">MAX run completed</string>
     <string name="chat_run_stopped_title">MAX run interrupted</string>
     <string name="chat_run_done_body">“%1$s” finished · %2$d rounds · %3$d tool call(s) · %4$s</string>

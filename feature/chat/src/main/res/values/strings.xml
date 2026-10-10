@@ -101,6 +101,7 @@
     <string name="chat_skill_none">没有可记录的操作序列</string>
     <string name="chat_memory_saved">记忆整理完成：%1$d 条新增，%2$d 条更新，%3$d 条归档（库 → 记忆仿生）</string>
     <string name="chat_memory_none">暂时没有值得长期记住的新内容</string>
+    <string name="chat_memory_failed">记忆整理失败了（详情见 库 → 记忆仿生的策展人日志）</string>
     <string name="chat_run_done_title">MAX 运行完成</string>
     <string name="chat_run_stopped_title">MAX 运行已中断</string>
     <string name="chat_run_done_body">「%1$s」已完成 · %2$d 轮 · %3$d 次工具调用 · 用时 %4$s</string>

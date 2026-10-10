@@ -262,6 +262,7 @@ fun ChatScreen(
     val compressTooShortHint = stringResource(R.string.chat_compress_too_short)
     val memorySavedTemplate = stringResource(R.string.chat_memory_saved)
     val memoryNoneLabel = stringResource(R.string.chat_memory_none)
+    val memoryFailedLabel = stringResource(R.string.chat_memory_failed)
     val screenPrompt = stringResource(R.string.chat_screen_prompt)
     val screenReady by viewModel.screenCaptureReady.collectAsStateWithLifecycle()
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -528,6 +529,7 @@ fun ChatScreen(
                     viewModel.reflectMemory(
                         savedTemplate = memorySavedTemplate,
                         noneLabel = memoryNoneLabel,
+                        failedLabel = memoryFailedLabel,
                     )
                 },
             )

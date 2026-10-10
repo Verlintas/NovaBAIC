@@ -45,6 +45,7 @@ import com.verlintas.baic2.core.model.AttachmentKind
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.CoreMemory
+import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.DocumentTextCodec
 import com.verlintas.baic2.core.model.MemoryPrompt
 import com.verlintas.baic2.core.model.MemoryText
@@ -400,7 +401,7 @@ class ChatViewModel @Inject constructor(
             AppVisibility.foregroundFlow.collect { foreground ->
                 if (!foreground && wasForeground) {
                     providerConfigQuiet()?.let { config ->
-                        maybeCurate(IDLE_CURATE_MESSAGES, config)
+                        maybeCurate(IDLE_CURATE_MESSAGES, config, trigger = "idle")
                     }
                 }
                 wasForeground = foreground
@@ -684,13 +685,13 @@ class ChatViewModel @Inject constructor(
     }
 
     /** Sleep-time consolidation: turns recent episodes into durable notes. */
-    fun reflectMemory(savedTemplate: String, noneLabel: String) {
+    fun reflectMemory(savedTemplate: String, noneLabel: String, failedLabel: String) {
         if (running.value || auxBusy.value) return
         viewModelScope.launch {
             val config = resolveConfig() ?: return@launch
             auxBusy.value = true
             try {
-                val outcome = runCurator(config)
+                val outcome = runCurator(config, trigger = "manual")
                 if (outcome != null) {
                     lastCuratedAssistantCount = conversationRepository.getMessages(conversationId)
                         .count { it.role == ChatRole.ASSISTANT }
@@ -700,6 +701,9 @@ class ChatViewModel @Inject constructor(
                     } else {
                         noneLabel
                     }
+                } else {
+                    // Failed runs must say so; the Library log has the details.
+                    notice.value = failedLabel
                 }
             } finally {
                 auxBusy.value = false
@@ -787,10 +791,17 @@ class ChatViewModel @Inject constructor(
         val history = prepareHistory(rawHistory)
         // Priming: notes cued by this message are woken and ride along in the
         // system prompt; everything else stays out of the window until asked.
+        // The status line tells the agent how much memory exists, when it was
+        // last consolidated and how long ago the user last spoke.
+        val turnNow = System.currentTimeMillis()
+        val previousActivity = conversationRepository.lastUserMessageAtBefore(
+            rawHistory.lastOrNull()?.createdAt ?: turnNow,
+        )
         val memoryContext = MemoryPrompt.context(
             core = memoryRepository.getCore(),
             primed = primedNotes(text, rawHistory, conversation.title),
-            now = System.currentTimeMillis(),
+            now = turnNow,
+            status = memoryRepository.memoryStatus(previousActivity),
         )
         // Tasks record agentic work only: plain Chat / Chat+ turns are not runs.
         val agentic = conversation.mode.requiresConfirmation || conversation.mode == AppMode.MAX
@@ -897,18 +908,30 @@ class ChatViewModel @Inject constructor(
 
                     is AgentEvent.Usage -> Unit
 
-                    AgentEvent.Completed -> runId?.let { id ->
-                        runRepository.finish(id, RunState.COMPLETED, roundsUsed, toolCallsUsed)
-                        if (conversation.mode == AppMode.MAX) {
-                            announceRunEnd(
-                                completed = true,
-                                reason = "",
-                                title = conversation.title,
-                                rounds = roundsUsed,
-                                toolCalls = toolCallsUsed,
-                                durationMs = System.currentTimeMillis() - runStartedAt,
-                                runId = id,
-                            )
+                    AgentEvent.Completed -> {
+                        runId?.let { id ->
+                            runRepository.finish(id, RunState.COMPLETED, roundsUsed, toolCallsUsed)
+                            if (agentic) {
+                                announceRunEnd(
+                                    completed = true,
+                                    reason = "",
+                                    title = conversation.title,
+                                    rounds = roundsUsed,
+                                    toolCalls = toolCallsUsed,
+                                    durationMs = System.currentTimeMillis() - runStartedAt,
+                                    runId = id,
+                                    showDialog = conversation.mode == AppMode.MAX,
+                                )
+                            }
+                        } ?: run {
+                            // A plain reply finished while the user was elsewhere:
+                            // let them know instead of silently holding it.
+                            if (!AppVisibility.foreground) {
+                                runNotifier.notifyConversationFinished(
+                                    conversation.title.ifBlank { "BAIC2" },
+                                    conversationId,
+                                )
+                            }
                         }
                     }
 
@@ -933,7 +956,7 @@ class ChatViewModel @Inject constructor(
                         error.value = event.error.toChatError()
                         runId?.let { id ->
                             runRepository.finish(id, RunState.FAILED, roundsUsed, toolCallsUsed)
-                            if (conversation.mode == AppMode.MAX) {
+                            if (agentic) {
                                 announceRunEnd(
                                     completed = false,
                                     reason = event.error.message,
@@ -942,6 +965,7 @@ class ChatViewModel @Inject constructor(
                                     toolCalls = toolCallsUsed,
                                     durationMs = System.currentTimeMillis() - runStartedAt,
                                     runId = id,
+                                    showDialog = conversation.mode == AppMode.MAX,
                                 )
                             }
                         }
@@ -988,13 +1012,16 @@ class ChatViewModel @Inject constructor(
             }
             // Consolidation is sleep-time work: prefer the background edge,
             // with an overflow fallback for marathon foreground sessions.
-            val threshold = if (AppVisibility.foreground) {
-                OVERFLOW_CURATE_MESSAGES
-            } else {
-                IDLE_CURATE_MESSAGES
-            }
+            val foregroundNow = AppVisibility.foreground
+            val threshold = if (foregroundNow) OVERFLOW_CURATE_MESSAGES else IDLE_CURATE_MESSAGES
             // Best-effort upkeep: a memory failure must never take the turn down.
-            quietly { maybeCurate(threshold, config) }
+            quietly {
+                maybeCurate(
+                    threshold = threshold,
+                    config = config,
+                    trigger = if (foregroundNow) "overflow" else "idle",
+                )
+            }
             quietly { maybeAutoCompress(config) }
         }
     }
@@ -1021,15 +1048,18 @@ class ChatViewModel @Inject constructor(
         toolCalls: Int,
         durationMs: Long,
         runId: Long,
+        showDialog: Boolean,
     ) {
-        _runCompletion.value = RunCompletion(
-            completed = completed,
-            title = title.ifBlank { "MAX" },
-            reason = reason,
-            rounds = rounds,
-            toolCalls = toolCalls,
-            durationMs = durationMs,
-        )
+        if (showDialog) {
+            _runCompletion.value = RunCompletion(
+                completed = completed,
+                title = title.ifBlank { "MAX" },
+                reason = reason,
+                rounds = rounds,
+                toolCalls = toolCalls,
+                durationMs = durationMs,
+            )
+        }
         if (!AppVisibility.foreground) {
             runNotifier.notifyFinished(title.ifBlank { "BAIC2" }, completed, runId)
         }
@@ -1144,27 +1174,34 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun maybeCurate(threshold: Int, config: ProviderConfig) {
+    private suspend fun maybeCurate(threshold: Int, config: ProviderConfig, trigger: String) {
         val messages = conversationRepository.getMessages(conversationId)
         val assistantCount = messages.count { it.role == ChatRole.ASSISTANT }
-        // First observation only baselines: opening an old conversation must
-        // not replay its whole backlog through the curator.
+        val lastRunAt = memoryRepository.lastCuratorRunAt()
+        val newestAt = messages.lastOrNull()?.createdAt ?: 0L
+        // A marathon foreground session must still consolidate: activity after
+        // a long gap is due on time, regardless of the turn counter.
+        val timeDue = lastRunAt > 0L && System.currentTimeMillis() - lastRunAt >= TIME_CURATE_MS &&
+            newestAt > lastRunAt
         if (lastCuratedAssistantCount < 0) {
+            // First observation baselines, unless a timed pass is already due.
             lastCuratedAssistantCount = assistantCount
+            if (!timeDue) return
+        } else if (!timeDue && assistantCount - lastCuratedAssistantCount < threshold) {
             return
         }
         // A single agentic turn can add many assistant rows, so a modulo check
         // would jump past exact multiples and never fire; keep a high-water mark.
-        if (assistantCount - lastCuratedAssistantCount < threshold) return
-        if (runCurator(config) != null) {
+        val outcome = runCurator(config, if (timeDue) "time" else trigger)
+        if (outcome != null) {
             lastCuratedAssistantCount = assistantCount
         }
     }
 
     private data class CuratorOutcome(val added: Int, val revised: Int, val forgotten: Int)
 
-    /** Returns null when the request failed; counts otherwise. */
-    private suspend fun runCurator(config: ProviderConfig): CuratorOutcome? {
+    /** Returns null when the request failed; counts otherwise. Always logged. */
+    private suspend fun runCurator(config: ProviderConfig, trigger: String): CuratorOutcome? {
         val messages = conversationRepository.getMessages(conversationId)
             .filter { it.role == ChatRole.USER || (it.role == ChatRole.ASSISTANT && it.content.isNotBlank()) }
             .takeLast(30)
@@ -1174,7 +1211,7 @@ class ChatViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val fading = memoryRepository.rehearsalCandidates(now)
         val holds = memoryRepository.listHolds()
-        val raw = runCatching {
+        val raw = try {
             auxiliaryTasks.complete(
                 config = config,
                 systemPrompt = AuxiliaryTasks.CURATOR_SYSTEM,
@@ -1188,8 +1225,30 @@ class ChatViewModel @Inject constructor(
                 maxTokens = 900,
                 temperature = 0.2,
             )
-        }.getOrNull() ?: return null
-        val plan = AuxiliaryTasks.parseCuratorPlan(raw)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logCuratorRun(
+                trigger = trigger,
+                messages = messages,
+                notesScanned = notes.size,
+                parsed = false,
+                error = e.message ?: "consolidation request failed",
+            )
+            return null
+        }
+        val plan = AuxiliaryTasks.parseCuratorPlanOrNull(raw)
+        if (plan == null) {
+            // A reply without a plan is a failure, not an empty plan.
+            logCuratorRun(
+                trigger = trigger,
+                messages = messages,
+                notesScanned = notes.size,
+                parsed = false,
+                error = "the model replied without a plan JSON",
+            )
+            return null
+        }
         var added = 0
         var revised = 0
         plan.remember.forEach { item ->
@@ -1231,15 +1290,60 @@ class ChatViewModel @Inject constructor(
                 forgotten++
             }
         }
+        var rehearsed = 0
         plan.rehearseKeep.forEach { id ->
             if (memoryRepository.noteById(id) != null) {
                 memoryRepository.touch(listOf(id))
+                rehearsed++
             }
         }
         if (plan.coreUser != null || plan.coreContext != null) {
             memoryRepository.setCore(user = plan.coreUser, context = plan.coreContext)
         }
+        logCuratorRun(
+            trigger = trigger,
+            messages = messages,
+            notesScanned = notes.size,
+            parsed = true,
+            added = added,
+            revised = revised,
+            forgotten = forgotten,
+            rehearsed = rehearsed,
+        )
         return CuratorOutcome(added, revised, forgotten)
+    }
+
+    /** Best-effort consolidation log; logging must never break a run. */
+    private suspend fun logCuratorRun(
+        trigger: String,
+        messages: List<ChatMessage>,
+        notesScanned: Int,
+        parsed: Boolean,
+        error: String? = null,
+        added: Int = 0,
+        revised: Int = 0,
+        forgotten: Int = 0,
+        rehearsed: Int = 0,
+    ) {
+        runCatching {
+            memoryRepository.recordCuratorRun(
+                CuratorRun(
+                    ranAt = System.currentTimeMillis(),
+                    trigger = trigger,
+                    conversationId = conversationId,
+                    messages = messages.size,
+                    windowFrom = messages.firstOrNull()?.createdAt ?: 0L,
+                    windowTo = messages.lastOrNull()?.createdAt ?: 0L,
+                    notesScanned = notesScanned,
+                    added = added,
+                    revised = revised,
+                    forgotten = forgotten,
+                    rehearsed = rehearsed,
+                    parsed = parsed,
+                    error = error,
+                ),
+            )
+        }
     }
 
     private suspend fun maybeAutoCompress(config: ProviderConfig) {
@@ -1372,6 +1476,8 @@ class ChatViewModel @Inject constructor(
         )
         private const val IDLE_CURATE_MESSAGES = 4
         private const val OVERFLOW_CURATE_MESSAGES = 24
+        /** A marathon foreground session still consolidates after this gap. */
+        private const val TIME_CURATE_MS = 12 * 3_600_000L
         private const val CURATOR_NOTES = 60
         private const val PREFETCH_LIMIT = 4
         private const val UPCOMING_LIMIT = 2

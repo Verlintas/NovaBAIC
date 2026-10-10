@@ -22,15 +22,23 @@ package com.verlintas.baic2.core.data.repository
 import androidx.room.withTransaction
 import com.verlintas.baic2.core.data.db.Baic2Database
 import com.verlintas.baic2.core.data.db.CoreMemoryEntity
+import com.verlintas.baic2.core.data.db.CuratorRunEntity
 import com.verlintas.baic2.core.data.db.MemoryHoldEntity
 import com.verlintas.baic2.core.data.db.NoteEntity
 import com.verlintas.baic2.core.data.db.NoteLinkEntity
 import com.verlintas.baic2.core.data.db.NoteRevisionEntity
 import com.verlintas.baic2.core.data.mapper.ChatMapper
 import com.verlintas.baic2.core.model.CoreMemory
+import com.verlintas.baic2.core.model.CuratorRun
+import com.verlintas.baic2.core.model.MemoryBackup
+import com.verlintas.baic2.core.model.MemoryBackupCodec
+import com.verlintas.baic2.core.model.MemoryBackupCore
+import com.verlintas.baic2.core.model.MemoryBackupHold
+import com.verlintas.baic2.core.model.MemoryBackupNote
 import com.verlintas.baic2.core.model.MemoryConsolidator
 import com.verlintas.baic2.core.model.MemoryHold
 import com.verlintas.baic2.core.model.MemoryScoring
+import com.verlintas.baic2.core.model.MemoryStatus
 import com.verlintas.baic2.core.model.MemoryText
 import com.verlintas.baic2.core.model.Note
 import com.verlintas.baic2.core.model.NoteKind
@@ -308,6 +316,174 @@ class MemoryRepository @Inject constructor(
         }
 
     suspend fun removeHold(id: Long) = db.memoryHoldDao().delete(id)
+
+    /** Consolidation log; best-effort - logging must never break a run. */
+    suspend fun recordCuratorRun(run: CuratorRun): Long =
+        db.curatorRunDao().insert(
+            CuratorRunEntity(
+                ranAt = run.ranAt,
+                trigger = run.trigger,
+                conversationId = run.conversationId,
+                messages = run.messages,
+                windowFrom = run.windowFrom,
+                windowTo = run.windowTo,
+                notesScanned = run.notesScanned,
+                added = run.added,
+                revised = run.revised,
+                forgotten = run.forgotten,
+                rehearsed = run.rehearsed,
+                parsed = run.parsed,
+                error = run.error,
+            ),
+        )
+
+    suspend fun recentCuratorRuns(limit: Int = 20): List<CuratorRun> =
+        db.curatorRunDao().recent(limit).map(::curatorRunToModel)
+
+    fun observeCuratorRuns(limit: Int = 20): Flow<List<CuratorRun>> =
+        db.curatorRunDao().observeRecent(limit).map { list -> list.map(::curatorRunToModel) }
+
+    /** Epoch of the newest consolidation pass; 0 when none ever ran. */
+    suspend fun lastCuratorRunAt(): Long = db.curatorRunDao().latestRanAt() ?: 0L
+
+    /** Cheap snapshot for the always-on memory state line. */
+    suspend fun memoryStatus(lastUserActivityAt: Long? = null): MemoryStatus {
+        val now = System.currentTimeMillis()
+        val notes = db.noteDao().getActive(PAGE_SIZE).map(mapper::noteToModel)
+        val holds = db.memoryHoldDao().getRecent(SUPPRESSED_SCAN).size
+        val lastRun = recentCuratorRuns(1).firstOrNull()
+        return MemoryStatus(
+            activeNotes = notes.size,
+            pinned = notes.count { it.pinned },
+            expiringSoon = notes.count { note ->
+                val expires = note.expiresAt ?: return@count false
+                expires > now && expires - now <= 86_400_000L
+            },
+            expired = notes.count { it.isExpired(now) },
+            holds = holds,
+            lastConsolidatedAt = lastRun?.ranAt ?: 0L,
+            lastConsolidation = lastRun?.takeIf { it.succeeded }?.let {
+                "added ${it.added}, revised ${it.revised}, forgotten ${it.forgotten}"
+            },
+            lastUserActivityAt = lastUserActivityAt,
+        )
+    }
+
+    private fun curatorRunToModel(entity: CuratorRunEntity) = CuratorRun(
+        id = entity.id,
+        ranAt = entity.ranAt,
+        trigger = entity.trigger,
+        conversationId = entity.conversationId,
+        messages = entity.messages,
+        windowFrom = entity.windowFrom,
+        windowTo = entity.windowTo,
+        notesScanned = entity.notesScanned,
+        added = entity.added,
+        revised = entity.revised,
+        forgotten = entity.forgotten,
+        rehearsed = entity.rehearsed,
+        parsed = entity.parsed,
+        error = entity.error,
+    )
+
+    /** Portable JSON snapshot: notes + core memory + holds. */
+    suspend fun exportBackup(): String {
+        val notes = db.noteDao().getActive(PAGE_SIZE).map(mapper::noteToModel)
+        val core = getCore()
+        val holds = listHolds()
+        return MemoryBackupCodec.encode(
+            MemoryBackup(
+                version = 1,
+                exportedAt = System.currentTimeMillis(),
+                core = if (core.user.isNotBlank() || core.context.isNotBlank()) {
+                    MemoryBackupCore(user = core.user, context = core.context)
+                } else {
+                    null
+                },
+                notes = notes.map { note ->
+                    MemoryBackupNote(
+                        content = note.content,
+                        kind = note.kind.wire(),
+                        importance = note.importance,
+                        source = note.source.wire(),
+                        entities = note.entities,
+                        whenAt = note.whenAt,
+                        expiresAt = note.expiresAt,
+                        createdAt = note.createdAt.takeIf { it > 0 },
+                    )
+                },
+                holds = holds.map { MemoryBackupHold(content = it.content, reason = it.reason) },
+            ),
+        )
+    }
+
+    data class ImportResult(
+        val valid: Boolean = true,
+        val imported: Int = 0,
+        val merged: Int = 0,
+        val skipped: Int = 0,
+        val holds: Int = 0,
+        val coreUpdated: Boolean = false,
+    )
+
+    /**
+     * Imports a backup through the normal write protocol: holds and
+     * suppression still apply, near-duplicates reconsolidate instead of
+     * piling up, and nothing is overwritten.
+     */
+    suspend fun importBackup(text: String): ImportResult {
+        val backup = MemoryBackupCodec.decode(text).getOrElse { return ImportResult(valid = false) }
+        var imported = 0
+        var merged = 0
+        var skipped = 0
+        backup.notes.forEach { note ->
+            if (note.content.isBlank()) return@forEach
+            when (
+                addNote(
+                    kind = NoteKind.fromWire(note.kind),
+                    content = note.content,
+                    importance = note.importance,
+                    whenAt = note.whenAt,
+                    source = NoteSource.fromWire(note.source),
+                    entities = note.entities,
+                    expiresAt = note.expiresAt,
+                )
+            ) {
+                is AddOutcome.Saved -> imported++
+                is AddOutcome.Merged -> merged++
+                is AddOutcome.Duplicate,
+                is AddOutcome.Suppressed,
+                is AddOutcome.Held,
+                -> skipped++
+            }
+        }
+        var addedHolds = 0
+        val existingHolds = listHolds().map { it.content }.toSet()
+        backup.holds.forEach { hold ->
+            if (hold.content.isNotBlank() && hold.content !in existingHolds) {
+                addHold(hold.content, hold.reason)
+                addedHolds++
+            }
+        }
+        var coreUpdated = false
+        backup.core?.let { core ->
+            if (core.user.isNotBlank() || core.context.isNotBlank()) {
+                setCore(
+                    user = core.user.takeIf { it.isNotBlank() },
+                    context = core.context.takeIf { it.isNotBlank() },
+                )
+                coreUpdated = true
+            }
+        }
+        return ImportResult(
+            valid = true,
+            imported = imported,
+            merged = merged,
+            skipped = skipped,
+            holds = addedHolds,
+            coreUpdated = coreUpdated,
+        )
+    }
 
     /**
      * Closest notes by text similarity, for the "no confident match" exit:

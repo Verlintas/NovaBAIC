@@ -151,6 +151,28 @@ data class MemoryHoldEntity(
     val createdAt: Long,
 )
 
+/** Consolidation log: "empty plan" and "run failed" must be distinguishable. */
+@Entity(
+    tableName = "curator_runs",
+    indices = [Index(value = ["ranAt"])],
+)
+data class CuratorRunEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val ranAt: Long,
+    val trigger: String,
+    val conversationId: Long?,
+    val messages: Int,
+    val windowFrom: Long,
+    val windowTo: Long,
+    val notesScanned: Int,
+    val added: Int,
+    val revised: Int,
+    val forgotten: Int,
+    val rehearsed: Int,
+    val parsed: Boolean,
+    val error: String?,
+)
+
 @Entity(
     tableName = "runs",
     indices = [Index(value = ["conversationId"])],

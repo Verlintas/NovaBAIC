@@ -37,4 +37,10 @@ interface RunNotifier {
      * so the user knows the agent finished or was interrupted.
      */
     fun notifyFinished(title: String, success: Boolean, runId: Long?)
+
+    /**
+     * A plain chat reply finished while the app was not visible; tapping the
+     * notification opens that conversation.
+     */
+    fun notifyConversationFinished(title: String, conversationId: Long)
 }

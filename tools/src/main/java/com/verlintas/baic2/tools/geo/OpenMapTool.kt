@@ -53,7 +53,7 @@ class OpenMapTool @Inject constructor(
             "WGS-84 latitude/longitude (e.g. from get_location); GCJ-02 conversion for Chinese map " +
             "apps happens inside. Optional label and zoom. No map is rendered by BAIC2 itself.",
         parametersJson = """{"type":"object","properties":{"latitude":{"type":"number"},"longitude":{"type":"number"},"label":{"type":"string","description":"optional marker label"},"zoom":{"type":"integer","description":"1-21, default 15"},"bd09":{"type":"boolean","description":"set true if the input is already BD-09 (Baidu) coordinates"}},"required":["latitude","longitude"]}""",
-        readOnly = false,
+        readOnly = true,
         danger = DangerLevel.MEDIUM,
         parallelSafe = false,
     )

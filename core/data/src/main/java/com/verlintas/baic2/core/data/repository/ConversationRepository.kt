@@ -67,6 +67,14 @@ class ConversationRepository @Inject constructor(
     suspend fun getMessages(conversationId: Long): List<ChatMessage> =
         db.messageDao().getByConversation(conversationId).map(mapper::messageToModel)
 
+    /**
+     * The newest user message before [before], across all conversations:
+     * "how long ago did we last talk", injected so time gaps are never
+     * guessed wrong.
+     */
+    suspend fun lastUserMessageAtBefore(before: Long): Long? =
+        db.messageDao().latestAtBefore(ChatRole.USER.name, before)
+
     suspend fun conversationCount(): Int = db.conversationDao().count()
 
     suspend fun messageCount(): Int = db.messageDao().countAll()

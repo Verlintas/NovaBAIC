@@ -25,6 +25,7 @@ import com.verlintas.baic2.core.data.repository.McpServerRepository
 import com.verlintas.baic2.core.data.repository.MemoryRepository
 import com.verlintas.baic2.core.model.Automation
 import com.verlintas.baic2.core.model.CoreMemory
+import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.McpServer
 import com.verlintas.baic2.core.model.MemoryHold
 import com.verlintas.baic2.core.model.MemoryText
@@ -50,6 +51,7 @@ data class LibraryUiState(
     val core: CoreMemory = CoreMemory(),
     val noteQuery: String = "",
     val holds: List<MemoryHold> = emptyList(),
+    val curatorRuns: List<CuratorRun> = emptyList(),
     val skills: List<Skill> = emptyList(),
     val mcpServers: List<McpServer> = emptyList(),
     val mcpStatus: Map<Long, McpServerStatus> = emptyMap(),
@@ -130,6 +132,13 @@ class LibraryViewModel @Inject constructor(
 
     suspend fun revisionsFor(id: Long): List<NoteRevision> = memoryRepository.revisionsFor(id)
 
+    /** Portable JSON of notes + core memory + holds. */
+    suspend fun exportMemory(): String = memoryRepository.exportBackup()
+
+    /** Merges a backup through the normal write protocol. */
+    suspend fun importMemory(text: String): MemoryRepository.ImportResult =
+        memoryRepository.importBackup(text)
+
     fun setNotePinned(id: Long, pinned: Boolean) {
         viewModelScope.launch { memoryRepository.setPinned(id, pinned) }
     }
@@ -152,6 +161,7 @@ class LibraryViewModel @Inject constructor(
         val core: CoreMemory,
         val query: String,
         val holds: List<MemoryHold>,
+        val curatorRuns: List<CuratorRun>,
     )
 
     val uiState: StateFlow<LibraryUiState> = combine(
@@ -161,7 +171,10 @@ class LibraryViewModel @Inject constructor(
             memoryRepository.observeCore(),
             noteQuery,
             memoryRepository.observeHolds(),
-        ) { notes, core, query, holds -> MemorySlice(notes, core, query, holds) },
+            memoryRepository.observeCuratorRuns(8),
+        ) { notes, core, query, holds, runs ->
+            MemorySlice(notes, core, query, holds, runs)
+        },
         skills,
         mcpServerRepository.observeAll(),
         mcpManager.status,
@@ -172,6 +185,7 @@ class LibraryViewModel @Inject constructor(
             core = memory.core,
             noteQuery = memory.query,
             holds = memory.holds,
+            curatorRuns = memory.curatorRuns,
             skills = skillList,
             mcpServers = mcpServers,
             mcpStatus = mcpStatus,

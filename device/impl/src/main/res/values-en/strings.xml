@@ -8,6 +8,7 @@
     <string name="run_channel">Agent runs</string>
     <string name="run_channel_done">Agent results</string>
     <string name="run_finished">AI task completed</string>
+    <string name="run_reply_ready">Reply ready</string>
     <string name="run_interrupted">AI task interrupted</string>
     <string name="projection_title">BAIC2 screen capture</string>
     <string name="projection_text">In use for screen analysis and OCR</string>

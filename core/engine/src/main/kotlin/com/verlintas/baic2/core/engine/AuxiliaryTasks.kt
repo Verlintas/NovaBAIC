@@ -145,6 +145,8 @@ class AuxiliaryTasks(
             "so recall can go \"one thing at a time\".\n" +
             "- expires: for perishable facts only (where someone is right now, a temporary state), " +
             "a duration like 12h/3d or a date; durable facts must omit it.\n" +
+            "- numbers: never remember tool counts, version numbers, prices or other values a new " +
+            "release can change - they rot; if one truly matters, qualify it with a date.\n" +
             "- revise: fix or sharpen an existing note by its #id when new information updates it; " +
             "prefer revise over remember whenever a note already covers the topic, even if the " +
             "wording differs; include only the fields that change.\n" +
@@ -194,8 +196,17 @@ class AuxiliaryTasks(
          * Parses the curator reply. Anything unparseable yields an empty plan,
          * never junk notes; every field is clamped to its budget.
          */
-        fun parseCuratorPlan(raw: String): CuratorPlan {
-            val element = extractJsonObject(raw) ?: return CuratorPlan()
+        fun parseCuratorPlan(raw: String): CuratorPlan =
+            extractJsonObject(raw)?.let(::parsePlanElement) ?: CuratorPlan()
+
+        /**
+         * Null when no plan JSON could be extracted at all - a real failure,
+         * distinguishable from a parsed-but-empty plan ("{}").
+         */
+        fun parseCuratorPlanOrNull(raw: String): CuratorPlan? =
+            extractJsonObject(raw)?.let(::parsePlanElement)
+
+        private fun parsePlanElement(element: JsonObject): CuratorPlan {
             val remember = (element["remember"] as? JsonArray).orEmpty()
                 .mapNotNull { item ->
                     val objectItem = item as? JsonObject ?: return@mapNotNull null
