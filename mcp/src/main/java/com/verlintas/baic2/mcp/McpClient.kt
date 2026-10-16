@@ -203,15 +203,20 @@ class McpClient @Inject constructor(
             val text = httpResponse.body?.string().orEmpty()
             if (contentType.contains("text/event-stream")) {
                 val parser = SseParser()
-                var payload: String? = null
+                val candidates = mutableListOf<String>()
                 text.lines().forEach { line ->
                     val event = parser.line(line)
-                    if (event != null && (event.data != "[DONE]")) {
-                        payload = payload ?: event.data
-                    }
+                    if (event != null && event.data != "[DONE]") candidates += event.data
                 }
-                parser.endOfStream()?.let { payload = payload ?: it.data }
-                val data = payload ?: throw IOException("empty SSE response")
+                parser.endOfStream()?.let { if (it.data != "[DONE]") candidates += it.data }
+                // Servers may send progress/log notifications before the reply;
+                // the response is the object carrying result/error.
+                val data = candidates.firstOrNull { candidate ->
+                    val root = runCatching { json.parseToJsonElement(candidate) as? JsonObject }
+                        .getOrNull()
+                    root != null && (root["result"] != null || root["error"] != null)
+                } ?: candidates.firstOrNull()
+                ?: throw IOException("empty SSE response")
                 return RpcResponse(parseRpc(data), returnedSession)
             }
             if (text.isBlank()) return RpcResponse(JsonObject(emptyMap()), returnedSession)

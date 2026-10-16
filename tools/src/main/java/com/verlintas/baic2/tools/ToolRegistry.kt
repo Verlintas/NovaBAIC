@@ -42,13 +42,17 @@ class ToolRegistry @Inject constructor(
 
     private fun allTools(): Map<String, DeviceTool> = byName + dynamic
 
-    override fun specs(mode: AppMode): List<ToolSpec> = when (mode) {
-        AppMode.CHAT -> allTools().values.filter { it.spec.alwaysAvailable }.map { it.spec }
-        AppMode.CHAT_PLUS -> allTools().values
-            .filter { it.spec.readOnly || it.spec.alwaysAvailable }
-            .map { it.spec }
+    override fun specs(mode: AppMode): List<ToolSpec> {
+        val tools = when (mode) {
+            AppMode.CHAT -> allTools().values.filter { it.spec.alwaysAvailable }
+            AppMode.CHAT_PLUS -> allTools().values
+                .filter { it.spec.readOnly || it.spec.alwaysAvailable }
 
-        AppMode.ACT, AppMode.MAX -> allTools().values.map { it.spec }
+            AppMode.ACT, AppMode.MAX -> allTools().values
+        }
+        // Deterministic order keeps the serialized tool block stable across
+        // turns, so provider prefix caching actually hits.
+        return tools.map { it.spec }.sortedBy { it.name }
     }
 
     override fun find(name: String): ToolSpec? = allTools()[name]?.spec
@@ -76,6 +80,17 @@ class DeviceToolRunner @Inject constructor(
     override suspend fun run(call: ToolCall, run: ToolRunContext): ToolResult {
         val tool = registry.tool(call.name)
             ?: return ToolResult.Failure("Unknown tool '${call.name}'. Use one of: ${registry.toolNames.joinToString()}")
+        val cacheKey = if (tool.spec.cacheable) {
+            call.name + "|" + call.argumentsJson.trim()
+        } else {
+            null
+        }
+        if (cacheKey != null) {
+            val cached = run.cache[cacheKey] as? ToolResult.Success
+            if (cached != null) {
+                return ToolResult.Success("[cached from earlier in this run]\n" + cached.output)
+            }
+        }
         val arguments = ArgumentHealer.parse(call.argumentsJson) ?: JsonObject(emptyMap())
         val healed = ArgumentHealer.heal(arguments, tool.spec.parametersJson)
         val result = try {
@@ -84,6 +99,9 @@ class DeviceToolRunner @Inject constructor(
             throw e
         } catch (e: Exception) {
             ToolResult.Failure("${call.name} crashed: ${e.message ?: e.javaClass.simpleName}")
+        }
+        if (cacheKey != null && result is ToolResult.Success) {
+            run.cache[cacheKey] = result
         }
         return when {
             healed.notes.isEmpty() -> result

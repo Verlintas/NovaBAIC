@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.JsonObject
+import kotlinx.coroutines.sync.withLock
 
 sealed interface McpServerStatus {
     data class Connected(val toolCount: Int) : McpServerStatus
@@ -59,8 +60,10 @@ class McpManager @Inject constructor(
     private val _status = MutableStateFlow<Map<Long, McpServerStatus>>(emptyMap())
     val status: StateFlow<Map<Long, McpServerStatus>> = _status.asStateFlow()
 
+    private val refreshMutex = kotlinx.coroutines.sync.Mutex()
+
     /** Reconnects every enabled server; safe to call repeatedly. */
-    suspend fun refresh() {
+    suspend fun refresh() = refreshMutex.withLock {
         disconnectAll()
         repository.getAll().forEach { server ->
             if (!server.enabled) {

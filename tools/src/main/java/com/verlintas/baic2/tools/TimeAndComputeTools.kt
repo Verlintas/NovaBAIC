@@ -101,18 +101,18 @@ internal class ExpressionEvaluator(private val source: String) {
     }
 
     private fun parseTerm(): Double {
-        var value = parsePower()
+        var value = parseUnary()
         while (true) {
             skipSpaces()
             when {
-                consume('*') -> value *= parsePower()
+                consume('*') -> value *= parseUnary()
                 consume('/') -> {
-                    val divisor = parsePower()
+                    val divisor = parseUnary()
                     if (divisor == 0.0) throw ArithmeticException("division by zero")
                     value /= divisor
                 }
                 consume('%') -> {
-                    val divisor = parsePower()
+                    val divisor = parseUnary()
                     if (divisor == 0.0) throw ArithmeticException("modulo by zero")
                     value %= divisor
                 }
@@ -122,10 +122,11 @@ internal class ExpressionEvaluator(private val source: String) {
     }
 
     private fun parsePower(): Double {
-        val base = parseUnary()
+        val base = parseAtom()
         skipSpaces()
         if (consume('^')) {
-            return Math.pow(base, parsePower())
+            // Right-associative; the exponent may carry its own sign (2^-3).
+            return Math.pow(base, parseUnary())
         }
         return base
     }
@@ -134,7 +135,7 @@ internal class ExpressionEvaluator(private val source: String) {
         skipSpaces()
         if (consume('-')) return -parseUnary()
         if (consume('+')) return parseUnary()
-        return parseAtom()
+        return parsePower()
     }
 
     private fun parseAtom(): Double {

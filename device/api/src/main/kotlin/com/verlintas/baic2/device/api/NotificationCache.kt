@@ -33,9 +33,21 @@ object NotificationCache {
     private const val MAX = 60
     private val items = CopyOnWriteArrayList<CachedNotification>()
 
+    /** Process-local listeners (notification automations); kept dependency-free. */
+    private val listeners = CopyOnWriteArrayList<(CachedNotification) -> Unit>()
+
+    fun addListener(listener: (CachedNotification) -> Unit) {
+        listeners.add(listener)
+    }
+
+    fun removeListener(listener: (CachedNotification) -> Unit) {
+        listeners.remove(listener)
+    }
+
     fun record(notification: CachedNotification) {
         items.add(notification)
         while (items.size > MAX) items.removeAt(0)
+        listeners.forEach { listener -> runCatching { listener(notification) } }
     }
 
     fun snapshot(limit: Int, sinceMillis: Long, appFilter: String?): List<CachedNotification> =

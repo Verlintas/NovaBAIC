@@ -111,8 +111,10 @@ class GazetteerIndex(places: List<GazetteerPlace>) {
             if (best.size > limit) best.subList(limit, best.size).clear()
             if (best.size >= limit) {
                 // Anything not yet visited is at least `ring` cells away
-                // (loose but always-safe lower bound).
-                val unvisitedFloor = ring * CELL_DEGREES * METERS_PER_DEGREE
+                // (loose but always-safe lower bound: east-west degrees shrink
+                // by cos(latitude), so the floor must shrink with them).
+                val unvisitedFloor = ring * CELL_DEGREES * METERS_PER_DEGREE *
+                    kotlin.math.cos(Math.toRadians(latitude)).coerceAtLeast(0.05)
                 if (best[limit - 1].distance <= unvisitedFloor) {
                     converged = true
                     break

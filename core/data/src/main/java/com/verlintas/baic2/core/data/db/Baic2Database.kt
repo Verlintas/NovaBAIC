@@ -43,7 +43,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SnapshotEntity::class,
         ScheduledTaskEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 abstract class Baic2Database : RoomDatabase() {
@@ -81,6 +81,16 @@ abstract class Baic2Database : RoomDatabase() {
     abstract fun scheduledTaskDao(): ScheduledTaskDao
 
     companion object {
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Notification-triggered automations: package + keyword filters.
+                db.execSQL(
+                    "ALTER TABLE automations ADD COLUMN notificationPackagesJson TEXT NOT NULL DEFAULT '[]'",
+                )
+                db.execSQL("ALTER TABLE automations ADD COLUMN notificationKeyword TEXT")
+            }
+        }
+
         val MIGRATION_19_20 = object : Migration(19, 20) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // "妈妈" -> "张兰": alias resolution for recall and priming.

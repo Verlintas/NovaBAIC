@@ -356,6 +356,12 @@ object ToolsModule {
 
     @Provides
     @IntoSet
+    fun askUserTool(
+        questions: com.verlintas.baic2.core.engine.QuestionQueue,
+    ): DeviceTool = com.verlintas.baic2.tools.AskUserTool(questions)
+
+    @Provides
+    @IntoSet
     fun coreMemoryUpdateTool(
         memoryRepository: com.verlintas.baic2.core.data.repository.MemoryRepository,
     ): DeviceTool = com.verlintas.baic2.tools.memory.CoreMemoryUpdateTool(memoryRepository)

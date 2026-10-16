@@ -42,6 +42,12 @@ data class ToolSpec(
      * wraps it and marks the run as tainted so high-danger calls are gated.
      */
     val untrustedOutput: Boolean = false,
+    /**
+     * Deterministic reads (web pages, weather, file listings): the runner
+     * answers a repeated identical call from the run's cache instead of
+     * paying the network/read cost again.
+     */
+    val cacheable: Boolean = false,
 )
 
 @Serializable

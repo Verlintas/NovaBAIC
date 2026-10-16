@@ -44,7 +44,7 @@ class PlanUpdateTool(
         description = "Create or update the task plan. Pass the FULL step list with each step's status " +
             "(pending/doing/done/failed). Call it when starting a task and after every verification.",
         parametersJson = """{"type":"object","properties":{"steps":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"status":{"type":"string","enum":["pending","doing","done","failed"]}},"required":["title"]}}},"required":["steps"]}""",
-        readOnly = false,
+        readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = false,
     )

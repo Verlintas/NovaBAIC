@@ -42,6 +42,25 @@ def validate_doc_counts(tool_count, failures):
                 )
 
 
+def count_tool_providers():
+    """Real registry size: one @IntoSet provider per statically advertised tool.
+
+    Counting schema literals drifted (a composite skill template counts as a
+    schema but registers dynamically), so the provider set is the source of
+    truth for the prose checks.
+    """
+    roots = [ROOT / "tools", ROOT / "device", ROOT / "app"]
+    count = 0
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*.kt"):
+            if "build" in path.parts:
+                continue
+            count += path.read_text().count("@IntoSet")
+    return count
+
+
 def main() -> int:
     checked = 0
     failures = []
@@ -56,14 +75,18 @@ def main() -> int:
                 continue
             if not isinstance(schema, dict) or schema.get("type") != "object":
                 failures.append((path, "missing \"type\": \"object\""))
+    tool_count = count_tool_providers()
     if not failures:
-        validate_doc_counts(checked, failures)
+        validate_doc_counts(tool_count, failures)
     if failures:
         for path, why in failures:
             print(f"{path.relative_to(ROOT)}: {why}")
-        print(f"{len(failures)} failure(s); registry has {checked} tool schemas.")
+        print(f"{len(failures)} failure(s); registry has {tool_count} tools, {checked} schemas.")
         return 1
-    print(f"All {checked} tool schemas are valid object schemas; docs match {checked} tools.")
+    print(
+        f"All {checked} tool schemas are valid object schemas; "
+        f"registry has {tool_count} tools and docs match.",
+    )
     return 0
 
 if __name__ == "__main__":

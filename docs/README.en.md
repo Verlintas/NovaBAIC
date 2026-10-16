@@ -132,14 +132,15 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 - `spawn_agent`: a subagent with its own context and budget; multiple calls can run in parallel
 - `plan_update`: the plan artifact — a persistent plan card at the top of the chat whose step states update live
 - `load_skill`: load a skill as tools on demand
-- `automation`: create time- or battery-triggered automations
+- `automation`: create time-, battery- or **notification-triggered** automations
+- `ask_user`: pause and ask one question at a genuine fork; when you are away it continues with a stated assumption
 
 ### Automation, skills & MCP
 
 - **Scheduled tasks**: daily / weekly schedules on top of system exact alarms; a foreground service runs the full agent unattended and reports back with a notification; toggle or run-now from the UI
-- **Skills v2**: declarative YAML recipes; imported skills load as tools on demand, and a completed run can be "saved as a skill"
+- **Skills v2**: declarative YAML recipes with `{{parameter}}` placeholders and a parameters schema — record once, reuse with different inputs; a completed run can also be "saved as a skill"
 - **MCP**: add remote Streamable HTTP servers; their tools join the toolbox automatically
-- **Automations**: time (daily / weekly) and battery triggers that execute action sequences and report results
+- **Automations**: time (daily / weekly), battery and **notification** triggers (package/keyword filters with a cooldown) execute action sequences and report results
 
 ### Tasks & runs
 

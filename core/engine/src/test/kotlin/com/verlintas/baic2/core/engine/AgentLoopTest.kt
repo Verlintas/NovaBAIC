@@ -95,6 +95,38 @@ class AgentLoopTest {
     }
 
     @Test
+    fun identicalRepeatsAreRefusedAfterTwoRuns() = runTest {
+        val call = ToolCall(id = "c1", name = "read_thing", argumentsJson = """{"q":"x"}""")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(call),
+                toolRound(call),
+                toolRound(call.copy(id = "c2")),
+                textRound("used what I had"),
+            ),
+        )
+        var runnerCalls = 0
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(listOf(ToolSpec(name = "read_thing", description = "r", readOnly = true))),
+            toolRunner = { _, _ ->
+                runnerCalls++
+                ToolResult.Success("42")
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        // Two executions, the third identical attempt denied without running.
+        assertEquals(2, runnerCalls)
+        val denied = events.filterIsInstance<AgentEvent.ToolCallFinished>()
+            .filter { it.call.status == ToolCallStatus.DENIED }
+        assertEquals(1, denied.size)
+        assertTrue(denied.first().call.result.orEmpty().contains("same arguments"))
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
     fun toolRoundExecutesAndFinishes() = runTest {
         val call = ToolCall(id = "c1", name = "read_thing", argumentsJson = "{}")
         val provider = ScriptedProvider(

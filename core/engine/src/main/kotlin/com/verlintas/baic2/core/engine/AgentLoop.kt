@@ -65,6 +65,10 @@ data class ToolRunContext(
     val taint: TaintState = TaintState(),
     /** The user message that started this run; memories cite it as evidence. */
     val triggerMessageId: Long? = null,
+    /** Notes already injected by priming; search results can mark them. */
+    val primedNoteIds: Set<Long> = emptySet(),
+    /** Per-run cache for deterministic reads (see ToolSpec.cacheable). */
+    val cache: MutableMap<String, ToolResult> = java.util.concurrent.ConcurrentHashMap(),
 )
 
 /** Executes a single tool call. */
@@ -110,6 +114,7 @@ class AgentLoop(
         initialTaint: Boolean = false,
         budgetOverride: RunBudget? = null,
         triggerMessageId: Long? = null,
+        primedNoteIds: Set<Long> = emptySet(),
     ): Flow<AgentEvent> = flow {
         val budget = budgetOverride ?: RunBudget.forMode(mode)
         val runContext = ToolRunContext(
@@ -118,6 +123,7 @@ class AgentLoop(
             config = config,
             unattended = unattended,
             triggerMessageId = triggerMessageId,
+            primedNoteIds = primedNoteIds,
         )
         val startedAt = clock()
         var messages = history
@@ -128,7 +134,10 @@ class AgentLoop(
         // it down), high-danger calls stay gated across turns and compressions.
         var tainted = initialTaint || ToolTrust.windowIsTainted(history)
         runContext.taint.tainted = tainted
-        val toolFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
+            val toolFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
+            // Identical repeats: the third call with the same name+args is
+            // refused, so a successful-but-pointless loop cannot burn rounds.
+            val callSignatures = HashMap<String, Int>()
 
         while (true) {
             if (round >= budget.maxRounds) {
@@ -249,17 +258,22 @@ class AgentLoop(
                 val runnable = mutableListOf<ToolCall>()
                 for (call in toolCalls) {
                     when {
-                        (toolFailures[call.name] ?: 0) >= MAX_TOOL_FAILURES ->
+                        // Denials come before any dialog: a poisoned, exhausted
+                        // or looping call must never pop a confirmation.
+                        failureCount(toolFailures, call) >= MAX_TOOL_FAILURES ->
                             preDenied[call] =
-                                "${call.name} failed $MAX_TOOL_FAILURES times in this run. " +
-                                    "Re-read its parameter documentation, change the arguments, " +
-                                    "or use another tool — do not retry unchanged."
+                                "${call.name} with these arguments failed $MAX_TOOL_FAILURES times " +
+                                    "in this run. Change the arguments or the approach - do not retry unchanged."
+
+                        signatureCount(callSignatures, call) >= MAX_IDENTICAL_CALLS ->
+                            preDenied[call] = identicalCallReason(call)
 
                         remainingBudget <= 0 ->
                             preDenied[call] =
                                 "Tool call budget exhausted (${budget.maxToolCalls}); answer with what you have"
 
                         else -> {
+                            bumpSignature(callSignatures, call)
                             runnable += call
                             remainingBudget--
                         }
@@ -270,7 +284,7 @@ class AgentLoop(
                     Triple(call, ToolCallStatus.DENIED, ToolResult.Denied(reason))
                 }).associateBy { it.first.id }
                 toolCalls.mapNotNull { byId[it.id] }.forEach { (call, status, result) ->
-                    recordFailure(toolFailures, call.name, status, result)
+                    recordFailure(toolFailures, call, status, result)
                     if (status == ToolCallStatus.DONE || status == ToolCallStatus.FAILED) {
                         toolCallsUsed++
                     }
@@ -299,31 +313,37 @@ class AgentLoop(
                         decision is GateResult.Denied ->
                             ToolCallStatus.DENIED to ToolResult.Denied(decision.reason)
 
-                        (toolFailures[call.name] ?: 0) >= MAX_TOOL_FAILURES ->
+                        failureCount(toolFailures, call) >= MAX_TOOL_FAILURES ->
                             ToolCallStatus.DENIED to ToolResult.Denied(
-                                "${call.name} failed $MAX_TOOL_FAILURES times in this run. " +
-                                    "Re-read its parameter documentation, change the arguments, " +
-                                    "or use another tool — do not retry unchanged.",
+                                "${call.name} with these arguments failed $MAX_TOOL_FAILURES times " +
+                                    "in this run. Change the arguments or the approach - do not retry unchanged.",
                             )
 
-                        decision is GateResult.NeedsConfirm -> {
-                            val approved = confirmationGate.confirm(call)
-                            if (approved) {
-                                execute(call, runContext)
-                            } else {
-                                ToolCallStatus.REJECTED to ToolResult.Denied("User rejected the call")
-                            }
-                        }
+                        signatureCount(callSignatures, call) >= MAX_IDENTICAL_CALLS ->
+                            ToolCallStatus.DENIED to ToolResult.Denied(identicalCallReason(call))
 
                         toolCallsUsed >= budget.maxToolCalls ->
                             ToolCallStatus.DENIED to ToolResult.Denied(
                                 "Tool call budget exhausted (${budget.maxToolCalls}); answer with what you have",
                             )
 
-                        else -> execute(call, runContext)
+                        decision is GateResult.NeedsConfirm -> {
+                            val approved = confirmationGate.confirm(call)
+                            if (approved) {
+                                bumpSignature(callSignatures, call)
+                                execute(call, runContext)
+                            } else {
+                                ToolCallStatus.REJECTED to ToolResult.Denied("User rejected the call")
+                            }
+                        }
+
+                        else -> {
+                            bumpSignature(callSignatures, call)
+                            execute(call, runContext)
+                        }
                     }
 
-                    recordFailure(toolFailures, call.name, status, result)
+                    recordFailure(toolFailures, call, status, result)
                     if (status == ToolCallStatus.DONE || status == ToolCallStatus.FAILED) {
                         toolCallsUsed++
                     }
@@ -351,19 +371,40 @@ class AgentLoop(
      * Tool-name level circuit breaker: three failures in a run and further
      * identical attempts are denied with guidance instead of burning rounds.
      */
+    /** How many times this exact call (name + arguments) already ran. */
+    private fun signatureCount(counts: MutableMap<String, Int>, call: ToolCall): Int =
+        counts[call.name + "|" + call.argumentsJson.trim()] ?: 0
+
+    private fun bumpSignature(counts: MutableMap<String, Int>, call: ToolCall) {
+        val signature = call.name + "|" + call.argumentsJson.trim()
+        counts[signature] = (counts[signature] ?: 0) + 1
+    }
+
+    /** Failures are keyed by signature, so changing the arguments resets the count. */
+    private fun failureCount(failures: MutableMap<String, Int>, call: ToolCall): Int {
+        val key = call.name + "|" + call.argumentsJson.trim()
+        return failures[key] ?: 0
+    }
+
+    private fun identicalCallReason(call: ToolCall): String =
+        "${call.name} already ran $MAX_IDENTICAL_CALLS times with exactly the same arguments in " +
+            "this run; the result will not change. Change the approach or arguments, or answer " +
+            "with what you already have."
+
     private fun recordFailure(
         failures: MutableMap<String, Int>,
-        toolName: String,
+        call: ToolCall,
         status: ToolCallStatus,
         result: ToolResult,
     ) {
+        val key = call.name + "|" + call.argumentsJson.trim()
         when {
             status == ToolCallStatus.DONE && result is ToolResult.Success ->
-                failures.remove(toolName)
+                failures.remove(key)
 
             status == ToolCallStatus.FAILED ||
                 (status == ToolCallStatus.DONE && result is ToolResult.Failure) ->
-                failures[toolName] = (failures[toolName] ?: 0) + 1
+                failures[key] = (failures[key] ?: 0) + 1
         }
     }
 
@@ -442,6 +483,7 @@ class AgentLoop(
 
     private companion object {
         const val MAX_TOOL_FAILURES = 3
+        const val MAX_IDENTICAL_CALLS = 2
 
         /** External side effects that stay disabled in unattended runs. */
         val UNATTENDED_BLOCKED = setOf("run_shell", "manage_app", "set_clipboard", "share_text")
@@ -477,8 +519,16 @@ fun renderSystemPrompt(
                 "just talk with the user - clearly, concisely, and in your own voice."
 
         AppMode.CHAT_PLUS ->
-            "You are in research mode. You may use read-only tools and your memory tools to inspect " +
-                "information. Draft a short plan before acting and never attempt to modify the device."
+            "You are in research mode: your own quiet study. You may read (read-only tools) and " +
+                "remember, never change the device. How you work: think silently first about what " +
+                "you actually need to check; fire independent lookups together in one round " +
+                "(several calls, or web_search with a queries array); reconcile what you find and " +
+                "name disagreements between sources; after a few attempts with thin evidence, stop " +
+                "and say what is missing instead of burning rounds. The reply is for a person: " +
+                "conclusions first, clean prose, no citation clutter - the tool cards already show " +
+                "what you read. Name a source only when the user asks, when sources disagree, or " +
+                "when the claim is perishable and costly (prices, versions, health). For multi-step " +
+                "research keep a short visible plan with plan_update."
 
         AppMode.ACT ->
             "You are in action mode. You can call device tools; each call is confirmed by the user first, " +
@@ -495,7 +545,9 @@ fun renderSystemPrompt(
                 "(6) before finishing, re-read the plan and verify every step, then answer with: what was " +
                 "completed, what changed on the device, and anything left undone or risky."
     }
-    val withPlan = if (!planContext.isNullOrBlank() && mode == AppMode.MAX) {
+    val withPlan = if (!planContext.isNullOrBlank() &&
+        (mode == AppMode.MAX || mode == AppMode.CHAT_PLUS)
+    ) {
         base + "\n\nCurrent plan (keep it updated via plan_update):\n" + planContext
     } else {
         base

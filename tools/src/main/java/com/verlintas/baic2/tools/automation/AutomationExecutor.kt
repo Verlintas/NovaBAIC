@@ -39,6 +39,7 @@ import kotlinx.coroutines.CancellationException
 class AutomationExecutor @Inject constructor(
     private val toolRunner: ToolRunner,
     private val automationRepository: AutomationRepository,
+    private val registry: dagger.Lazy<com.verlintas.baic2.tools.ToolRegistry>,
     @ApplicationContext private val context: Context,
 ) {
 
@@ -51,8 +52,23 @@ class AutomationExecutor @Inject constructor(
                 name = action.tool,
                 argumentsJson = action.argsJson,
             )
-            val result = try {
-                toolRunner.run(call, com.verlintas.baic2.core.engine.ToolRunContext(null, com.verlintas.baic2.core.model.AppMode.MAX))
+            // Creation-time validation can go stale (dynamic skill tools can
+            // shadow names later); re-check against the live registry.
+            val denial = AutomationPolicy.denialReason(
+                action.tool,
+                registry.get().tool(action.tool)?.spec?.danger,
+            )
+            val result = if (denial != null) {
+                ToolResult.Denied("$denial (refused at execution time)")
+            } else try {
+                toolRunner.run(
+                    call,
+                    com.verlintas.baic2.core.engine.ToolRunContext(
+                        conversationId = null,
+                        mode = com.verlintas.baic2.core.model.AppMode.MAX,
+                        unattended = true,
+                    ),
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

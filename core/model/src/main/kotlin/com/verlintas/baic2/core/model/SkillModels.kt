@@ -32,6 +32,8 @@ data class SkillToolDef(
     val id: String,
     val description: String,
     val steps: List<SkillStep>,
+    /** JSON schema for the composite tool; steps may use {{name}} placeholders. */
+    val parametersJson: String = """{"type":"object","properties":{}}""",
 )
 
 @Serializable

@@ -114,7 +114,11 @@ import com.verlintas.baic2.designsystem.Baic2Spacing
 import com.verlintas.baic2.designsystem.component.AuroraSurface
 import com.verlintas.baic2.designsystem.component.MemoryRing
 import com.verlintas.baic2.designsystem.component.pressScale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val MAX_BACKUP_BYTES = 16 * 1024 * 1024
 
 private object LibraryRoute {
     const val ROOT = "library_root"
@@ -356,10 +360,14 @@ private fun MemoryPage(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val json = viewModel.exportMemory()
-                runCatching {
-                    context.contentResolver.openOutputStream(uri)?.use { stream ->
-                        stream.write(json.toByteArray(Charsets.UTF_8))
+                val json = withContext(Dispatchers.IO) {
+                    runCatching { viewModel.exportMemory() }.getOrNull()
+                } ?: return@launch
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use { stream ->
+                            stream.write(json.toByteArray(Charsets.UTF_8))
+                        }
                     }
                 }
             }
@@ -370,13 +378,29 @@ private fun MemoryPage(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val text = runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                }.getOrNull()
-                importResult = if (text == null) {
-                    MemoryRepository.ImportResult(valid = false)
-                } else {
-                    viewModel.importMemory(text)
+                importResult = withContext(Dispatchers.IO) {
+                    // Bounded read: a malformed or huge file must not OOM us.
+                    val text = runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            val buffer = java.io.ByteArrayOutputStream()
+                            val chunk = ByteArray(64 * 1024)
+                            var total = 0
+                            while (total <= MAX_BACKUP_BYTES) {
+                                val read = stream.read(chunk)
+                                if (read == -1) break
+                                total += read
+                                buffer.write(chunk, 0, read)
+                            }
+                            buffer.toByteArray().toString(Charsets.UTF_8)
+                        }
+                    }.getOrNull()
+                    when {
+                        text == null -> MemoryRepository.ImportResult(valid = false)
+                        text.toByteArray(Charsets.UTF_8).size > MAX_BACKUP_BYTES ->
+                            MemoryRepository.ImportResult(valid = false)
+                        else -> runCatching { viewModel.importMemory(text) }
+                            .getOrElse { MemoryRepository.ImportResult(valid = false) }
+                    }
                 }
             }
         }

@@ -163,6 +163,8 @@ class AutomationBootstrap @Inject constructor(
 ) {
 
     private var batteryReceiver: BroadcastReceiver? = null
+    private var notificationListener: ((com.verlintas.baic2.device.api.CachedNotification) -> Unit)? = null
+    private val notificationCooldown = java.util.concurrent.ConcurrentHashMap<Long, Long>()
 
     fun start() {
         CoroutineScope(Dispatchers.IO).launch {
@@ -200,5 +202,69 @@ class AutomationBootstrap @Inject constructor(
             context.registerReceiver(receiver, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             batteryReceiver = receiver
         }
+        if (notificationListener == null) {
+            // Notification triggers: one serialized worker consumes the stream,
+            // so a notification storm cannot spawn unbounded concurrent runs.
+            val queue = kotlinx.coroutines.channels.Channel<com.verlintas.baic2.device.api.CachedNotification>(
+                kotlinx.coroutines.channels.Channel.UNLIMITED,
+            )
+            val listener: (com.verlintas.baic2.device.api.CachedNotification) -> Unit = { notification ->
+                queue.trySend(notification)
+            }
+            com.verlintas.baic2.device.api.NotificationCache.addListener(listener)
+            notificationListener = listener
+            CoroutineScope(Dispatchers.IO).launch {
+                for (notification in queue) {
+                    runCatching { onNotification(notification) }
+                }
+            }
+        }
+    }
+
+    private suspend fun onNotification(notification: com.verlintas.baic2.device.api.CachedNotification) {
+        val now = System.currentTimeMillis()
+        automationRepository.getAll()
+            .filter { automation ->
+                automation.enabled &&
+                    automation.trigger == AutomationTrigger.NOTIFICATION &&
+                    matchesNotification(automation, notification)
+            }
+            .forEach { automation ->
+                // Atomic check-and-reserve: a burst must not fire the same
+                // automation twice.
+                val reserved = notificationCooldown.compute(automation.id) { _, last ->
+                    if (last == null || now - last >= NOTIFICATION_COOLDOWN_MS) now else last
+                }
+                if (reserved != now) return@forEach
+                runCatching { executor.run(automation) }
+            }
+    }
+
+    private fun matchesNotification(
+        automation: Automation,
+        notification: com.verlintas.baic2.device.api.CachedNotification,
+    ): Boolean {
+        val packages = automation.notificationPackages
+        val keyword = automation.notificationKeyword?.trim().orEmpty()
+        // At least one filter must exist, or the automation would fire on everything.
+        if (packages.isEmpty() && keyword.isEmpty()) return false
+        if (packages.isNotEmpty() && packages.none { pkg ->
+                notification.packageName.equals(pkg.trim(), ignoreCase = true) ||
+                    notification.packageName.contains(pkg.trim(), ignoreCase = true)
+            }
+        ) {
+            return false
+        }
+        if (keyword.isNotEmpty() &&
+            !notification.title.contains(keyword, ignoreCase = true) &&
+            !notification.text.contains(keyword, ignoreCase = true)
+        ) {
+            return false
+        }
+        return true
+    }
+
+    private companion object {
+        const val NOTIFICATION_COOLDOWN_MS = 60_000L
     }
 }

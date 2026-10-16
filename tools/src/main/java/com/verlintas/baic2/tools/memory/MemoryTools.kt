@@ -59,6 +59,7 @@ class MemorySearchTool(
         parametersJson = """
             {"type":"object","properties":{
               "query":{"type":"string","description":"keywords in the user's language; space-separated terms are ANDed. Omit to browse recent items."},
+              "queries":{"type":"array","items":{"type":"string"},"description":"several searches in one call (up to 4); the union of terms is searched once"},
               "scope":{"type":"string","enum":["all","notes","messages"],"description":"default all"},
               "role":{"type":"string","enum":["any","user","assistant"],"description":"filter message hits by speaker; user recalls what the user themselves said"},
               "entity":{"type":"string","description":"recall everything about a person/project/place by exact name"},
@@ -77,7 +78,13 @@ class MemorySearchTool(
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
-        val query = arguments.string("query")?.trim().orEmpty()
+        val queryList = (arguments["queries"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
+            .filter { it.isNotEmpty() }
+            .take(4)
+        val query = arguments.string("query")?.trim().orEmpty().ifEmpty {
+            queryList.joinToString(" · ")
+        }
         val scope = arguments.string("scope")?.trim()?.lowercase() ?: "all"
         val from = MemoryText.parseWhen(arguments.string("from"))
         val to = endOfDay(arguments.string("to"))
@@ -91,7 +98,18 @@ class MemorySearchTool(
         }
         val limit = (arguments.int("limit") ?: 10).coerceIn(1, 20)
         val offset = (arguments.int("offset") ?: 0).coerceAtLeast(0)
-        val terms = MemoryText.terms(query)
+        // One union of cues serves every query in the batch.
+        val terms = LinkedHashSet<String>().apply {
+            (listOf(query) + queryList).filter { it.isNotBlank() }
+                .forEach { addAll(MemoryText.terms(it)) }
+        }.take(24)
+        if (query.isNotEmpty() && terms.isEmpty()) {
+            return ToolResult.Failure(
+                "Query \"$query\" has no usable keywords (too short or filler). " +
+                    "Use longer or more specific words, or omit 'query' to browse recent items.",
+            )
+        }
+        val primedIds = context.run.primedNoteIds
 
         val entityNotes: List<ScoredNote> = if (entity != null && scope != "messages") {
             if (at != null) {
@@ -174,6 +192,7 @@ class MemorySearchTool(
                                 rank = index + 1,
                                 total = notes.size,
                                 asOf = at,
+                                primed = scored.note.id in primedIds,
                             ),
                         ).append('\n')
                     }
@@ -183,7 +202,7 @@ class MemorySearchTool(
                     }
                     if (at == null) closestBlock(query)?.let { append('\n').append(it).append('\n') }
                 }
-                if (entity != null && at == null) {
+                if (entity != null && at == null && scope != "messages") {
                     entityTimeline(entity, now)?.let { append('\n').append(it).append('\n') }
                 }
                 if (hits.isNotEmpty()) {
@@ -299,6 +318,7 @@ class MemorySearchTool(
         rank: Int,
         total: Int,
         asOf: Long? = null,
+        primed: Boolean = false,
     ): String {
         val note = scored.note
         val recall = (MemoryScoring.retrievability(note, now) * 100).toInt()
@@ -346,8 +366,9 @@ class MemorySearchTool(
             note.updatedAt > asOf -> " · later revised (this was the version then)"
             else -> ""
         }
+        val primedMark = if (primed) " · already primed" else ""
         return "#${note.id} [${note.kind.wire()} i${note.importance}$source$entities" +
-            " · rank $rank/$total · score $score$weak · $cues$expiry$changedSince" +
+            " · rank $rank/$total · score $score$weak · $cues$expiry$changedSince$primedMark" +
             " · strength $strength · recall $recall% · last recalled $last$evidence] " +
             note.content.replace('\n', ' ')
     }
@@ -664,8 +685,16 @@ class MemoryForgetTool(
         val targets = LinkedHashMap<Long, Note>()
         ids.forEach { id -> memoryRepository.noteById(id)?.let { targets[it.id] = it } }
         if (targets.isEmpty() && query.isNotEmpty()) {
+            val terms = MemoryText.terms(query)
+            if (terms.isEmpty()) {
+                // Browse mode would return arbitrary recent notes; forgetting must never guess.
+                return ToolResult.Failure(
+                    "Query \"$query\" has no usable keywords (too short or filler). " +
+                        "Use longer words, or pass explicit ids.",
+                )
+            }
             memoryRepository.recall(
-                terms = MemoryText.terms(query),
+                terms = terms,
                 limit = 3,
                 spread = false,
                 feedback = false,

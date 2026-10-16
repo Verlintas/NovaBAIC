@@ -46,6 +46,11 @@ object AgentRuntimeModule {
 
     @Provides
     @Singleton
+    fun provideQuestionQueue(): com.verlintas.baic2.core.engine.QuestionQueue =
+        com.verlintas.baic2.core.engine.QuestionQueue()
+
+    @Provides
+    @Singleton
     fun provideConfirmationGate(queue: ConfirmationQueue): ConfirmationGate =
         ConfirmationGate { call -> queue.confirm(call) }
 

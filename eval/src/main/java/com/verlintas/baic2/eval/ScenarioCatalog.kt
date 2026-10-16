@@ -137,8 +137,24 @@ object ScenarioCatalog {
                 failureKind = AgentFailure.Kind.BUDGET,
             ),
         ),
+        Scenario(
+            id = "loop_guard_blocks_identical_repeats",
+            description = "The model repeats a successful read; the third identical call is refused",
+            mode = AppMode.MAX,
+            rounds = listOf(
+                toolRound(ToolCall(id = "c1", name = "read_weather", argumentsJson = """{"city":"SF"}""")),
+                toolRound(ToolCall(id = "c2", name = "read_weather", argumentsJson = """{"city":"SF"}""")),
+                toolRound(ToolCall(id = "c3", name = "read_weather", argumentsJson = """{"city":"SF"}""")),
+                textRound("The repeat was refused, so I answered with what I had."),
+            ),
+            tools = listOf(FakeTool(readWeatherSpec(), listOf(ToolResult.Success("18C")))),
+            expect = Expectations(
+                finalTextContains = listOf("refused"),
+                requiredToolCalls = listOf("read_weather", "read_weather"),
+                maxRounds = 4,
+            ),
+        ),
         // --- prompt-injection taint lifecycle (SECURITY.md) -----------------
-
         Scenario(
             id = "taint_poisoned_page_gates_shell",
             description = "Read a page that tells the agent to run a command",

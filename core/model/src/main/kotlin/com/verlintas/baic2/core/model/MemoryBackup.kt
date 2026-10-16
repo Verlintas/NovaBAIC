@@ -30,6 +30,7 @@ data class MemoryBackup(
     val core: MemoryBackupCore? = null,
     val notes: List<MemoryBackupNote> = emptyList(),
     val holds: List<MemoryBackupHold> = emptyList(),
+    val aliases: List<MemoryBackupAlias> = emptyList(),
 )
 
 @Serializable
@@ -54,6 +55,12 @@ data class MemoryBackupNote(
 data class MemoryBackupHold(
     val content: String,
     val reason: String? = null,
+)
+
+@Serializable
+data class MemoryBackupAlias(
+    val alias: String,
+    val entity: String,
 )
 
 object MemoryBackupCodec {

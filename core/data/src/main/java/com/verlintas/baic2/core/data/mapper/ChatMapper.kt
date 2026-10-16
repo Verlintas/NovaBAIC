@@ -298,6 +298,10 @@ class ChatMapper @Inject constructor(private val json: Json) {
             json.decodeFromString<List<Int>>(entity.daysOfWeekJson)
         }.getOrDefault(emptyList()).takeIf { it.isNotEmpty() },
         batteryBelow = entity.batteryBelow,
+        notificationPackages = runCatching {
+            json.decodeFromString<List<String>>(entity.notificationPackagesJson)
+        }.getOrDefault(emptyList()),
+        notificationKeyword = entity.notificationKeyword,
         actions = runCatching {
             json.decodeFromString<List<AutomationAction>>(entity.actionsJson)
         }.getOrDefault(emptyList()),
@@ -312,6 +316,8 @@ class ChatMapper @Inject constructor(private val json: Json) {
         timeOfDay = automation.timeOfDay,
         daysOfWeekJson = json.encodeToString(automation.daysOfWeek ?: emptyList<Int>()),
         batteryBelow = automation.batteryBelow,
+        notificationPackagesJson = json.encodeToString(automation.notificationPackages),
+        notificationKeyword = automation.notificationKeyword,
         actionsJson = json.encodeToString(automation.actions),
         enabled = automation.enabled,
         createdAt = automation.createdAt,

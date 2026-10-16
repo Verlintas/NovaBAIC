@@ -74,7 +74,8 @@ class AndroidRunNotifier @Inject constructor(
             } ?: return
         val contentIntent = PendingIntent.getActivity(
             context,
-            runId?.toInt() ?: 0,
+            // 2_000_000 + id keeps run codes disjoint from conversation codes.
+            runId?.let { (it % 1_000_000L).toInt() + 2_000_000 } ?: 2_000_001,
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -128,7 +129,7 @@ class AndroidRunNotifier @Inject constructor(
             } ?: return
         val contentIntent = PendingIntent.getActivity(
             context,
-            CONVERSATION_NOTIFICATION_ID,
+            3_000_000 + (conversationId % 1_000_000L).toInt(),
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

@@ -118,7 +118,11 @@ class ConversationRepository @Inject constructor(
     }
 
     suspend fun delete(id: Long) = db.withTransaction {
+        // Orphans here would leak snapshot payloads and inflate run stats.
         db.messageDao().deleteAllForConversation(id)
+        db.snapshotDao().deleteForConversation(id)
+        db.planDao().deleteForConversation(id)
+        db.runDao().deleteForConversation(id)
         db.conversationDao().delete(id)
     }
 

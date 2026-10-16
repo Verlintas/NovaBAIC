@@ -70,7 +70,13 @@ object SkillCodec {
                     argsJson = toJsonElement(step["args"]).toString(),
                 )
             }
-            if (steps.isEmpty()) null else SkillToolDef(toolId, toolDescription, steps)
+            if (steps.isEmpty()) null else SkillToolDef(
+                id = toolId,
+                description = toolDescription,
+                steps = steps,
+                parametersJson = tool["parameters"]?.let { toJsonElement(it).toString() }
+                    ?: """{"type":"object","properties":{}}""",
+            )
         }
 
         Skill(
@@ -95,6 +101,7 @@ object SkillCodec {
                 linkedMapOf(
                     "id" to tool.id,
                     "description" to tool.description,
+                    "parameters" to toPlain(json.parseToJsonElement(tool.parametersJson)),
                     "steps" to tool.steps.map { step ->
                         linkedMapOf(
                             "tool" to step.tool,

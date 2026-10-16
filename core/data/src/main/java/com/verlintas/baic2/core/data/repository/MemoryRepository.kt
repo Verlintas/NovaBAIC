@@ -33,6 +33,7 @@ import com.verlintas.baic2.core.model.CoreMemory
 import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.MemoryAlias
 import com.verlintas.baic2.core.model.MemoryBackup
+import com.verlintas.baic2.core.model.MemoryBackupAlias
 import com.verlintas.baic2.core.model.MemoryBackupCodec
 import com.verlintas.baic2.core.model.MemoryBackupCore
 import com.verlintas.baic2.core.model.MemoryBackupHold
@@ -137,6 +138,8 @@ class MemoryRepository @Inject constructor(
         source: NoteSource = NoteSource.USER,
         entities: List<String> = emptyList(),
         expiresAt: Long? = null,
+        /** Restored backups keep their original age; live writes use now. */
+        createdAt: Long? = null,
     ): AddOutcome {
         val trimmed = content.trim()
         if (trimmed.isEmpty()) return AddOutcome.Duplicate(0L)
@@ -145,7 +148,9 @@ class MemoryRepository @Inject constructor(
         val holds = db.memoryHoldDao().getRecent(SUPPRESSED_SCAN)
             .map { MemoryHold(id = it.id, content = it.content, reason = it.reason) }
         val now = System.currentTimeMillis()
-        return when (val decision = MemoryConsolidator.decide(trimmed, active, suppressedNotes, holds)) {
+        // Serialize decide+write so two writers cannot both store the same fact.
+        return db.withTransaction {
+            when (val decision = MemoryConsolidator.decide(trimmed, active, suppressedNotes, holds)) {
             is MemoryConsolidator.Decision.Held -> AddOutcome.Held(decision.holdId)
 
             is MemoryConsolidator.Decision.Suppressed -> AddOutcome.Suppressed(decision.noteId)
@@ -164,6 +169,7 @@ class MemoryRepository @Inject constructor(
                         importance = maxOf(target.importance, importance.coerceIn(1, 5)),
                         now = now,
                         expiresAt = expiresAt,
+                        messageId = messageId,
                     )
                     db.noteDao().touch(target.id, now)
                     AddOutcome.Merged(target.id, decision.previousContent)
@@ -181,7 +187,7 @@ class MemoryRepository @Inject constructor(
                         messageId = messageId,
                         whenAt = whenAt,
                         expiresAt = expiresAt,
-                        createdAt = now,
+                        createdAt = createdAt?.coerceAtLeast(1L) ?: now,
                         updatedAt = now,
                         lastAccessedAt = 0L,
                         accessCount = 0,
@@ -199,6 +205,7 @@ class MemoryRepository @Inject constructor(
                     ),
                 )
                 AddOutcome.Saved(id, decision.similarIds, decision.conflicts)
+            }
             }
         }
     }
@@ -247,23 +254,24 @@ class MemoryRepository @Inject constructor(
     ): Replacement? {
         val trimmed = content.trim()
         if (trimmed.isEmpty()) return null
-        val existing = db.noteDao().getById(id) ?: return null
-        val note = mapper.noteToModel(existing)
-        recordRevision(note)
-        val now = System.currentTimeMillis()
-        db.noteDao().replaceInPlace(
-            id = id,
-            kind = (kind ?: note.kind).name,
-            content = trimmed,
-            importance = (importance ?: note.importance).coerceIn(1, 5),
-            entities = entities?.let(MemoryText::encodeEntities).orEmpty().ifEmpty { existing.entities },
-            now = now,
-            expiresAt = expiresAt,
-            messageId = messageId,
-        )
-        db.noteDao().touch(id, now)
-        val updated = db.noteDao().getById(id)?.let(mapper::noteToModel) ?: return null
-        return Replacement(updated, note.content)
+        return db.withTransaction {
+            val existing = db.noteDao().getById(id) ?: return@withTransaction null
+            val note = mapper.noteToModel(existing)
+            recordRevision(note)
+            val now = System.currentTimeMillis()
+            db.noteDao().replaceInPlace(
+                id = id,
+                kind = (kind ?: note.kind).name,
+                content = trimmed,
+                importance = (importance ?: note.importance).coerceIn(1, 5),
+                entities = entities?.let(MemoryText::encodeEntities).orEmpty().ifEmpty { existing.entities },
+                now = now,
+                expiresAt = expiresAt,
+                messageId = messageId,
+            )
+            db.noteDao().touch(id, now)
+            db.noteDao().getById(id)?.let(mapper::noteToModel)?.let { Replacement(it, note.content) }
+        }
     }
 
     /** Old versions of a note, newest first. */
@@ -364,6 +372,8 @@ class MemoryRepository @Inject constructor(
         val a = alias.trim()
         val e = entity.trim()
         if (a.isEmpty() || e.isEmpty() || a.equals(e, ignoreCase = true)) return false
+        // Case variants must not coexist: PK is binary, lookups are NOCASE.
+        db.memoryAliasDao().delete(a)
         db.memoryAliasDao().upsert(
             MemoryAliasEntity(alias = a, entity = e, createdAt = System.currentTimeMillis()),
         )
@@ -454,9 +464,10 @@ class MemoryRepository @Inject constructor(
 
     /** Portable JSON snapshot: notes + core memory + holds. */
     suspend fun exportBackup(): String {
-        val notes = db.noteDao().getActive(PAGE_SIZE).map(mapper::noteToModel)
+        val notes = db.noteDao().getAllActive().map(mapper::noteToModel)
         val core = getCore()
-        val holds = listHolds()
+        val holds = db.memoryHoldDao().getAllOnce().map { it.content to it.reason }
+            .map { (content, reason) -> MemoryHold(content = content, reason = reason) }
         return MemoryBackupCodec.encode(
             MemoryBackup(
                 version = 1,
@@ -479,6 +490,7 @@ class MemoryRepository @Inject constructor(
                     )
                 },
                 holds = holds.map { MemoryBackupHold(content = it.content, reason = it.reason) },
+                aliases = aliases().map { MemoryBackupAlias(alias = it.alias, entity = it.entity) },
             ),
         )
     }
@@ -502,6 +514,17 @@ class MemoryRepository @Inject constructor(
         var imported = 0
         var merged = 0
         var skipped = 0
+        // Holds first: a restored promise must protect its notes from step one.
+        var addedHolds = 0
+        val existingHolds = listHolds().map { it.content }.toSet()
+        backup.holds.forEach { hold ->
+            if (hold.content.isNotBlank() && hold.content !in existingHolds) {
+                addHold(hold.content, hold.reason)
+                addedHolds++
+            }
+        }
+        // Aliases next, so imports recall correctly under the same names.
+        backup.aliases.forEach { alias -> setAlias(alias.alias, alias.entity) }
         backup.notes.forEach { note ->
             if (note.content.isBlank()) return@forEach
             when (
@@ -513,6 +536,7 @@ class MemoryRepository @Inject constructor(
                     source = NoteSource.fromWire(note.source),
                     entities = note.entities,
                     expiresAt = note.expiresAt,
+                    createdAt = note.createdAt,
                 )
             ) {
                 is AddOutcome.Saved -> imported++
@@ -521,14 +545,6 @@ class MemoryRepository @Inject constructor(
                 is AddOutcome.Suppressed,
                 is AddOutcome.Held,
                 -> skipped++
-            }
-        }
-        var addedHolds = 0
-        val existingHolds = listHolds().map { it.content }.toSet()
-        backup.holds.forEach { hold ->
-            if (hold.content.isNotBlank() && hold.content !in existingHolds) {
-                addHold(hold.content, hold.reason)
-                addedHolds++
             }
         }
         var coreUpdated = false
@@ -763,8 +779,17 @@ class MemoryRepository @Inject constructor(
     suspend fun noteAsOf(note: Note, at: Long): Note? {
         if (note.suppressed || note.createdAt > at) return null
         if (note.archived && note.updatedAt <= at) return null
-        val revision = db.noteRevisionDao().revisionAsOf(note.id, at) ?: return note
-        return note.copy(content = revision.content, importance = revision.importance)
+        // Clamp temporal state so post-`at` touches do not leak into the
+        // historical ranking (retrievability would read as "just recalled").
+        val revision = db.noteRevisionDao().revisionAsOf(note.id, at)
+        return note.copy(
+            content = revision?.content ?: note.content,
+            importance = revision?.importance ?: note.importance,
+            entities = revision?.let { MemoryText.decodeEntities(it.entities) }
+                ?.ifEmpty { note.entities } ?: note.entities,
+            updatedAt = minOf(note.updatedAt, at),
+            lastAccessedAt = minOf(note.lastAccessedAt, at),
+        )
     }
 
     /** Fire together, wire together: co-recalled notes gain link weight. */

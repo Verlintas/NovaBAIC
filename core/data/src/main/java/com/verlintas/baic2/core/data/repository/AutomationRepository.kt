@@ -47,7 +47,8 @@ class AutomationRepository @Inject constructor(
         return if (automation.id == 0L) {
             db.automationDao().insert(entity)
         } else {
-            db.automationDao().setEnabled(automation.id, automation.enabled)
+            // Full-row update: editing an automation must not silently no-op.
+            db.automationDao().update(entity)
             automation.id
         }
     }

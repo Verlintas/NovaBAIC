@@ -240,6 +240,8 @@ data class AutomationEntity(
     val timeOfDay: String?,
     val daysOfWeekJson: String,
     val batteryBelow: Int?,
+    val notificationPackagesJson: String,
+    val notificationKeyword: String?,
     val actionsJson: String,
     val enabled: Boolean,
     val createdAt: Long,

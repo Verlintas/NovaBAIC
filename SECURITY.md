@@ -66,10 +66,18 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
 - **Circuit breaker.** Three failures of the same tool in one run and its
   remaining calls are denied with guidance instead of burning rounds.
 - **Budgets.** Per-mode round / tool-call / wall-clock budgets; the persisted
-  ledger counts only calls that actually executed, matching the engine.
+  ledger counts only calls that actually executed, matching the engine. A
+  signature guard refuses the third identical call even when it succeeded, so
+  a pointless loop cannot burn rounds.
+- **Questions never hang a run.** `ask_user` resolves to "no answer"
+  immediately when nobody is subscribed (unattended, background, dismissed or
+  timed out); the agent continues with a stated assumption instead of waiting
+  on a person who is not there.
 - **SSRF guard.** `WebFetcher` blocks loopback, link-local, `.local` and
   private ranges; redirects are followed manually, and every hop is re-checked
-  before a connection is opened.
+  before a connection is opened. Host names are resolved and every address is
+  validated (loopback / site-local / link-local / CGNAT), so DNS tricks like
+  `localtest.me` are refused too.
 - **Location privacy.** Location is on-demand only: `get_location` reads the
   last known fix and never starts background tracking, and the tool writes
   nothing to the database. Reverse geocoding is fully offline against a

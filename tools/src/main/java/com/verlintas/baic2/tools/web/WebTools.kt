@@ -73,6 +73,11 @@ class WebFetcher @Inject constructor(
     private fun executeGuarded(request: Request, maxRedirects: Int = 5): okhttp3.Response {
         var current = request
         repeat(maxRedirects + 1) { hop ->
+            // Lexical checks stop literals; resolving stops DNS tricks
+            // (localtest.me, attacker names pointing at 127.0.0.1).
+            if (!isPublicHttpUrl(current.url.toString()) || !hostResolvesPublic(current.url)) {
+                throw IOException("blocked_url: refusing a private or unresolvable host")
+            }
             val response = client.newCall(current).execute()
             val redirect = response.code in REDIRECT_CODES
             val location = if (redirect) response.header("Location") else null
@@ -168,6 +173,25 @@ class WebFetcher @Inject constructor(
         }
     }
 
+    private fun hostResolvesPublic(url: okhttp3.HttpUrl): Boolean {
+        val addresses = try {
+            java.net.InetAddress.getAllByName(url.host)
+        } catch (e: java.net.UnknownHostException) {
+            return false
+        }
+        if (addresses.isEmpty()) return false
+        return addresses.all { address ->
+            val bytes = address.address
+            !address.isLoopbackAddress && !address.isSiteLocalAddress &&
+                !address.isLinkLocalAddress && !address.isAnyLocalAddress &&
+                !address.isMulticastAddress && !isCarrierGradeNat(bytes)
+        }
+    }
+
+    private fun isCarrierGradeNat(bytes: ByteArray): Boolean =
+        bytes.size == 4 && (bytes[0].toInt() and 0xFF) == 100 &&
+            (bytes[1].toInt() and 0xFF) in 64..127
+
     private companion object {
         val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
         const val DEFAULT_UA =
@@ -181,7 +205,14 @@ internal fun isPublicHttpUrl(raw: String): Boolean {
     if (url.scheme != "http" && url.scheme != "https") return false
     val host = url.host.lowercase()
     if (host == "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false
-    if (host == "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return false
+    if (host.contains(':')) {
+        // IPv6 literals only: a *domain* starting with "fc"/"fd" is legitimate.
+        if (host == "::1" || host.startsWith("fc") || host.startsWith("fd") ||
+            host.startsWith("fe80") || host.contains("::ffff:")
+        ) {
+            return false
+        }
+    }
     val parts = host.split('.')
     if (parts.size == 4 && parts.all { it.toIntOrNull() != null }) {
         val a = parts[0].toInt()
@@ -211,6 +242,7 @@ class WebSearchTool @Inject constructor(
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = true,
+        cacheable = true,
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
@@ -341,6 +373,8 @@ class WebSearchTool @Inject constructor(
                         EngineHealth.report(name, ok = true)
                     }
                     outcome.isSuccess -> {
+                        // withTimeoutOrNull cancels only the waiter; stop the engine too.
+                        job.cancel()
                         slot.error = slot.error ?: "timeout"
                         EngineHealth.report(name, ok = false)
                     }
@@ -540,6 +574,7 @@ class WebReadTool @Inject constructor(
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = true,
+        cacheable = true,
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
@@ -593,6 +628,7 @@ class GetWeatherTool @Inject constructor(
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = true,
+        cacheable = true,
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
@@ -635,6 +671,7 @@ class FetchRssTool @Inject constructor(
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = true,
+        cacheable = true,
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
@@ -653,8 +690,10 @@ class FetchRssTool @Inject constructor(
                 append("Feed items:\n")
                 items.forEach { item ->
                     val title = item.selectFirst("title")?.text().orEmpty()
-                    val link = item.selectFirst("link")?.text()
-                        ?: item.selectFirst("link")?.attr("href").orEmpty()
+                    val link = item.selectFirst("link")?.let { node ->
+                        node.text().takeIf { it.isNotBlank() }
+                            ?: node.attr("href").takeIf { it.isNotBlank() }
+                    }.orEmpty()
                     val date = item.selectFirst("pubDate, updated, published")?.text().orEmpty()
                     append("\n- $title\n  $link${if (date.isBlank()) "" else "\n  $date"}")
                 }

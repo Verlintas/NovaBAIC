@@ -84,6 +84,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.verlintas.baic2.designsystem.Baic2Mono
 
+private const val MAX_INLINE_IMAGE_CHARS = 256 * 1024
+
 /**
  * Lightweight markdown renderer tuned for streaming model output: fenced code
  * blocks become terminal cards, inline code/bold/links are styled. Tables and
@@ -614,6 +616,9 @@ private fun MarkdownImage(alt: String, url: String) {
     val shape = RoundedCornerShape(10.dp)
     val bitmap = remember(url) {
         if (!url.startsWith("data:image/")) return@remember null
+        // Inline data URLs can be megabytes; decoding them on the main thread
+        // would jank or OOM. Skip anything beyond a sane inline size.
+        if (url.length > MAX_INLINE_IMAGE_CHARS) return@remember null
         runCatching {
             val payload = url.substringAfter(',', "")
             val bytes = android.util.Base64.decode(payload, android.util.Base64.DEFAULT)

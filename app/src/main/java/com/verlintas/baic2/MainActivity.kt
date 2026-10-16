@@ -118,6 +118,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(backgroundRunnable)
+        // The grace period must not outlive the activity unhandled: a process
+        // kept alive by a service would otherwise stay "foreground" forever.
+        AppVisibility.foreground = false
         super.onDestroy()
     }
 

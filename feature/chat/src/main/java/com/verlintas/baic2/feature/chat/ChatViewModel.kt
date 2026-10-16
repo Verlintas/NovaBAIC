@@ -35,7 +35,9 @@ import com.verlintas.baic2.core.engine.AgentFailure
 import com.verlintas.baic2.core.engine.AgentLoop
 import com.verlintas.baic2.core.engine.AuxiliaryTasks
 import com.verlintas.baic2.core.engine.ConfirmationQueue
+import com.verlintas.baic2.core.engine.QuestionQueue
 import com.verlintas.baic2.core.engine.ToolCatalog
+import com.verlintas.baic2.core.engine.UserQuestion
 import com.verlintas.baic2.core.engine.renderSystemPrompt
 import com.verlintas.baic2.core.model.Agent
 import com.verlintas.baic2.core.model.AppMode
@@ -166,6 +168,7 @@ class ChatViewModel @Inject constructor(
     private val pdfTextExtractor: PdfTextExtractor,
     private val runNotifier: RunNotifier,
     private val confirmationQueue: ConfirmationQueue,
+    private val questionQueue: QuestionQueue,
     private val planRepository: PlanRepository,
     private val skillRepository: SkillRepository,
     private val settingsRepository: SettingsRepository,
@@ -184,6 +187,16 @@ class ChatViewModel @Inject constructor(
     private val attachmentError = MutableStateFlow<AttachmentError?>(null)
     private val confirmation = MutableStateFlow<ToolCall?>(null)
     private val notice = MutableStateFlow<String?>(null)
+
+    /** A mid-run question from the agent, answered through [respondQuestion]. */
+    private val _pendingQuestion = MutableStateFlow<UserQuestion?>(null)
+    val pendingQuestion: StateFlow<UserQuestion?> = _pendingQuestion.asStateFlow()
+
+    fun respondQuestion(answer: String?) {
+        val question = _pendingQuestion.value ?: return
+        questionQueue.respond(question.id, answer)
+        _pendingQuestion.value = null
+    }
 
     val notices: StateFlow<String?> = notice.asStateFlow()
 
@@ -382,13 +395,25 @@ class ChatViewModel @Inject constructor(
     private var runJob: Job? = null
     private var titleGenerated = false
     private var lastCuratedAssistantCount = -1
+
+    /** True while this ViewModel owns the shared run foreground service. */
+    @Volatile
+    private var ownsRunNotification = false
     private val turnGate = java.util.concurrent.atomic.AtomicBoolean(false)
 
     init {
         viewModelScope.launch {
             confirmationQueue.requests.collect { call -> confirmation.value = call }
         }
-        runNotifier.setStopHandler { runJob?.cancel() }
+        viewModelScope.launch {
+            questionQueue.requests.collect { question ->
+                // Shared queue: only surface questions for this conversation
+                // (automation/scheduled runs must not pop dialogs into chats).
+                if (question.conversationId == null || question.conversationId == conversationId) {
+                    _pendingQuestion.value = question
+                }
+            }
+        }
         viewModelScope.launch {
             runControlBus.stops.collect { target ->
                 if (target == conversationId) runJob?.cancel()
@@ -451,13 +476,18 @@ class ChatViewModel @Inject constructor(
         ModelCatalog.entryFor(provider ?: ProviderId.OPENAI_COMPATIBLE, model)?.contextWindow
             ?: ModelContextWindows.forModel(model)
 
-    fun send(text: String) {
+    /**
+     * Returns true when the turn was admitted. A false return means another
+     * turn (or post-turn upkeep) holds the gate - the caller must keep the
+     * draft instead of silently dropping it.
+     */
+    fun send(text: String): Boolean {
         val trimmed = text.trim()
         val attachments = pendingAttachments.value
-        if (trimmed.isEmpty() && attachments.isEmpty()) return
+        if (trimmed.isEmpty() && attachments.isEmpty()) return false
         // Atomic admission: two taps (or voice auto-send + tap) must not start
         // two concurrent turns inside the pre-`running` suspension window.
-        if (!turnGate.compareAndSet(false, true)) return
+        if (!turnGate.compareAndSet(false, true)) return false
         pendingAttachments.value = emptyList()
         runJob = viewModelScope.launch {
             try {
@@ -466,6 +496,7 @@ class ChatViewModel @Inject constructor(
                 turnGate.set(false)
             }
         }
+        return true
     }
 
     fun importImages(uris: List<android.net.Uri>) {
@@ -586,8 +617,11 @@ class ChatViewModel @Inject constructor(
     override fun onCleared() {
         cancelVoiceSession()
         speechOutput.stop()
-        runNotifier.setStopHandler(null)
-        runNotifier.stopRunning()
+        if (ownsRunNotification) {
+            runNotifier.setStopHandler(null)
+            runNotifier.stopRunning()
+            ownsRunNotification = false
+        }
         super.onCleared()
     }
 
@@ -797,9 +831,10 @@ class ChatViewModel @Inject constructor(
         val previousActivity = conversationRepository.lastUserMessageAtBefore(
             rawHistory.lastOrNull()?.createdAt ?: turnNow,
         )
+        val primed = primedNotes(text, rawHistory, conversation.title)
         val memoryContext = MemoryPrompt.context(
             core = memoryRepository.getCore(),
-            primed = primedNotes(text, rawHistory, conversation.title),
+            primed = primed,
             now = turnNow,
             status = memoryRepository.memoryStatus(previousActivity),
         )
@@ -812,6 +847,10 @@ class ChatViewModel @Inject constructor(
         }
         if (agentic) {
             runNotifier.startRunning(conversation.title.ifBlank { "BAIC2" }, runId)
+            // The stop handler belongs to the VM that owns the run, not to
+            // whichever chat happens to be open.
+            runNotifier.setStopHandler { runJob?.cancel() }
+            ownsRunNotification = true
         }
         _runCompletion.value = null
 
@@ -835,6 +874,7 @@ class ChatViewModel @Inject constructor(
                 planContext = planRepository.getPlan(conversationId)?.render(),
                 memoryContext = memoryContext,
                 triggerMessageId = history.lastOrNull { it.role == ChatRole.USER }?.id,
+                primedNoteIds = primed.map { it.id }.toSet(),
             ).collect { event ->
                 when (event) {
                     is AgentEvent.RoundStarted -> {
@@ -1003,7 +1043,13 @@ class ChatViewModel @Inject constructor(
             running.value = false
             streaming.value = StreamingState()
             confirmation.value = null
-            runNotifier.stopRunning()
+            // A timed-out question must not keep an unanswerable dialog around.
+            _pendingQuestion.value = null
+            if (ownsRunNotification) {
+                runNotifier.stopRunning()
+                runNotifier.setStopHandler(null)
+                ownsRunNotification = false
+            }
         }
 
         if (!failed) {
@@ -1385,6 +1431,9 @@ class ChatViewModel @Inject constructor(
         if (messages.size <= KEEP_RECENT_MESSAGES) return
 
         val boundary = messages.takeLast(KEEP_RECENT_MESSAGES).firstOrNull { it.role == ChatRole.USER }
+            // A long agentic tail can hold >6 assistant/tool rows with no user
+            // message; walk back further instead of never compressing again.
+            ?: messages.dropLast(KEEP_RECENT_MESSAGES).lastOrNull { it.role == ChatRole.USER }
             ?: return
         val older = messages.takeWhile { it.id < boundary.id }
         if (older.none { it.role == ChatRole.USER }) return
@@ -1439,7 +1488,8 @@ class ChatViewModel @Inject constructor(
         messages.filter { it.role == ChatRole.ASSISTANT && it.toolCalls.isNotEmpty() }
             .forEach { message ->
                 val pending = message.toolCalls.filter { call ->
-                    call.status == ToolCallStatus.PENDING && call.id !in answeredIds
+                    (call.status == ToolCallStatus.PENDING ||
+                        call.status == ToolCallStatus.RUNNING) && call.id !in answeredIds
                 }
                 if (pending.isNotEmpty()) {
                     pending.forEach { call ->
