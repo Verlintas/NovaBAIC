@@ -22,6 +22,7 @@
     <string name="chat_error_api_key">API key unavailable, please reconfigure the service</string>
     <string name="chat_error_unsupported">This provider is not supported yet</string>
     <string name="chat_error_internal">Internal error: %1$s</string>
+    <string name="chat_error_agent_busy">Another autonomous task is still running. Stop it from Tasks, or wait for it to finish</string>
 
     <string name="chat_tool_pending">pending</string>
     <string name="chat_tool_running">running</string>

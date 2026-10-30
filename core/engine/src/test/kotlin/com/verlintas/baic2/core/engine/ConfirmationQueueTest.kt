@@ -38,7 +38,18 @@ class ConfirmationQueueTest {
         val queue = ConfirmationQueue(timeoutMs = 10_000)
         val result = async { queue.confirm(call) }
         val request = queue.requests.first()
-        assertEquals("c1", request.id)
+        assertEquals("c1", request.call.id)
+        assertEquals(null, request.conversationId)
+        assertTrue(queue.respond("c1", allow = true))
+        assertTrue(result.await())
+    }
+
+    @Test
+    fun requestCarriesItsConversation() = runTest {
+        val queue = ConfirmationQueue(timeoutMs = 10_000)
+        val result = async { queue.confirm(call, conversationId = 7L) }
+        val request = queue.requests.first()
+        assertEquals(7L, request.conversationId)
         assertTrue(queue.respond("c1", allow = true))
         assertTrue(result.await())
     }

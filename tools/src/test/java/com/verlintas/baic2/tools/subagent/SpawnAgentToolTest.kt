@@ -118,7 +118,7 @@ class SpawnAgentToolTest {
             ToolResult.Success("ran")
         }
 
-        val result = tool.runChild("do the task", AppMode.MAX, ToolRunContext(config = config))
+        val result = tool.runChild("do the task", AppMode.MAX, ToolRunContext(config = config, mode = AppMode.MAX))
 
         assertTrue(result is ToolResult.Success)
         assertEquals(1, runnerCalls)
@@ -142,7 +142,11 @@ class SpawnAgentToolTest {
         val result = tool.runChild(
             task = "do the task",
             mode = AppMode.MAX,
-            run = ToolRunContext(config = config, taint = TaintState().apply { tainted = true }),
+            run = ToolRunContext(
+                config = config,
+                mode = AppMode.MAX,
+                taint = TaintState().apply { tainted = true },
+            ),
         )
 
         assertTrue(result is ToolResult.Success)
@@ -161,7 +165,7 @@ class SpawnAgentToolTest {
         )
         val tool = spawn(provider, listOf(webSpec)) { _, _ -> ToolResult.Success("page text") }
 
-        val result = tool.runChild("read the page", AppMode.MAX, ToolRunContext(config = config))
+        val result = tool.runChild("read the page", AppMode.MAX, ToolRunContext(config = config, mode = AppMode.MAX))
 
         assertTrue(result is ToolResult.Success)
         assertTrue(

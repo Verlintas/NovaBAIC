@@ -25,7 +25,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 
 class QuestionQueueTest {
 
@@ -58,15 +61,36 @@ class QuestionQueueTest {
     @Test
     fun timeoutReturnsNull() = runTest {
         val queue = QuestionQueue(timeoutMs = 1_000)
+        val expired = async { queue.expired.first() }
         val result = async { queue.ask(question) }
         queue.requests.first()
         assertNull(result.await())
+        assertEquals("q1", expired.await())
     }
 
     @Test
     fun noSubscriberMeansNobodyIsThere() = runTest {
         val queue = QuestionQueue(timeoutMs = 10_000)
         assertNull(queue.ask(question))
+    }
+
+    @Test
+    fun differentConversationsDoNotBlockEachOther() = runTest {
+        val queue = QuestionQueue(timeoutMs = 10_000)
+        val first = question.copy(id = "a", conversationId = 1L)
+        val second = question.copy(id = "b", conversationId = 2L)
+        val collector = async {
+            withTimeout(1_000) { queue.requests.take(2).toList() }
+        }
+        val answerA = async { queue.ask(first) }
+        val answerB = async { queue.ask(second) }
+        val requests = collector.await()
+
+        assertEquals(setOf("a", "b"), requests.map { it.id }.toSet())
+        assertTrue(queue.respond("a", "one"))
+        assertTrue(queue.respond("b", "two"))
+        assertEquals("one", answerA.await())
+        assertEquals("two", answerB.await())
     }
 
     @Test

@@ -26,6 +26,10 @@ data class CachedNotification(
     val title: String,
     val text: String,
     val postedAt: Long,
+    /** StatusBarNotification key; identical for in-place updates. */
+    val key: String = "",
+    /** Music players, downloads and other progress notifications update in place. */
+    val isOngoing: Boolean = false,
 )
 
 /** Recent notifications captured by the listener service while access is granted. */

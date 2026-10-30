@@ -222,6 +222,9 @@ class AutomationBootstrap @Inject constructor(
     }
 
     private suspend fun onNotification(notification: com.verlintas.baic2.device.api.CachedNotification) {
+        // Ongoing notifications are living state (music, downloads, timers),
+        // not events; firing on every progress update is noise, not automation.
+        if (notification.isOngoing) return
         val now = System.currentTimeMillis()
         automationRepository.getAll()
             .filter { automation ->
@@ -230,12 +233,14 @@ class AutomationBootstrap @Inject constructor(
                     matchesNotification(automation, notification)
             }
             .forEach { automation ->
-                // Atomic check-and-reserve: a burst must not fire the same
-                // automation twice.
-                val reserved = notificationCooldown.compute(automation.id) { _, last ->
-                    if (last == null || now - last >= NOTIFICATION_COOLDOWN_MS) now else last
+                // One serialized consumer owns this map: check and reserve are
+                // atomic with respect to other notifications, without a
+                // same-millisecond sentinel that could let a burst through.
+                val last = notificationCooldown[automation.id]
+                if (last != null && now - last < NOTIFICATION_COOLDOWN_MS) {
+                    return@forEach
                 }
-                if (reserved != now) return@forEach
+                notificationCooldown[automation.id] = now
                 runCatching { executor.run(automation) }
             }
     }

@@ -28,9 +28,12 @@ import java.io.IOException
 import java.net.URLDecoder
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,11 +46,16 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 internal data class SearchHit(val title: String, val url: String, val snippet: String)
 
@@ -70,7 +78,7 @@ class WebFetcher @Inject constructor(
      * Executes [request], following at most [maxRedirects] hops with every
      * target validated against the public-URL policy before it is dialled.
      */
-    private fun executeGuarded(request: Request, maxRedirects: Int = 5): okhttp3.Response {
+    private suspend fun executeGuarded(request: Request, maxRedirects: Int = 5): Response {
         var current = request
         repeat(maxRedirects + 1) { hop ->
             // Lexical checks stop literals; resolving stops DNS tricks
@@ -78,7 +86,7 @@ class WebFetcher @Inject constructor(
             if (!isPublicHttpUrl(current.url.toString()) || !hostResolvesPublic(current.url)) {
                 throw IOException("blocked_url: refusing a private or unresolvable host")
             }
-            val response = client.newCall(current).execute()
+            val response = executeAsync(current)
             val redirect = response.code in REDIRECT_CODES
             val location = if (redirect) response.header("Location") else null
             if (location == null) return response
@@ -96,7 +104,49 @@ class WebFetcher @Inject constructor(
         throw IOException("too many redirects for ${request.url}")
     }
 
-    fun fetch(
+    /**
+     * OkHttp's blocking execute() ignores coroutine cancellation, which made
+     * the search engine timeout a lie. Enqueue instead; cancellation cancels
+     * the live call and frees the waiting coroutine.
+     */
+    private suspend fun executeAsync(request: Request): Response =
+        suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(
+                object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuation.isActive) continuation.resumeWithException(e)
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        if (continuation.isActive) {
+                            continuation.resume(response)
+                        } else {
+                            response.close()
+                        }
+                    }
+                },
+            )
+        }
+
+    /**
+     * Reading the body is still blocking, after the call future has resumed.
+     * Closing the response when the continuation is cancelled unblocks a
+     * stalled read when the caller's timeout fires.
+     */
+    private suspend fun <T> closeOnCancellation(response: Response, block: () -> T): T =
+        suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { runCatching { response.close() } }
+            try {
+                val value = block()
+                if (continuation.isActive) continuation.resume(value)
+            } catch (e: Exception) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+        }
+
+    suspend fun fetch(
         url: String,
         userAgent: String = DEFAULT_UA,
         maxBytes: Long = 2_000_000,
@@ -121,15 +171,25 @@ class WebFetcher @Inject constructor(
                         IllegalArgumentException("blocked_redirect: '$url' redirected to a private address"),
                     )
                 }
-                val source = response.body?.source() ?: return Result.failure(IOException("empty body"))
-                source.request(maxBytes)
-                val bytes = source.buffer.clone().readByteArray()
-                // Honour the server charset, then sniff <meta charset>; many
-                // mainland sites still serve GBK and UTF-8 decoding garbles them.
-                val charset = response.body?.contentType()?.charset()
-                    ?: charsetFromHtml(bytes)
-                    ?: Charsets.UTF_8
-                Result.success(String(bytes, charset))
+                closeOnCancellation(response) {
+                    val source = response.body?.source()
+                        ?: return@closeOnCancellation Result.failure(IOException("empty body"))
+                    // Ask for one extra byte so truncation is detectable rather
+                    // than silently pretending the body ended here.
+                    source.request(maxBytes + 1)
+                    val buffered = source.buffer.clone().readByteArray()
+                    val truncated = buffered.size > maxBytes
+                    val bytes = if (truncated) buffered.copyOf(maxBytes.toInt()) else buffered
+                    // Honour the server charset, then sniff <meta charset>; many
+                    // mainland sites still serve GBK and UTF-8 decoding garbles them.
+                    val charset = response.body?.contentType()?.charset()
+                        ?: charsetFromHtml(bytes)
+                        ?: Charsets.UTF_8
+                    val text = String(bytes, charset)
+                    Result.success(
+                        if (truncated) "$text\n\n[content truncated at $maxBytes bytes]" else text,
+                    )
+                }
             }
         } catch (e: IOException) {
             Result.failure(e)
@@ -143,7 +203,7 @@ class WebFetcher @Inject constructor(
         return runCatching { java.nio.charset.Charset.forName(match.groupValues[1]) }.getOrNull()
     }
 
-    fun fetchBytes(url: String, maxBytes: Long = 20_000_000L): Result<ByteArray> {
+    suspend fun fetchBytes(url: String, maxBytes: Long = 20_000_000L): Result<ByteArray> {
         if (!isPublicHttpUrl(url)) {
             return Result.failure(IllegalArgumentException("blocked_url: only public http(s) URLs are allowed"))
         }
@@ -159,13 +219,16 @@ class WebFetcher @Inject constructor(
                         IllegalArgumentException("blocked_redirect: '$url' redirected to a private address"),
                     )
                 }
-                val source = response.body?.source() ?: return Result.failure(IOException("empty body"))
-                source.request(maxBytes)
-                val bytes = source.buffer.clone().readByteArray()
-                if (bytes.size > maxBytes) {
-                    Result.failure(IOException("file exceeds the ${maxBytes / 1_000_000} MB limit"))
-                } else {
-                    Result.success(bytes)
+                closeOnCancellation(response) {
+                    val source = response.body?.source()
+                        ?: return@closeOnCancellation Result.failure(IOException("empty body"))
+                    source.request(maxBytes + 1)
+                    val bytes = source.buffer.clone().readByteArray()
+                    if (bytes.size > maxBytes) {
+                        Result.failure(IOException("file exceeds the ${maxBytes / 1_000_000} MB limit"))
+                    } else {
+                        Result.success(bytes)
+                    }
                 }
             }
         } catch (e: IOException) {
@@ -242,7 +305,9 @@ class WebSearchTool @Inject constructor(
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = true,
-        cacheable = true,
+        // Its own five-minute cache already honours `refresh`; the runner-level
+        // cache would return stale results before that flag is ever read.
+        cacheable = false,
     )
 
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
@@ -332,25 +397,53 @@ class WebSearchTool @Inject constructor(
             val jobs = buildList {
                 queries.forEach { query ->
                     if ("ddg-lite" in engines) {
-                        add("ddg-lite" to async { searchDuckDuckGoLite(query, perQuery, freshness) })
+                        add(
+                            "ddg-lite" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchDuckDuckGoLite(query, perQuery, freshness) }
+                            },
+                        )
                     }
                     if ("ddg" in engines) {
-                        add("ddg" to async { searchDuckDuckGo(query, perQuery, freshness) })
+                        add(
+                            "ddg" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchDuckDuckGo(query, perQuery, freshness) }
+                            },
+                        )
                     }
                     if ("bing" in engines) {
-                        add("bing" to async { searchBing(query, perQuery, freshness) })
+                        add(
+                            "bing" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchBing(query, perQuery, freshness) }
+                            },
+                        )
                     }
                     if ("baidu" in engines) {
-                        add("baidu" to async { searchBaidu(query, perQuery) })
+                        add(
+                            "baidu" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchBaidu(query, perQuery) }
+                            },
+                        )
                     }
                     if ("mojeek" in engines) {
-                        add("mojeek" to async { searchMojeek(query, perQuery) })
+                        add(
+                            "mojeek" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchMojeek(query, perQuery) }
+                            },
+                        )
                     }
                     if ("360" in engines) {
-                        add("360" to async { search360(query, perQuery) })
+                        add(
+                            "360" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { search360(query, perQuery) }
+                            },
+                        )
                     }
                     if ("sogou" in engines) {
-                        add("sogou" to async { searchSogou(query, perQuery) })
+                        add(
+                            "sogou" to async(Dispatchers.IO) {
+                                withTimeout(ENGINE_TIMEOUT_MS) { searchSogou(query, perQuery) }
+                            },
+                        )
                     }
                 }
             }
@@ -359,8 +452,19 @@ class WebSearchTool @Inject constructor(
             val hits = mutableListOf<SearchHit>()
             jobs.forEach { (name, job) ->
                 val slot = tally.getOrPut(name) { EngineTally() }
-                val outcome = runCatching {
-                    withTimeoutOrNull(ENGINE_TIMEOUT_MS) { job.await() }
+                // The timeout lives inside the job, so every engine gets the
+                // same wall-clock budget from its own start rather than each
+                // await adding another 8 seconds.
+                val outcome = try {
+                    Result.success(job.await())
+                } catch (e: TimeoutCancellationException) {
+                    job.cancel()
+                    Result.success(null)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    job.cancel()
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
                 }
                 val result = outcome.getOrNull()
                 when {
@@ -373,8 +477,6 @@ class WebSearchTool @Inject constructor(
                         EngineHealth.report(name, ok = true)
                     }
                     outcome.isSuccess -> {
-                        // withTimeoutOrNull cancels only the waiter; stop the engine too.
-                        job.cancel()
                         slot.error = slot.error ?: "timeout"
                         EngineHealth.report(name, ok = false)
                     }
@@ -399,10 +501,17 @@ class WebSearchTool @Inject constructor(
         withContext(Dispatchers.IO) {
             val chunks = mutableListOf<String>()
             var attempts = 0
+            val deadline = System.currentTimeMillis() + READ_PHASE_TIMEOUT_MS
             for (hit in hits) {
                 if (chunks.size >= wanted || attempts >= READ_ATTEMPTS) break
+                val remaining = deadline - System.currentTimeMillis()
+                if (remaining <= 0L) break
                 attempts++
-                val html = fetcher.fetch(hit.url).getOrNull() ?: continue
+                // A slow article must not multiply the search deadline: cap
+                // each fetch and the whole reading phase.
+                val html = withTimeoutOrNull(minOf(READ_TIMEOUT_MS, remaining)) {
+                    fetcher.fetch(hit.url)
+                }?.getOrNull() ?: continue
                 val article = SearchPipeline.extractArticle(html)
                 if (article.isBlank()) continue
                 val body = if (article.length > BODY_BUDGET) {
@@ -415,7 +524,7 @@ class WebSearchTool @Inject constructor(
             if (chunks.isEmpty()) "" else "\n\nTop result bodies:" + chunks.joinToString("\n")
         }
 
-    private fun searchDuckDuckGoLite(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
+    private suspend fun searchDuckDuckGoLite(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
         val url = "https://lite.duckduckgo.com/lite/?q=" +
             java.net.URLEncoder.encode(query, "UTF-8") + freshnessParam("ddg", freshness)
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
@@ -428,7 +537,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun searchDuckDuckGo(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
+    private suspend fun searchDuckDuckGo(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
         val url = "https://html.duckduckgo.com/html/?q=" +
             java.net.URLEncoder.encode(query, "UTF-8") + freshnessParam("ddg", freshness)
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
@@ -440,7 +549,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun searchBing(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
+    private suspend fun searchBing(query: String, limit: Int, freshness: String = "any"): List<SearchHit> {
         val url = "https://www.bing.com/search?q=" +
             java.net.URLEncoder.encode(query, "UTF-8") + freshnessParam("bing", freshness)
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
@@ -452,7 +561,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun searchBaidu(query: String, limit: Int): List<SearchHit> {
+    private suspend fun searchBaidu(query: String, limit: Int): List<SearchHit> {
         val url = "https://www.baidu.com/s?wd=" + java.net.URLEncoder.encode(query, "UTF-8")
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
         val doc = Jsoup.parse(html, url)
@@ -463,7 +572,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun searchMojeek(query: String, limit: Int): List<SearchHit> {
+    private suspend fun searchMojeek(query: String, limit: Int): List<SearchHit> {
         val url = "https://www.mojeek.com/search?q=" + java.net.URLEncoder.encode(query, "UTF-8")
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
         val doc = Jsoup.parse(html, url)
@@ -474,7 +583,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun search360(query: String, limit: Int): List<SearchHit> {
+    private suspend fun search360(query: String, limit: Int): List<SearchHit> {
         val url = "https://www.so.com/s?q=" + java.net.URLEncoder.encode(query, "UTF-8")
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
         val doc = Jsoup.parse(html, url)
@@ -485,7 +594,7 @@ class WebSearchTool @Inject constructor(
         }.take(limit)
     }
 
-    private fun searchSogou(query: String, limit: Int): List<SearchHit> {
+    private suspend fun searchSogou(query: String, limit: Int): List<SearchHit> {
         val url = "https://www.sogou.com/web?query=" + java.net.URLEncoder.encode(query, "UTF-8")
         val html = fetcher.fetch(url).getOrElse { failure -> throw IllegalStateException(failure.message.orEmpty()) }
         val doc = Jsoup.parse(html, url)
@@ -554,6 +663,8 @@ class WebSearchTool @Inject constructor(
         val ALL_ENGINES = setOf("ddg-lite", "ddg", "bing", "baidu", "mojeek", "360", "sogou")
         val FRESHNESS_VALUES = setOf("any", "day", "week", "month", "year")
         const val ENGINE_TIMEOUT_MS = 8_000L
+        const val READ_TIMEOUT_MS = 10_000L
+        const val READ_PHASE_TIMEOUT_MS = 12_000L
         const val READ_ATTEMPTS = 6
         const val BODY_BUDGET = 5_000
         const val MAX_OUTPUT_CHARS = 9_000

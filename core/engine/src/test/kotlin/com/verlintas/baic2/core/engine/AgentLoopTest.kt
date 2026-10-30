@@ -122,7 +122,182 @@ class AgentLoopTest {
         val denied = events.filterIsInstance<AgentEvent.ToolCallFinished>()
             .filter { it.call.status == ToolCallStatus.DENIED }
         assertEquals(1, denied.size)
-        assertTrue(denied.first().call.result.orEmpty().contains("same arguments"))
+        assertTrue(denied.first().call.result.orEmpty().contains("identical arguments"))
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
+    fun alternatingCallsDoNotTripTheRepeatGuard() = runTest {
+        val observe = ToolCall(id = "o1", name = "observe", argumentsJson = "{}")
+        val tap = ToolCall(id = "t1", name = "tap", argumentsJson = """{"x":1}""")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(observe),
+                toolRound(tap),
+                toolRound(observe.copy(id = "o2")),
+                toolRound(tap.copy(id = "t2")),
+                toolRound(observe.copy(id = "o3")),
+                textRound("done"),
+            ),
+        )
+        var runnerCalls = 0
+        val specs = listOf(
+            ToolSpec(name = "observe", description = "read", readOnly = true),
+            ToolSpec(name = "tap", description = "act"),
+        )
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(specs),
+            toolRunner = { _, _ ->
+                runnerCalls++
+                ToolResult.Success("ok")
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        assertEquals(5, runnerCalls)
+        assertEquals(
+            0,
+            events.filterIsInstance<AgentEvent.ToolCallFinished>()
+                .count { it.call.status == ToolCallStatus.DENIED },
+        )
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
+    fun failedCallsMayBeRetriedAfterTheEnvironmentChanges() = runTest {
+        val call = ToolCall(id = "c1", name = "needs_permission", argumentsJson = "{}")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(call),
+                toolRound(call.copy(id = "c2")),
+                toolRound(call.copy(id = "c3")),
+                textRound("done"),
+            ),
+        )
+        var runnerCalls = 0
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(ToolSpec(name = "needs_permission", description = "act")),
+            ),
+            toolRunner = { _, _ ->
+                runnerCalls++
+                if (runnerCalls < 3) {
+                    ToolResult.Failure("permission denied")
+                } else {
+                    ToolResult.Success("worked")
+                }
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        assertEquals(3, runnerCalls)
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
+    fun whitespaceInsideAStringIsPartOfTheCallSignature() = runTest {
+        val spaced = ToolCall(id = "c1", name = "search", argumentsJson = """{"q":"new york"}""")
+        val compact = ToolCall(id = "c2", name = "search", argumentsJson = """{"q":"newyork"}""")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(spaced),
+                toolRound(spaced.copy(id = "c1b")),
+                toolRound(spaced.copy(id = "c1c")),
+                toolRound(compact),
+                textRound("done"),
+            ),
+        )
+        var runnerCalls = 0
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(listOf(ToolSpec(name = "search", description = "r"))),
+            toolRunner = { _, _ ->
+                runnerCalls++
+                if (runnerCalls <= 3) ToolResult.Failure("nothing") else ToolResult.Success("hit")
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        assertEquals(4, runnerCalls)
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
+    fun aToolCanTaintTheRestOfTheRunEvenWhenItReturnsSuccess() = runTest {
+        val read = ToolCall(id = "c1", name = "read_web", argumentsJson = "{}")
+        val shell = ToolCall(id = "c2", name = "run_shell", argumentsJson = "{}")
+        val provider = ScriptedProvider(
+            listOf(toolRound(read), toolRound(shell), textRound("stopped")),
+        )
+        var shellRan = false
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(name = "read_web", description = "read", readOnly = true),
+                    ToolSpec(name = "run_shell", description = "sh", danger = DangerLevel.HIGH),
+                ),
+            ),
+            toolRunner = { call, run ->
+                if (call.name == "read_web") {
+                    run.taint.tainted = true
+                    ToolResult.Success("external text")
+                } else {
+                    shellRan = true
+                    ToolResult.Success("ran")
+                }
+            },
+            confirmationGate = ConfirmationGate { false },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        assertEquals(false, shellRan)
+        assertTrue(
+            events.filterIsInstance<AgentEvent.ToolCallFinished>()
+                .any { it.call.name == "run_shell" && it.call.status == ToolCallStatus.REJECTED },
+        )
+    }
+
+    @Test
+    fun duplicateCallsInOneParallelBatchRunOnlyOnce() = runTest {
+        val first = ToolCall(id = "c1", name = "observe", argumentsJson = "{}")
+        val duplicate = ToolCall(id = "c2", name = "observe", argumentsJson = "{}")
+        val provider = ScriptedProvider(
+            listOf(toolRound(first, duplicate), textRound("done")),
+        )
+        var runnerCalls = 0
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(
+                        name = "observe",
+                        description = "read",
+                        readOnly = true,
+                        parallelSafe = true,
+                    ),
+                ),
+            ),
+            toolRunner = { _, _ ->
+                runnerCalls++
+                ToolResult.Success("screen")
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history).toList()
+
+        assertEquals(1, runnerCalls)
+        assertEquals(
+            1,
+            events.filterIsInstance<AgentEvent.ToolCallFinished>()
+                .count { it.call.status == ToolCallStatus.DENIED },
+        )
         assertEquals(AgentEvent.Completed, events.last())
     }
 

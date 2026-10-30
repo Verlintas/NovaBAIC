@@ -84,6 +84,13 @@ class ArgumentHealerTest {
     }
 
     @Test
+    fun fixesCaseOnlyKeyMismatches() {
+        val healed = ArgumentHealer.heal(JsonObject(mapOf("City" to JsonPrimitive("Beijing"))), schema)
+        assertEquals("Beijing", healed.arguments["city"]?.jsonPrimitive?.content)
+        assertTrue(healed.notes.isNotEmpty())
+    }
+
+    @Test
     fun skipsAmbiguousRenames() {
         val ambiguousSchema = """
             {"type":"object","properties":{"path":{"type":"string"},"pash":{"type":"string"}}}

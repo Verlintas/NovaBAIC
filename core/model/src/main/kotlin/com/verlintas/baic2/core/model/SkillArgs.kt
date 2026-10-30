@@ -34,7 +34,8 @@ import kotlinx.serialization.json.contentOrNull
  */
 object SkillArgs {
 
-    private val PLACEHOLDER = Regex("\\{\\{(\\w+)\\}\\}")
+    // Unicode-aware: skill parameter names may be Chinese (or hyphenated).
+    private val PLACEHOLDER = Regex("\\{\\{([\\p{L}\\p{N}_-]+)\\}\\}")
 
     fun render(argsJson: String, parameters: JsonObject): Result<String> {
         val element = runCatching {

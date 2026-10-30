@@ -80,6 +80,12 @@ fun interface ToolRunner {
 fun interface ConfirmationGate {
     suspend fun confirm(call: ToolCall): Boolean
 
+    /**
+     * The loop uses this overload so a process-wide UI queue can route the
+     * request to the chat that owns the run. Simple gates keep working.
+     */
+    suspend fun confirm(call: ToolCall, conversationId: Long?): Boolean = confirm(call)
+
     companion object {
         val AllowAll = ConfirmationGate { true }
     }
@@ -134,10 +140,12 @@ class AgentLoop(
         // it down), high-danger calls stay gated across turns and compressions.
         var tainted = initialTaint || ToolTrust.windowIsTainted(history)
         runContext.taint.tainted = tainted
-            val toolFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
-            // Identical repeats: the third call with the same name+args is
-            // refused, so a successful-but-pointless loop cannot burn rounds.
-            val callSignatures = HashMap<String, Int>()
+        val toolFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
+        // Consecutive identical successes: the third in a row is refused,
+        // so a pointless loop cannot burn rounds. Alternating calls
+        // (observe -> tap -> observe) stay legal.
+        var lastSuccessSignature: String? = null
+        var consecutiveSuccesses = 0
 
         while (true) {
             if (round >= budget.maxRounds) {
@@ -256,25 +264,30 @@ class AgentLoop(
                 var remainingBudget = (budget.maxToolCalls - toolCallsUsed).coerceAtLeast(0)
                 val preDenied = LinkedHashMap<ToolCall, String>()
                 val runnable = mutableListOf<ToolCall>()
+                val queuedSignatures = HashMap<String, Int>()
                 for (call in toolCalls) {
+                    val signature = signatureOf(call)
+                    val repeatsInBatch = queuedSignatures[signature] ?: 0
                     when {
                         // Denials come before any dialog: a poisoned, exhausted
                         // or looping call must never pop a confirmation.
+                        repeatsInBatch > 0 ||
+                            (lastSuccessSignature == signature &&
+                                consecutiveSuccesses + repeatsInBatch >= MAX_IDENTICAL_CALLS) ->
+                            preDenied[call] = identicalCallReason(call)
+
                         failureCount(toolFailures, call) >= MAX_TOOL_FAILURES ->
                             preDenied[call] =
                                 "${call.name} with these arguments failed $MAX_TOOL_FAILURES times " +
                                     "in this run. Change the arguments or the approach - do not retry unchanged."
-
-                        signatureCount(callSignatures, call) >= MAX_IDENTICAL_CALLS ->
-                            preDenied[call] = identicalCallReason(call)
 
                         remainingBudget <= 0 ->
                             preDenied[call] =
                                 "Tool call budget exhausted (${budget.maxToolCalls}); answer with what you have"
 
                         else -> {
-                            bumpSignature(callSignatures, call)
                             runnable += call
+                            queuedSignatures[signature] = repeatsInBatch + 1
                             remainingBudget--
                         }
                     }
@@ -284,6 +297,18 @@ class AgentLoop(
                     Triple(call, ToolCallStatus.DENIED, ToolResult.Denied(reason))
                 }).associateBy { it.first.id }
                 toolCalls.mapNotNull { byId[it.id] }.forEach { (call, status, result) ->
+                    if (status == ToolCallStatus.DONE && result is ToolResult.Success) {
+                        val signature = signatureOf(call)
+                        consecutiveSuccesses = if (signature == lastSuccessSignature) {
+                            consecutiveSuccesses + 1
+                        } else {
+                            lastSuccessSignature = signature
+                            1
+                        }
+                    } else {
+                        lastSuccessSignature = null
+                        consecutiveSuccesses = 0
+                    }
                     recordFailure(toolFailures, call, status, result)
                     if (status == ToolCallStatus.DONE || status == ToolCallStatus.FAILED) {
                         toolCallsUsed++
@@ -294,6 +319,10 @@ class AgentLoop(
                         tainted = true
                         runContext.taint.tainted = true
                     }
+                    // A tool may mark the run itself (e.g. a composite skill
+                    // whose earlier step read external text, even if a later
+                    // step failed). Honour that marker for the next gate.
+                    if (runContext.taint.tainted) tainted = true
                     val finished = call.copy(result = render(result), status = status)
                     emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
                     messages = messages + ChatMessage(
@@ -319,7 +348,8 @@ class AgentLoop(
                                     "in this run. Change the arguments or the approach - do not retry unchanged.",
                             )
 
-                        signatureCount(callSignatures, call) >= MAX_IDENTICAL_CALLS ->
+                        lastSuccessSignature == signatureOf(call) &&
+                            consecutiveSuccesses >= MAX_IDENTICAL_CALLS ->
                             ToolCallStatus.DENIED to ToolResult.Denied(identicalCallReason(call))
 
                         toolCallsUsed >= budget.maxToolCalls ->
@@ -328,21 +358,29 @@ class AgentLoop(
                             )
 
                         decision is GateResult.NeedsConfirm -> {
-                            val approved = confirmationGate.confirm(call)
+                            val approved = confirmationGate.confirm(call, conversationId)
                             if (approved) {
-                                bumpSignature(callSignatures, call)
                                 execute(call, runContext)
                             } else {
                                 ToolCallStatus.REJECTED to ToolResult.Denied("User rejected the call")
                             }
                         }
 
-                        else -> {
-                            bumpSignature(callSignatures, call)
-                            execute(call, runContext)
-                        }
+                        else -> execute(call, runContext)
                     }
 
+                    if (status == ToolCallStatus.DONE && result is ToolResult.Success) {
+                        val signature = signatureOf(call)
+                        consecutiveSuccesses = if (signature == lastSuccessSignature) {
+                            consecutiveSuccesses + 1
+                        } else {
+                            lastSuccessSignature = signature
+                            1
+                        }
+                    } else {
+                        lastSuccessSignature = null
+                        consecutiveSuccesses = 0
+                    }
                     recordFailure(toolFailures, call, status, result)
                     if (status == ToolCallStatus.DONE || status == ToolCallStatus.FAILED) {
                         toolCallsUsed++
@@ -353,6 +391,8 @@ class AgentLoop(
                         tainted = true
                         runContext.taint.tainted = true
                     }
+                    // Tools can mark the run internally; the next gate must see it.
+                    if (runContext.taint.tainted) tainted = true
 
                     val finished = call.copy(result = render(result), status = status)
                     emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
@@ -368,28 +408,47 @@ class AgentLoop(
     }.flowOn(Dispatchers.IO)
 
     /**
-     * Tool-name level circuit breaker: three failures in a run and further
-     * identical attempts are denied with guidance instead of burning rounds.
+     * Two independent guards: the failure breaker denies an unchanged failing
+     * call, and the repeat guard stops the third consecutive identical success.
      */
-    /** How many times this exact call (name + arguments) already ran. */
-    private fun signatureCount(counts: MutableMap<String, Int>, call: ToolCall): Int =
-        counts[call.name + "|" + call.argumentsJson.trim()] ?: 0
+    /** Formatting-insensitive signature that still respects whitespace inside strings. */
+    private fun signatureOf(call: ToolCall): String =
+        call.name + "|" + compactJson(call.argumentsJson)
 
-    private fun bumpSignature(counts: MutableMap<String, Int>, call: ToolCall) {
-        val signature = call.name + "|" + call.argumentsJson.trim()
-        counts[signature] = (counts[signature] ?: 0) + 1
+    private fun compactJson(raw: String): String {
+        val out = StringBuilder(raw.length)
+        var inString = false
+        var escaped = false
+        for (char in raw) {
+            if (inString) {
+                out.append(char)
+                when {
+                    escaped -> escaped = false
+                    char == '\\' -> escaped = true
+                    char == '"' -> inString = false
+                }
+            } else {
+                when {
+                    char == '"' -> {
+                        inString = true
+                        out.append(char)
+                    }
+
+                    !char.isWhitespace() -> out.append(char)
+                }
+            }
+        }
+        return out.toString()
     }
 
     /** Failures are keyed by signature, so changing the arguments resets the count. */
-    private fun failureCount(failures: MutableMap<String, Int>, call: ToolCall): Int {
-        val key = call.name + "|" + call.argumentsJson.trim()
-        return failures[key] ?: 0
-    }
+    private fun failureCount(failures: MutableMap<String, Int>, call: ToolCall): Int =
+        failures[signatureOf(call)] ?: 0
 
     private fun identicalCallReason(call: ToolCall): String =
-        "${call.name} already ran $MAX_IDENTICAL_CALLS times with exactly the same arguments in " +
-            "this run; the result will not change. Change the approach or arguments, or answer " +
-            "with what you already have."
+        "${call.name} already produced the same result $MAX_IDENTICAL_CALLS times in a row " +
+            "with identical arguments; repeating it will not change anything. Change the " +
+            "approach or arguments, or answer with what you already have."
 
     private fun recordFailure(
         failures: MutableMap<String, Int>,
@@ -397,7 +456,7 @@ class AgentLoop(
         status: ToolCallStatus,
         result: ToolResult,
     ) {
-        val key = call.name + "|" + call.argumentsJson.trim()
+        val key = signatureOf(call)
         when {
             status == ToolCallStatus.DONE && result is ToolResult.Success ->
                 failures.remove(key)
@@ -466,7 +525,9 @@ class AgentLoop(
         if (spec.alwaysAvailable) return GateResult.Allow
         // Nobody is watching a scheduled run: high-impact tools stay refused
         // no matter what the prompt (or an injected page) asks for.
-        if (unattended && (spec.danger == DangerLevel.HIGH || spec.name in UNATTENDED_BLOCKED)) {
+        if (unattended &&
+            (spec.danger == DangerLevel.HIGH || spec.name in ToolTrust.UNATTENDED_BLOCKED)
+        ) {
             return GateResult.Denied(
                 "Blocked: ${spec.name} is high-impact and this run is unattended. " +
                     "Ask the user to run this step interactively instead.",
@@ -484,9 +545,6 @@ class AgentLoop(
     private companion object {
         const val MAX_TOOL_FAILURES = 3
         const val MAX_IDENTICAL_CALLS = 2
-
-        /** External side effects that stay disabled in unattended runs. */
-        val UNATTENDED_BLOCKED = setOf("run_shell", "manage_app", "set_clipboard", "share_text")
     }
 
     private sealed interface GateResult {
@@ -522,7 +580,7 @@ fun renderSystemPrompt(
             "You are in research mode: your own quiet study. You may read (read-only tools) and " +
                 "remember, never change the device. How you work: think silently first about what " +
                 "you actually need to check; fire independent lookups together in one round " +
-                "(several calls, or web_search with a queries array); reconcile what you find and " +
+                "(several calls, or one web_search whose query field is an array); reconcile what you find and " +
                 "name disagreements between sources; after a few attempts with thin evidence, stop " +
                 "and say what is missing instead of burning rounds. The reply is for a person: " +
                 "conclusions first, clean prose, no citation clutter - the tool cards already show " +

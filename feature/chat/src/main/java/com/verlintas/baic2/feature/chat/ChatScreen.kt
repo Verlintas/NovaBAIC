@@ -411,7 +411,9 @@ fun ChatScreen(
         val target = matches.getOrNull(matchIndex) ?: return@LaunchedEffect
         val index = state.messages.indexOfFirst { it.id == target.id }
         if (index >= 0) {
-            runCatching { listState.animateScrollToItem(index) }
+            // The plan card is an item before the message list.
+            val planOffset = if (state.plan?.steps?.isNotEmpty() == true) 1 else 0
+            runCatching { listState.animateScrollToItem(index + planOffset) }
         }
     }
 
@@ -995,8 +997,7 @@ fun ChatScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.editAndResend(target.id, text)
-                        editTarget = null
+                        if (viewModel.editAndResend(target.id, text)) editTarget = null
                     },
                 ) {
                     Text(stringResource(R.string.chat_edit_confirm))
@@ -1359,6 +1360,7 @@ private fun errorText(error: ChatError): String = when (error.kind) {
     ChatError.Kind.UNSUPPORTED -> stringResource(R.string.chat_error_unsupported)
     ChatError.Kind.INTERNAL -> stringResource(R.string.chat_error_internal, error.detail.orEmpty())
     ChatError.Kind.SCREEN_CAPTURE -> stringResource(R.string.chat_error_screen_capture)
+    ChatError.Kind.BUSY -> stringResource(R.string.chat_error_agent_busy)
 }
 
 @Composable

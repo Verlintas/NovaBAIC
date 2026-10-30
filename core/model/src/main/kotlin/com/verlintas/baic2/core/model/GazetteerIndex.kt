@@ -114,7 +114,7 @@ class GazetteerIndex(places: List<GazetteerPlace>) {
                 // (loose but always-safe lower bound: east-west degrees shrink
                 // by cos(latitude), so the floor must shrink with them).
                 val unvisitedFloor = ring * CELL_DEGREES * METERS_PER_DEGREE *
-                    kotlin.math.cos(Math.toRadians(latitude)).coerceAtLeast(0.05)
+                    kotlin.math.cos(Math.toRadians(latitude)).coerceAtLeast(0.0)
                 if (best[limit - 1].distance <= unvisitedFloor) {
                     converged = true
                     break

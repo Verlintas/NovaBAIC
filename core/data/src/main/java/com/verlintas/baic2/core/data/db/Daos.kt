@@ -162,7 +162,11 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun getById(id: Long): MessageEntity?
 
-    @Query("UPDATE messages SET role = :role, content = :content WHERE id = :id")
+    @Query(
+        "UPDATE messages SET role = :role, content = :content, thinking = NULL, " +
+            "thinkingSignature = NULL, thinkingMs = NULL, toolCallsJson = '[]', " +
+            "attachmentsJson = '[]', toolCallId = NULL, toolName = NULL WHERE id = :id",
+    )
     suspend fun updateRoleAndContent(id: Long, role: String, content: String)
 
     @Query("DELETE FROM messages WHERE conversationId = :conversationId AND id > :afterId AND id < :beforeId")
@@ -281,6 +285,12 @@ interface ScheduledTaskDao {
 
     @Query("UPDATE scheduled_tasks SET enabled = :enabled WHERE id = :id")
     suspend fun setEnabled(id: Long, enabled: Boolean)
+
+    @Query("UPDATE scheduled_tasks SET conversationId = NULL WHERE conversationId = :conversationId")
+    suspend fun clearConversation(conversationId: Long)
+
+    @Query("UPDATE scheduled_tasks SET conversationId = NULL")
+    suspend fun clearAllConversations()
 
     @Query(
         "UPDATE scheduled_tasks SET conversationId = :conversationId, lastRunAt = :lastRunAt, " +
@@ -503,6 +513,7 @@ interface NoteDao {
     @Query(
         "UPDATE notes SET content = :content, importance = :importance, " +
             "expiresAt = COALESCE(:expiresAt, expiresAt), " +
+            "conversationId = COALESCE(:conversationId, conversationId), " +
             "messageId = COALESCE(:messageId, messageId), updatedAt = :now WHERE id = :id",
     )
     suspend fun update(
@@ -511,6 +522,7 @@ interface NoteDao {
         importance: Int,
         now: Long,
         expiresAt: Long? = null,
+        conversationId: Long? = null,
         messageId: Long? = null,
     )
 
@@ -530,6 +542,7 @@ interface NoteDao {
     @Query(
         "UPDATE notes SET kind = :kind, content = :content, importance = :importance, " +
             "entities = :entities, expiresAt = COALESCE(:expiresAt, expiresAt), " +
+            "conversationId = COALESCE(:conversationId, conversationId), " +
             "messageId = COALESCE(:messageId, messageId), " +
             "archived = 0, suppressed = 0, supersededBy = NULL, " +
             "updatedAt = :now WHERE id = :id",
@@ -542,6 +555,7 @@ interface NoteDao {
         entities: String,
         now: Long,
         expiresAt: Long? = null,
+        conversationId: Long? = null,
         messageId: Long? = null,
     )
 

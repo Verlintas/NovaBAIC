@@ -83,7 +83,14 @@ class SpawnAgentTool @Inject constructor(
     internal suspend fun runChild(task: String, mode: AppMode, run: ToolRunContext): ToolResult {
         val config = run.config
             ?: return ToolResult.Failure("Sub-agents need an active provider configuration.")
-        val budget = if (mode == AppMode.CHAT_PLUS) {
+        // A child can never be more privileged than its parent: an ACT
+        // confirmation must not become a blank cheque for MAX in the child.
+        val effectiveMode = when (run.mode) {
+            AppMode.MAX -> mode
+            AppMode.ACT -> if (mode.ordinal > AppMode.CHAT_PLUS.ordinal) AppMode.CHAT_PLUS else mode
+            else -> if (mode.ordinal > run.mode.ordinal) run.mode else mode
+        }
+        val budget = if (effectiveMode == AppMode.CHAT_PLUS) {
             RunBudget(maxRounds = 8, maxToolCalls = 20, maxWallClockMs = 300_000)
         } else {
             RunBudget(maxRounds = 16, maxToolCalls = 40, maxWallClockMs = 600_000)
@@ -109,11 +116,14 @@ class SpawnAgentTool @Inject constructor(
         val events = try {
             loop.run(
                 config = config,
-                mode = mode,
+                mode = effectiveMode,
                 history = listOf(ChatMessage(role = ChatRole.USER, content = task)),
+                conversationId = run.conversationId,
                 initialTaint = run.taint.tainted,
                 unattended = run.unattended,
                 budgetOverride = budget,
+                triggerMessageId = run.triggerMessageId,
+                primedNoteIds = run.primedNoteIds,
             ).toList()
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e

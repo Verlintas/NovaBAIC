@@ -40,6 +40,9 @@ class BaicNotificationListener : NotificationListenerService() {
                 title = title,
                 text = text,
                 postedAt = notification.postTime,
+                key = notification.key,
+                isOngoing =
+                    (notification.notification.flags and Notification.FLAG_ONGOING_EVENT) != 0,
             ),
         )
     }

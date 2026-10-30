@@ -51,11 +51,19 @@ class QuestionQueue(
     private val _requests = MutableSharedFlow<UserQuestion>(extraBufferCapacity = 4)
     val requests: SharedFlow<UserQuestion> = _requests
 
-    // Questions are answered one at a time: two parallel children asking must
-    // not overwrite each other's dialog slot.
-    private val serial = kotlinx.coroutines.sync.Mutex()
+    /** Questions that timed out; the UI must drop their stale dialog. */
+    private val _expired = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val expired: SharedFlow<String> = _expired
 
-    suspend fun ask(question: UserQuestion): String? = serial.withLock {
+    // Questions are answered one at a time per conversation: two parallel
+    // children asking must not overwrite each other's dialog slot, and a
+    // background conversation must not block the one the person is watching.
+    private val serial = ConcurrentHashMap<Long, kotlinx.coroutines.sync.Mutex>()
+
+    private fun lockFor(conversationId: Long?): kotlinx.coroutines.sync.Mutex =
+        serial.computeIfAbsent(conversationId ?: 0L) { kotlinx.coroutines.sync.Mutex() }
+
+    suspend fun ask(question: UserQuestion): String? = lockFor(question.conversationId).withLock {
         // Background/unattended: do not wait at all.
         if (_requests.subscriptionCount.value == 0) return@withLock null
         val deferred = CompletableDeferred<String?>()
@@ -67,6 +75,7 @@ class QuestionQueue(
         try {
             withTimeout(timeoutMs) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
+            _expired.tryEmit(question.id)
             null
         } finally {
             pending.remove(question.id)

@@ -68,7 +68,7 @@ class ScheduledTaskRunner @Inject constructor(
             mode = mode,
             title = "定时 · ${task.name}".take(24),
         )
-        conversationRepository.append(
+        val triggerMessageId = conversationRepository.append(
             ChatMessage(
                 conversationId = conversationId,
                 role = ChatRole.USER,
@@ -96,6 +96,7 @@ class ScheduledTaskRunner @Inject constructor(
                 history = conversationRepository.getMessages(conversationId),
                 conversationId = conversationId,
                 planContext = planRepository.getPlan(conversationId)?.render(),
+                triggerMessageId = triggerMessageId,
                 unattended = true,
             ).collect { event ->
                 when (event) {

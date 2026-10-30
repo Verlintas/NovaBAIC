@@ -22,6 +22,7 @@
     <string name="chat_error_api_key">API Key 不可用，请重新配置服务</string>
     <string name="chat_error_unsupported">该服务商暂未支持</string>
     <string name="chat_error_internal">内部错误：%1$s</string>
+    <string name="chat_error_agent_busy">另一个自主任务还在运行；先到「任务」停止它，或等它结束</string>
 
     <string name="chat_tool_pending">等待</string>
     <string name="chat_tool_running">执行中</string>

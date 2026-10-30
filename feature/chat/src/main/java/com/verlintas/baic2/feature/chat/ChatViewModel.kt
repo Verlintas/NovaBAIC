@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verlintas.baic2.core.data.attachment.AttachmentProcessor
 import com.verlintas.baic2.core.data.repository.AgentRepository
+import com.verlintas.baic2.core.data.repository.AgentRunGate
 import com.verlintas.baic2.core.data.repository.ApiKeyUnavailableException
 import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.MemoryRepository
@@ -140,6 +141,7 @@ data class ChatError(
         UNSUPPORTED,
         INTERNAL,
         SCREEN_CAPTURE,
+        BUSY,
     }
 }
 
@@ -157,6 +159,7 @@ class ChatViewModel @Inject constructor(
     private val agentRepository: AgentRepository,
     private val runRepository: RunRepository,
     private val runControlBus: RunControlBus,
+    private val agentRunGate: AgentRunGate,
     private val memoryRepository: MemoryRepository,
     private val agentLoop: AgentLoop,
     private val toolCatalog: ToolCatalog,
@@ -400,18 +403,53 @@ class ChatViewModel @Inject constructor(
     @Volatile
     private var ownsRunNotification = false
     private val turnGate = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val agentSlot = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * A turn needs the per-screen gate, and ACT/MAX also need the process-wide
+     * agent slot: they share one foreground service and one stop handler.
+     */
+    private fun admitTurn(): Boolean {
+        if (!turnGate.compareAndSet(false, true)) return false
+        val mode = uiState.value.mode
+        val agentic = mode.requiresConfirmation || mode == AppMode.MAX
+        if (agentic && !agentRunGate.tryAcquire(conversationId)) {
+            turnGate.set(false)
+            error.value = ChatError(ChatError.Kind.BUSY)
+            return false
+        }
+        if (agentic) agentSlot.set(true)
+        return true
+    }
+
+    private fun releaseTurn() {
+        if (agentSlot.compareAndSet(true, false)) agentRunGate.release(conversationId)
+        turnGate.set(false)
+    }
 
     init {
         viewModelScope.launch {
-            confirmationQueue.requests.collect { call -> confirmation.value = call }
+            confirmationQueue.requests.collect { request ->
+                // The queue is process-wide: only the chat that owns the run
+                // may show (and answer) its confirmation. A duplicate screen
+                // for the same conversation stays silent unless it is running.
+                if (running.value && request.conversationId == conversationId) {
+                    confirmation.value = request.call
+                }
+            }
         }
         viewModelScope.launch {
             questionQueue.requests.collect { question ->
                 // Shared queue: only surface questions for this conversation
                 // (automation/scheduled runs must not pop dialogs into chats).
-                if (question.conversationId == null || question.conversationId == conversationId) {
+                if (question.conversationId == conversationId) {
                     _pendingQuestion.value = question
                 }
+            }
+        }
+        viewModelScope.launch {
+            questionQueue.expired.collect { id ->
+                if (_pendingQuestion.value?.id == id) _pendingQuestion.value = null
             }
         }
         viewModelScope.launch {
@@ -487,13 +525,13 @@ class ChatViewModel @Inject constructor(
         if (trimmed.isEmpty() && attachments.isEmpty()) return false
         // Atomic admission: two taps (or voice auto-send + tap) must not start
         // two concurrent turns inside the pre-`running` suspension window.
-        if (!turnGate.compareAndSet(false, true)) return false
+        if (!admitTurn()) return false
         pendingAttachments.value = emptyList()
         runJob = viewModelScope.launch {
             try {
                 executeTurn(trimmed, attachments = attachments)
             } finally {
-                turnGate.set(false)
+                releaseTurn()
             }
         }
         return true
@@ -583,7 +621,7 @@ class ChatViewModel @Inject constructor(
 
     /** Captures the screen and sends it to the model as an image attachment. */
     fun analyzeScreen(prompt: String) {
-        if (!turnGate.compareAndSet(false, true)) return
+        if (!admitTurn()) return
         runJob = viewModelScope.launch {
             try {
                 auxBusy.value = true
@@ -601,7 +639,7 @@ class ChatViewModel @Inject constructor(
                 }
                 executeTurn(prompt, attachments = listOf(attachment))
             } finally {
-                turnGate.set(false)
+                releaseTurn()
             }
         }
     }
@@ -622,6 +660,7 @@ class ChatViewModel @Inject constructor(
             runNotifier.stopRunning()
             ownsRunNotification = false
         }
+        releaseTurn()
         super.onCleared()
     }
 
@@ -637,7 +676,7 @@ class ChatViewModel @Inject constructor(
 
     /** Drops everything after the last user message and runs that turn again. */
     fun retryLast() {
-        if (!turnGate.compareAndSet(false, true)) return
+        if (!admitTurn()) return
         runJob = viewModelScope.launch {
             try {
                 val messages = conversationRepository.getMessages(conversationId)
@@ -645,7 +684,7 @@ class ChatViewModel @Inject constructor(
                 conversationRepository.deleteMessagesAfter(conversationId, lastUser.id)
                 executeTurn(lastUser.content, appendUserMessage = false)
             } finally {
-                turnGate.set(false)
+                releaseTurn()
             }
         }
     }
@@ -673,19 +712,20 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { conversationRepository.deleteMessage(messageId) }
     }
 
-    fun editAndResend(messageId: Long, newText: String) {
+    fun editAndResend(messageId: Long, newText: String): Boolean {
         val trimmed = newText.trim()
-        if (trimmed.isEmpty()) return
-        if (!turnGate.compareAndSet(false, true)) return
+        if (trimmed.isEmpty()) return false
+        if (!admitTurn()) return false
         runJob = viewModelScope.launch {
             try {
                 conversationRepository.updateMessageContent(messageId, trimmed)
                 conversationRepository.deleteMessagesAfter(conversationId, messageId)
                 executeTurn(trimmed, appendUserMessage = false)
             } finally {
-                turnGate.set(false)
+                releaseTurn()
             }
         }
+        return true
     }
 
     /** Summarizes older history, keeping recent turns verbatim. */
@@ -1053,22 +1093,29 @@ class ChatViewModel @Inject constructor(
         }
 
         if (!failed) {
-            if (isFirstTurn && !titleGenerated) {
-                maybeGenerateTitle(config)
+            // Keep maintenance inside the busy flag: running is already false,
+            // but compression, curation and editing must still queue behind it.
+            auxBusy.value = true
+            try {
+                if (isFirstTurn && !titleGenerated) {
+                    maybeGenerateTitle(config)
+                }
+                // Consolidation is sleep-time work: prefer the background edge,
+                // with an overflow fallback for marathon foreground sessions.
+                val foregroundNow = AppVisibility.foreground
+                val threshold = if (foregroundNow) OVERFLOW_CURATE_MESSAGES else IDLE_CURATE_MESSAGES
+                // Best-effort upkeep: a memory failure must never take the turn down.
+                quietly {
+                    maybeCurate(
+                        threshold = threshold,
+                        config = config,
+                        trigger = if (foregroundNow) "overflow" else "idle",
+                    )
+                }
+                quietly { maybeAutoCompress(config) }
+            } finally {
+                auxBusy.value = false
             }
-            // Consolidation is sleep-time work: prefer the background edge,
-            // with an overflow fallback for marathon foreground sessions.
-            val foregroundNow = AppVisibility.foreground
-            val threshold = if (foregroundNow) OVERFLOW_CURATE_MESSAGES else IDLE_CURATE_MESSAGES
-            // Best-effort upkeep: a memory failure must never take the turn down.
-            quietly {
-                maybeCurate(
-                    threshold = threshold,
-                    config = config,
-                    trigger = if (foregroundNow) "overflow" else "idle",
-                )
-            }
-            quietly { maybeAutoCompress(config) }
         }
     }
 
@@ -1430,12 +1477,16 @@ class ChatViewModel @Inject constructor(
         val messages = conversationRepository.getMessages(conversationId)
         if (messages.size <= KEEP_RECENT_MESSAGES) return
 
-        val boundary = messages.takeLast(KEEP_RECENT_MESSAGES).firstOrNull { it.role == ChatRole.USER }
-            // A long agentic tail can hold >6 assistant/tool rows with no user
-            // message; walk back further instead of never compressing again.
-            ?: messages.dropLast(KEEP_RECENT_MESSAGES).lastOrNull { it.role == ChatRole.USER }
-            ?: return
-        val older = messages.takeWhile { it.id < boundary.id }
+        // Start from the newest KEEP_RECENT_MESSAGES rows. Never split a tool
+        // result from the assistant call that produced it: walk back over TOOL
+        // rows to include their call. This also compresses a long single-turn
+        // agentic tail that contains no user message in its recent window.
+        var boundaryIndex = (messages.size - KEEP_RECENT_MESSAGES).coerceAtLeast(0)
+        while (boundaryIndex > 0 && messages[boundaryIndex].role == ChatRole.TOOL) {
+            boundaryIndex--
+        }
+        val boundary = messages.getOrNull(boundaryIndex) ?: return
+        val older = messages.take(boundaryIndex)
         if (older.none { it.role == ChatRole.USER }) return
 
         auxBusy.value = true

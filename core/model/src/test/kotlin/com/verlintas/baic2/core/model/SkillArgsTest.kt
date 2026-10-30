@@ -58,6 +58,20 @@ class SkillArgsTest {
     }
 
     @Test
+    fun unicodeAndHyphenatedParameterNamesAreSubstituted() {
+        val rendered = SkillArgs.render(
+            """{"city":"{{城市}}","date":"{{start-date}}"}""",
+            buildJsonObject {
+                put("城市", "杭州")
+                put("start-date", "10月2日")
+            },
+        ).getOrThrow()
+        val obj = Json.parseToJsonElement(rendered).jsonObject
+        assertEquals("杭州", obj["city"]!!.jsonPrimitive.content)
+        assertEquals("10月2日", obj["date"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun missingParametersFailWithTheirNames() {
         val result = SkillArgs.render(
             """{"city":"{{city}}","date":"{{date}}"}""",

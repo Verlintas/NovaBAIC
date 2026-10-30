@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.1] - 2026-10-30
+
+> 修复 issue #1 的文件访问权限，并完成第二轮全量复审：搜索超时真正可取消、运行隔离、记忆与技能边界收紧。DB 仍为 v21，工具仍为 57。
+
+### 修复 Fixed
+
+- **文件访问（issue #1）**：`MANAGE_EXTERNAL_STORAGE` 不再声明 `maxSdkVersion=32`——API 33+ 安装后“所有文件访问”会出现在系统列表并可正常开关；权限页回到前台自动刷新，OEM 设置页缺失时回退到应用详情
+- **Web 搜索真正超时**：`WebFetcher` 从阻塞 `execute()` 改为可取消的 OkHttp `enqueue`，取消会中止正在进行的请求；每个搜索引擎从启动起最多 8 秒，`read_top` 正文阶段最多 12 秒（单篇 10 秒），不再出现“8 秒超时、实际等 30–90 秒”；搜索 job 固定 `Dispatchers.IO`
+- **搜索缓存与下载**：`web_search` 不再被 run 级缓存绕过 `refresh`；`download_file` 超过大小上限明确失败，不再静默截断后报成功
+- **运行隔离**：ACT/MAX 共享一个前台服务和一个停止按钮，现在由进程级 `AgentRunGate` 保证一次只跑一个交互式自主任务；第二个任务会提示先停止或等待，普通 Chat/Chat+ 不受影响
+- **循环守卫**：从“整轮同名同参第三次拒绝”改为“连续成功第三次拒绝”；失败三次仍由失败熔断处理，`screen_ocr → tap → screen_ocr` 这类正常观察链不再被误杀，并行批次内重复调用也会去重
+- **技能边界**：组合技能不能包含 `spawn_agent` / `automation` 步骤；运行时复查 HIGH 危险与无人值守黑名单；读到外部内容的步骤立即污染 run，失败输出也标记为不可信数据；重载技能会注销旧工具，不能覆盖内置或其他技能的工具
+- **记忆完整性**：`addNote` 的查重/决策/写入进入同一事务；导入旧备份不再覆盖更新的笔记；`updateNote` / `replaceNote` 事务化并拒绝已遗忘或被 hold 的内容；`replaces=` 不能复活已忘笔记；`memory_forget` 移除模型侧永久删除（永久清除只保留为库内长按操作）；合并/替换同步会话出处；删除会话清理定时任务引用；导入 core 只填空槽
+- **自动化**：常驻通知（音乐、下载进度等）不再触发自动化；同一毫秒的重复通知只执行一次；创建与执行共用无人值守黑名单；`spawn_agent` 子代理不能获得高于父级的权限
+- **UI / 集成**：确认请求与提问按会话路由；提问超时会关闭过期对话框；导航 `launchSingleTop` 减少同会话重复页面；压缩支持长单轮尾部且不拆开 tool 调用与结果；维护期保持 busy；搜索结果滚动计入计划卡
+- **MCP**：支持 2025-03-26 的 batch 响应，并从中选出真正的 result/error
+- **时间旅行**：历史实体不再回退到当前值；超出查询时点的召回/更新时间改用更保守的基线，不再显示成“刚刚召回”
+
+### 文档 Docs
+
+- HOW_IT_WORKS 更新搜索超时、确认队列、循环守卫、运行隔离与缓存描述；README 中英同步“永久删除只发生在库内”
+
 ## [0.3.0] - 2026-10-11
 
 > Agent 能力大版本：监听通知自动做事、中途向你提问、技能带参数复用；外加一次全量代码审查修复（四路并行，约 30 个真实 bug）。DB v21（无损迁移）。
@@ -13,7 +35,7 @@ All notable changes to this project are documented in this file.
 - **技能参数化**：recipe 步骤支持 `{{参数}}` 占位符 + parameters schema——录一次、换输入多用；缺失参数在任何步骤执行前报错
 - **卡死自检**：同一"工具 + 参数"的第三次调用直接拒绝（成功也算），杜绝原地打转；熔断改按签名计数（换参数即可重试）
 - **并发去重缓存**：`web_read` / `web_search` / `get_weather` / `fetch_rss` 在单次运行内重复调用直接回 `[cached from earlier in this run]`
-- **Chat+ 研究协议**：静默思考 → 一轮并行查（`web_search` 支持 `queries` 数组）→ 来源对账、冲突点名 → 几次无果就收手说明缺口 → 回复干净不带引用堆砌（来源按需才点名）；`plan_update` 改为只读，Chat+ 有可见计划卡
+- **Chat+ 研究协议**：静默思考 → 一轮并行查（`web_search` 的 `query` 支持字符串或数组）→ 来源对账、冲突点名 → 几次无果就收手说明缺口 → 回复干净不带引用堆砌（来源按需才点名）；`plan_update` 改为只读，Chat+ 有可见计划卡
 - **`memory_search` 批量**：`queries=[...]` 一次查多个主题；结果标注 `already primed`
 
 ### 安全 Security
@@ -27,8 +49,8 @@ All notable changes to this project are documented in this file.
 
 - **引擎**：确认弹窗前的守卫顺序已修正（此前 ACT / 污点路径可绕过签名守卫与预算）；计划上下文进 CHAT+；压缩边界可越过长 agentic 尾巴
 - **数据**：备份先导 hold 再导笔记、保留原始 createdAt、包含别名且不再截断；写协议事务化；会话删除不再留下 runs / snapshots / plans 孤儿；别名大小写重复行规范化；时间旅行的排序状态按历史时点钳制
-- **UI**：维护期草稿不再被静默吞掉（send 返回接纳结果）；运行通知归属正确（多会话不再互相拆卸前台服务）；库导入导出挪到 IO 线程 + 大小上限 + 失败兜底；分享导出限长（防 Binder 崩溃）
-- **工具**：`files` / `device_info` / `list_installed_apps` 取消 run 缓存（写后读旧值）；web_search 超时真正取消任务；RSS Atom 链接；`-2^2 = -4`；自动化时间与天数严格校验
+- **UI**：维护期草稿不再被静默吞掉（send 返回接纳结果）；运行通知标记归属（多会话隔离在 v0.3.1 完成）；库导入导出挪到 IO 线程 + 大小上限 + 失败兜底；分享导出限长（防 Binder 崩溃）
+- **工具**：`files` / `device_info` / `list_installed_apps` 取消 run 缓存（写后读旧值）；web_search 超时取消等待（底层 Call 取消在 v0.3.1 补全）；RSS Atom 链接；`-2^2 = -4`；自动化时间与天数严格校验
 - **MCP**：SSE 选择真正的响应事件（进度通知在前不再误读）；refresh 串行化
 
 ## [0.2.2] - 2026-10-11

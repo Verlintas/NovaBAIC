@@ -123,6 +123,8 @@ class ConversationRepository @Inject constructor(
         db.snapshotDao().deleteForConversation(id)
         db.planDao().deleteForConversation(id)
         db.runDao().deleteForConversation(id)
+        // Scheduled tasks must not keep writing into a deleted conversation.
+        db.scheduledTaskDao().clearConversation(id)
         db.conversationDao().delete(id)
     }
 

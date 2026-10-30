@@ -51,8 +51,7 @@ object AgentRuntimeModule {
 
     @Provides
     @Singleton
-    fun provideConfirmationGate(queue: ConfirmationQueue): ConfirmationGate =
-        ConfirmationGate { call -> queue.confirm(call) }
+    fun provideConfirmationGate(queue: ConfirmationQueue): ConfirmationGate = queue
 
     @Provides
     @Singleton

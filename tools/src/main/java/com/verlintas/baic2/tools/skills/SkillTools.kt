@@ -32,6 +32,11 @@ import com.verlintas.baic2.tools.ToolRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
+/** Skill recipes may not orchestrate other agents/automations. */
+internal object SkillPolicy {
+    val BLOCKED_STEPS = setOf("spawn_agent", "automation")
+}
+
 /** Coroutine-context carrier for skill nesting depth (survives suspension). */
 private class SkillNestingDepth(val depth: Int) :
     kotlin.coroutines.AbstractCoroutineContextElement(SkillNestingDepth) {
@@ -62,6 +67,8 @@ class CompositeSkillTool(
         parallelSafe = false,
     )
 
+    internal val skillId: String get() = skill.id
+
     override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
         val depth = kotlin.coroutines.coroutineContext[SkillNestingDepth]?.depth ?: 0
         if (depth >= MAX_NESTING_DEPTH) {
@@ -77,6 +84,7 @@ class CompositeSkillTool(
     private suspend fun runSteps(arguments: JsonObject, context: ToolContext): ToolResult {
         val registryRef = registry()
         val lines = mutableListOf<String>()
+        var sawUntrusted = false
         for ((index, step) in definition.steps.withIndex()) {
             if (step.tool == definition.id) {
                 return ToolResult.Failure("Skill step ${index + 1} would recurse into itself; fix the recipe.")
@@ -86,6 +94,18 @@ class CompositeSkillTool(
                     "Step ${index + 1} references unknown tool '${step.tool}'. " +
                         "Available: ${registryRef.toolNames.joinToString()}",
                 )
+            // Skills execute delegates directly, so the loop's unattended gate
+            // never sees them: enforce the same policy here.
+            if (context.run.unattended &&
+                (delegate.spec.danger == DangerLevel.HIGH ||
+                    step.tool in com.verlintas.baic2.core.model.ToolTrust.UNATTENDED_BLOCKED ||
+                    step.tool in SkillPolicy.BLOCKED_STEPS)
+            ) {
+                return ToolResult.Denied(
+                    "Skill '${skill.name}' step ${index + 1} ('${step.tool}') is not allowed " +
+                        "in an unattended run.",
+                )
+            }
             // {{placeholders}} in the recipe are filled from this call's args.
             val renderedJson = SkillArgs.render(step.argsJson, arguments).getOrElse { error ->
                 return ToolResult.Failure(
@@ -97,6 +117,12 @@ class CompositeSkillTool(
                 kotlinx.serialization.json.Json.parseToJsonElement(renderedJson) as? JsonObject
             }.getOrNull() ?: JsonObject(emptyMap())
             val result = delegate.execute(args, context)
+            if (delegate.spec.untrustedOutput) {
+                // Mark the run immediately, even if this step later fails:
+                // its text is already in the step log.
+                sawUntrusted = true
+                context.run.taint.tainted = true
+            }
             lines += when (result) {
                 is ToolResult.Success -> {
                     val output = if (delegate.spec.untrustedOutput) {
@@ -108,8 +134,14 @@ class CompositeSkillTool(
                 }
                 is ToolResult.Failure -> {
                     lines += "✗ ${step.tool}: ${result.reason}"
+                    val text = "Skill '${skill.name}' stopped at step ${index + 1}:\n" +
+                        lines.joinToString("\n")
                     return ToolResult.Failure(
-                        "Skill '${skill.name}' stopped at step ${index + 1}:\n" + lines.joinToString("\n"),
+                        if (sawUntrusted) {
+                            com.verlintas.baic2.core.model.ToolTrust.wrap(text)
+                        } else {
+                            text
+                        },
                     )
                 }
                 is ToolResult.Denied -> return ToolResult.Denied(
@@ -152,20 +184,39 @@ class LoadSkillTool(
             return ToolResult.Failure("Skill '${skill.name}' has no tools to load.")
         }
         val toolRegistry = registry.get()
+        // Drop this skill's previous composites so removed tools disappear.
+        toolRegistry.toolNames
+            .filter { name ->
+                (toolRegistry.tool(name) as? CompositeSkillTool)?.skillId == skill.id
+            }
+            .forEach { name -> toolRegistry.unregisterDynamic(listOf(name)) }
         val skipped = mutableListOf<String>()
         toolRegistry.registerDynamic(
             skill.tools.filter { definition ->
-                // A skill must never shadow a built-in tool name: that would let
-                // a recipe hijack an existing capability (and its trust level).
+                if (definition.steps.any { it.tool in SkillPolicy.BLOCKED_STEPS }) {
+                    skipped += definition.id
+                    return@filter false
+                }
+                // A skill must never shadow a built-in or another skill's tool.
                 val existing = toolRegistry.tool(definition.id)
-                val shadowingBuiltIn = existing != null && existing !is CompositeSkillTool
-                if (shadowingBuiltIn) skipped += definition.id
-                !shadowingBuiltIn
+                val collides = existing != null &&
+                    (existing !is CompositeSkillTool || existing.skillId != skill.id)
+                if (collides) skipped += definition.id
+                !collides
             }.map { definition ->
-                // Unknown step tools default to HIGH so the gate stays closed.
+                // Unknown step tools default to HIGH so the gate stays closed;
+                // steps in the unattended deny list force HIGH as well.
                 val stepTools = definition.steps.mapNotNull { step -> toolRegistry.tool(step.tool) }
                 val worst = definition.steps
-                    .map { step -> toolRegistry.tool(step.tool)?.spec?.danger ?: DangerLevel.HIGH }
+                    .map { step ->
+                        val spec = toolRegistry.tool(step.tool)?.spec
+                        when {
+                            spec == null -> DangerLevel.HIGH
+                            step.tool in com.verlintas.baic2.core.model.ToolTrust.UNATTENDED_BLOCKED ->
+                                DangerLevel.HIGH
+                            else -> spec.danger
+                        }
+                    }
                     .maxByOrNull { it.ordinal }
                     ?: DangerLevel.LOW
                 CompositeSkillTool(
@@ -181,7 +232,10 @@ class LoadSkillTool(
                 append("Loaded skill '${skill.name}' v${skill.version}.\n")
                 append("Tools now available: ${skill.tools.map { it.id }.joinToString()}\n")
                 if (skipped.isNotEmpty()) {
-                    append("Refused (name collides with an existing tool): ${skipped.joinToString()}\n")
+                    append(
+                        "Refused (name collision, or spawn_agent/automation steps): " +
+                            skipped.joinToString() + "\n",
+                    )
                 }
                 if (skill.instructions.isNotBlank()) {
                     append("\nInstructions:\n${skill.instructions.take(2_000)}")

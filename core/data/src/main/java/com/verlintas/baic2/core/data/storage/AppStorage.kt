@@ -81,6 +81,7 @@ class AppStorage @Inject constructor(
             db.snapshotDao().deleteAll()
             db.planDao().deleteAll()
             db.runDao().deleteAll()
+            db.scheduledTaskDao().clearAllConversations()
             db.conversationDao().deleteAll()
         }
     }

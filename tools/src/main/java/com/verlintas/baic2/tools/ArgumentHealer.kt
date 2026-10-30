@@ -79,11 +79,19 @@ object ArgumentHealer {
         }
         arguments.forEach { (key, value) ->
             if (key in properties) return@forEach
-            // Rename only when exactly one schema key is close enough;
-            // an ambiguous match could silently change the meaning.
-            val candidates = schemaNames.filter { candidate ->
-                val gap = distance(key.lowercase(), candidate.lowercase())
-                gap in 1..2 && candidate.lowercase() != key.lowercase()
+            // Case-only differences are exact renames; otherwise allow a
+            // small typo only when exactly one schema key is close enough.
+            // An ambiguous match could silently change the meaning.
+            val exactCase = schemaNames.filter { candidate ->
+                candidate != key && candidate.equals(key, ignoreCase = true)
+            }
+            val candidates = if (exactCase.size == 1) {
+                exactCase
+            } else {
+                schemaNames.filter { candidate ->
+                    val gap = distance(key.lowercase(), candidate.lowercase())
+                    gap in 1..2 && candidate.lowercase() != key.lowercase()
+                }
             }
             val target = candidates.singleOrNull()
             when {

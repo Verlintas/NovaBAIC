@@ -27,6 +27,12 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withTimeout
 
+/** A confirmation request plus the chat that must answer it. */
+data class ConfirmationRequest(
+    val call: ToolCall,
+    val conversationId: Long?,
+)
+
 /**
  * Bridge between the suspended agent loop and the confirmation UI: the loop
  * awaits [confirm] while the UI answers through [respond]. Unanswered requests
@@ -34,14 +40,16 @@ import kotlinx.coroutines.withTimeout
  */
 class ConfirmationQueue(
     private val timeoutMs: Long = 300_000,
-) {
+) : ConfirmationGate {
 
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
-    private val _requests = MutableSharedFlow<ToolCall>(extraBufferCapacity = 8)
-    val requests: SharedFlow<ToolCall> = _requests
+    private val _requests = MutableSharedFlow<ConfirmationRequest>(extraBufferCapacity = 8)
+    val requests: SharedFlow<ConfirmationRequest> = _requests
 
-    suspend fun confirm(call: ToolCall): Boolean {
+    override suspend fun confirm(call: ToolCall): Boolean = confirm(call, null)
+
+    override suspend fun confirm(call: ToolCall, conversationId: Long?): Boolean {
         // Nobody is listening (background/unattended run): deny immediately
         // instead of buffering the request until the 5-minute timeout.
         if (_requests.subscriptionCount.value == 0) return false
@@ -49,7 +57,7 @@ class ConfirmationQueue(
         if (pending.putIfAbsent(call.id, deferred) != null) {
             return false
         }
-        if (!_requests.tryEmit(call)) {
+        if (!_requests.tryEmit(ConfirmationRequest(call, conversationId))) {
             pending.remove(call.id)
             return false
         }

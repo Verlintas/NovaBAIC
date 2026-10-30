@@ -29,6 +29,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -210,12 +211,12 @@ class McpClient @Inject constructor(
                 }
                 parser.endOfStream()?.let { if (it.data != "[DONE]") candidates += it.data }
                 // Servers may send progress/log notifications before the reply;
-                // the response is the object carrying result/error.
-                val data = candidates.firstOrNull { candidate ->
-                    val root = runCatching { json.parseToJsonElement(candidate) as? JsonObject }
-                        .getOrNull()
-                    root != null && (root["result"] != null || root["error"] != null)
-                } ?: candidates.firstOrNull()
+                // the response is the object (or batch member) with result/error.
+                val data = candidates.firstNotNullOfOrNull { candidate ->
+                    parseRpcObject(candidate)?.takeIf {
+                        it["result"] != null || it["error"] != null
+                    }
+                } ?: candidates.firstNotNullOfOrNull { parseRpcObject(it) }
                 ?: throw IOException("empty SSE response")
                 return RpcResponse(parseRpc(data), returnedSession)
             }
@@ -225,8 +226,27 @@ class McpClient @Inject constructor(
     }
 
     private fun parseRpc(text: String): JsonObject {
-        val root = json.parseToJsonElement(text) as? JsonObject
+        val root = parseRpcObject(text)
             ?: throw IOException("malformed JSON-RPC response")
+        return parseRpc(root)
+    }
+
+    /**
+     * A 2025-03-26 server may answer with a batch array. Pick the member that
+     * carries a response (result/error), ignoring notifications in the batch.
+     */
+    private fun parseRpcObject(text: String): JsonObject? {
+        val root = runCatching { json.parseToJsonElement(text) }.getOrNull() ?: return null
+        val objects = when (root) {
+            is JsonObject -> listOf(root)
+            is JsonArray -> root.filterIsInstance<JsonObject>()
+            else -> return null
+        }
+        return objects.firstOrNull { it["result"] != null || it["error"] != null }
+            ?: objects.firstOrNull()
+    }
+
+    private fun parseRpc(root: JsonObject): JsonObject {
         val error = root["error"] as? JsonObject
         if (error != null) {
             val message = error["message"]?.jsonPrimitive?.contentOrNull ?: "MCP error"

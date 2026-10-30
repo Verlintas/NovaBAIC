@@ -503,6 +503,22 @@ class MemoryWriteTool(
         // replaces is deterministic: in-place update, id never changes.
         // Unspecified fields keep their current values instead of defaults.
         if (replaces != null) {
+            val target = memoryRepository.noteById(replaces)
+                ?: return ToolResult.Failure(
+                    "replaces=$replaces does not exist; nothing was updated. Search for the right id first.",
+                )
+            if (target.suppressed) {
+                return ToolResult.Failure(
+                    "Note #$replaces was explicitly forgotten. Confirm with the user before " +
+                        "re-learning it; replaces= cannot silently revive it.",
+                )
+            }
+            memoryRepository.heldFor(content)?.let { hold ->
+                return ToolResult.Failure(
+                    "Refused: this matches hold #${hold.id} (\"${hold.content.take(80)}\"). " +
+                        "Do not record it unless the user lifts the hold explicitly.",
+                )
+            }
             val updated = memoryRepository.replaceNote(
                 id = replaces,
                 content = content,
@@ -510,6 +526,7 @@ class MemoryWriteTool(
                 entities = entities,
                 kind = kindRaw?.let(NoteKind::fromWire),
                 expiresAt = expiresAt,
+                conversationId = context.run.conversationId,
                 messageId = context.run.triggerMessageId,
             )
             return if (updated != null) {
@@ -520,7 +537,7 @@ class MemoryWriteTool(
                 )
             } else {
                 ToolResult.Failure(
-                    "replaces=$replaces does not exist; nothing was updated. Search for the right id first.",
+                    "replaces=$replaces could not be updated (missing, forgotten, or blocked by a hold).",
                 )
             }
         }
@@ -658,14 +675,12 @@ class MemoryForgetTool(
         name = "memory_forget",
         description = "Archive memories the user asked to forget (soft delete; raw conversations " +
             "are never touched). Find notes by id from memory_search, or by query. Confirm what " +
-            "will be forgotten with the user before calling this. Pass hard=true only when the " +
-            "user explicitly asks to erase it permanently - that destroys the row, its history " +
-            "and its links, and cannot be undone.",
+            "will be forgotten with the user before calling this. Permanent erasure is a user " +
+            "action in Library -> Biomimetic memory (long-press), never a model action.",
         parametersJson = """
             {"type":"object","properties":{
               "ids":{"type":"array","items":{"type":"integer"},"description":"note ids to forget"},
               "query":{"type":"string","description":"keywords to find notes when ids are unknown"},
-              "hard":{"type":"boolean","description":"true = permanent erase (only on explicit user request)"},
               "reason":{"type":"string","description":"short reason, for the record"}
             }}
         """.trimIndent(),
@@ -678,7 +693,6 @@ class MemoryForgetTool(
             .mapNotNull { (it as? JsonPrimitive)?.longOrNull?.takeIf { value -> value > 0 } }
             .take(MAX_FORGET)
         val query = arguments.string("query")?.trim().orEmpty()
-        val hard = (arguments["hard"] as? JsonPrimitive)?.booleanOrNull ?: false
         if (ids.isEmpty() && query.isEmpty()) {
             return ToolResult.Failure("Provide 'ids' or 'query'")
         }
@@ -701,17 +715,12 @@ class MemoryForgetTool(
             ).forEach { scored -> targets[scored.note.id] = scored.note }
         }
         if (targets.isEmpty()) return ToolResult.Success("No matching notes to forget.")
-        targets.values.forEach { note ->
-            if (hard) memoryRepository.purge(note.id) else memoryRepository.suppress(note.id)
-        }
+        targets.values.forEach { note -> memoryRepository.suppress(note.id) }
         return ToolResult.Success(
             buildString {
-                if (hard) {
-                    append("Erased ").append(targets.size).append(" note(s) permanently:\n")
-                } else {
-                    append("Forgotten ").append(targets.size)
-                        .append(" note(s); re-learning is blocked until the user confirms:\n")
-                }
+                append("Forgotten ").append(targets.size)
+                    .append(" note(s); re-learning is blocked until the user confirms. ")
+                    .append("Permanent erasure stays a user action in the Library.\n")
                 targets.values.forEach { note ->
                     append("- #").append(note.id).append(' ').append(note.content.replace('\n', ' '))
                         .append('\n')

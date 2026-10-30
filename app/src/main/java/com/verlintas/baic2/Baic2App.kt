@@ -264,7 +264,7 @@ private fun ChatsZone(
 ) {
     LaunchedEffect(pendingConversationId, retryConversationId) {
         val id = pendingConversationId ?: retryConversationId ?: return@LaunchedEffect
-        navController.navigate("chat/$id")
+        navController.navigate("chat/$id") { launchSingleTop = true }
         onPendingConsumed()
     }
 
@@ -286,7 +286,9 @@ private fun ChatsZone(
     ) {
         composable(ROUTE_CONVERSATIONS) {
             ConversationsScreen(
-                onOpenConversation = { id -> navController.navigate("chat/$id") },
+                onOpenConversation = { id ->
+                    navController.navigate("chat/$id") { launchSingleTop = true }
+                },
             )
         }
         composable(
@@ -306,7 +308,9 @@ private fun ChatsZone(
         composable(ROUTE_STARRED) {
             StarredScreen(
                 onBack = { navController.popBackStack() },
-                onOpenConversation = { id -> navController.navigate("chat/$id") },
+                onOpenConversation = { id ->
+                    navController.navigate("chat/$id") { launchSingleTop = true }
+                },
             )
         }
     }

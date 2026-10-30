@@ -33,6 +33,8 @@ internal object AutomationPolicy {
     fun denialReason(toolName: String, danger: DangerLevel?): String? = when {
         danger == null -> "unknown tool"
         toolName in FORBIDDEN -> "tool '$toolName' cannot run inside an automation"
+        toolName in com.verlintas.baic2.core.model.ToolTrust.UNATTENDED_BLOCKED ->
+            "tool '$toolName' is blocked in unattended runs"
         danger == DangerLevel.HIGH -> "tool '$toolName' is too dangerous to run unattended"
         else -> null
     }
