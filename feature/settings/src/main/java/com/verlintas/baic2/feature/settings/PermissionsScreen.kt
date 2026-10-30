@@ -173,6 +173,17 @@ fun PermissionsPage(
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
+    // "All files access" and other special accesses are granted in system
+    // settings; refresh when the user comes back so the row is not stale.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     SettingsPage(
         title = stringResource(R.string.settings_permissions_title),
         onBack = onBack,
@@ -200,13 +211,24 @@ fun PermissionsPage(
                 granted = state.filesAccess,
                 onGrant = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        runCatching {
+                        val opened = runCatching {
                             context.startActivity(
                                 Intent(
                                     Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                                     Uri.parse("package:${context.packageName}"),
                                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                             )
+                            true
+                        }.getOrDefault(false)
+                        if (!opened) {
+                            // Some OEMs ignore the per-app page; fall back to
+                            // the full "All files access" list.
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
                         }
                     } else {
                         filesPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
