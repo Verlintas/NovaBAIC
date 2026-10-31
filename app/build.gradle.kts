@@ -27,6 +27,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Side-by-side test build: -Pbaic2.testSuffix=.devtest
+val testApplicationIdSuffix = providers.gradleProperty("baic2.testSuffix").orNull?.trim()
+
 val keystoreProperties = Properties().apply {
     val file = rootProject.file("keystore.properties")
     if (file.exists()) file.inputStream().use { load(it) }
@@ -43,8 +46,8 @@ android {
         applicationId = "com.verlintas.baic2"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.3.1"
+        versionCode = 26
+        versionName = "0.3.9-alpha"
     }
 
     signingConfigs {
@@ -64,6 +67,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (!testApplicationIdSuffix.isNullOrEmpty()) {
+                applicationIdSuffix = testApplicationIdSuffix
+                versionNameSuffix = "-test"
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

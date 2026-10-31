@@ -32,6 +32,13 @@ captures/
 keystore_pass.txt
 secrets.properties
 keystore.properties
+*.env
+.env
+.env.*
+!*.env.example
 
 # Reference-only asset the owner dropped in for design study
 /Coupon Reveal.json
+
+# Local-only test credentials and notes (never commit)
+.local/

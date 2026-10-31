@@ -109,6 +109,13 @@ class ConversationRepository @Inject constructor(
         )
     }
 
+    suspend fun updateAttachments(messageId: Long, attachments: List<com.verlintas.baic2.core.model.Attachment>) {
+        db.messageDao().updateAttachments(
+            messageId,
+            mapper.encodeAttachments(attachments),
+        )
+    }
+
     suspend fun updateTitle(id: Long, title: String) {
         db.conversationDao().updateTitle(id, title, System.currentTimeMillis())
     }

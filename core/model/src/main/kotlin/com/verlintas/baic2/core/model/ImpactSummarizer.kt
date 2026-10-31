@@ -61,6 +61,7 @@ object ImpactSummarizer {
             }
             "web_search" -> "网络搜索：${queryText(args).take(40)}"
             "web_read" -> "阅读网页：${(str("url") ?: "").take(60)}"
+            "app_research" -> "App 内检索：${str("app") ?: "?"} · ${str("query") ?: "?"}"
             "file_write" -> when (str("action")) {
                 "append" -> "追加文件：${str("name") ?: "?"}"
                 "delete" -> "删除文件：${str("name") ?: "?"}"
@@ -90,7 +91,7 @@ object ImpactSummarizer {
             "search_contacts" -> "搜索联系人：${str("query") ?: "?"}"
             "read_notifications" -> "读取通知"
             "get_location" -> "获取位置"
-            "list_installed_apps", "device_info", "network_status", "get_time",
+            "list_installed_apps", "device_info", "network_status",
             "get_screen_state", "get_foreground_app", "compute", "plan_update",
             "load_skill", "get_clipboard", "get_app_usage", "vibrate",
             -> null

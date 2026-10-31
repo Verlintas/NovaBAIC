@@ -11,6 +11,7 @@
     <string name="settings_provider_gemini">Gemini</string>
 
     <string name="settings_permissions_title">Permissions</string>
+    <string name="settings_skills_title">Skills</string>
     <string name="settings_a11y_title">UI automation</string>
     <string name="settings_a11y_description">Let the AI read the screen and tap, swipe and type</string>
     <string name="settings_a11y_on">On</string>
@@ -35,6 +36,10 @@
     <string name="settings_agents_hint">Tap a service to edit; use the dot on the right to set it as default</string>
     <string name="settings_agents_delete_confirm">The key and configuration of this service will be permanently removed.</string>
     <string name="settings_permissions_summary">Automation, screen, notifications and runtime permissions</string>
+    <string name="settings_skills_summary">Auto-save and replay multi-step flows</string>
+    <string name="settings_skills_auto_title">Auto-save skills</string>
+    <string name="settings_skills_auto_desc">After Act / Max finishes a multi-step UI flow successfully, save it as a replayable skill. Identical flows are skipped; up to 20 auto-saved skills are kept. Flows that look like password, OTP or API-key entry are skipped. Off by default.</string>
+    <string name="settings_skills_hint">Auto-save records text typed during the flow in the skill; avoid enabling it for password or chat flows. Auto-saved skills can be reviewed, renamed or deleted in Library → Skills. Turning this off does not delete existing skills.</string>
 
     <string name="settings_permissions_hint">Core permissions decide whether the AI can see and operate the device; runtime permissions are only used when the matching tool runs.</string>
     <string name="settings_permissions_core">Core capabilities</string>
@@ -58,6 +63,8 @@
     <string name="settings_perm_contacts_desc">Search contacts</string>
     <string name="settings_perm_location_title">Location</string>
     <string name="settings_perm_location_desc">Get the current location</string>
+    <string name="settings_perm_scene_title">Scene awareness</string>
+    <string name="settings_perm_scene_desc">Every message carries the current time. When on, it also carries the latest precise location (coordinates, accuracy, age) and a weather snapshot cached within 30 minutes. Used for the current request only, never written to chat history. Requires location permission.</string>
     <string name="settings_perm_grant">Grant</string>
     <string name="settings_perm_granted">Granted</string>
 
@@ -127,6 +134,29 @@
     <string name="settings_perm_shizuku_ready">Ready — the AI can run ADB-level commands</string>
     <string name="settings_perm_shizuku_denied">Installed but not granted, tap to request</string>
     <string name="settings_perm_shizuku_unavailable">Not installed or service not running</string>
+    <string name="settings_perm_display_keep_title">Keep background display</string>
+    <string name="settings_perm_display_keep_desc">Keep an already-started virtual display alive after Wi-Fi/ADB drops. Shows a notification and uses more battery; after a reboot it waits for a shell.</string>
+    <string name="settings_perm_wireless_title">Wireless debugging (no Shizuku)</string>
+    <string name="settings_perm_wireless_desc">Use Android\'s built-in wireless debugging; pair once to run ADB-level commands</string>
+    <string name="settings_perm_wireless_not_paired">Not paired, tap to pair</string>
+    <string name="settings_perm_wireless_disconnected">Paired, not connected</string>
+    <string name="settings_perm_wireless_connected">Connected — background virtual display ready</string>
+    <string name="settings_perm_wireless_unsupported">Requires Android 11 or newer</string>
+    <string name="settings_perm_wireless_pair">Pair</string>
+    <string name="settings_perm_wireless_connect">Connect</string>
+    <string name="settings_perm_wireless_disconnect">Disconnect</string>
+    <string name="settings_perm_wireless_dialog_title">Pair wireless debugging</string>
+    <string name="settings_perm_wireless_dialog_help">Enable UI automation, then tap “Read the pairing code automatically” and open Developer options → Wireless debugging → Pair device with pairing code. Keep that screen open.</string>
+    <string name="settings_perm_wireless_dialog_connect_help">Already paired. Keep Wireless debugging on, then tap Connect.</string>
+    <string name="settings_perm_wireless_port_hint">Wireless debugging port (optional)</string>
+    <string name="settings_perm_wireless_port_connect">Connect with this port</string>
+    <string name="settings_perm_wireless_auto_reenable">Re-enable Wireless debugging automatically</string>
+    <string name="settings_perm_wireless_keepalive_help">After pairing, BAIC2 grants itself the “modify system settings” permission over its ADB shell and tries to re-enable Wireless debugging after it is turned off, after a reboot or on a Wi-Fi change. You can revoke that grant in system settings at any time.</string>
+    <string name="settings_perm_wireless_pairing">Pairing…</string>
+    <string name="settings_perm_wireless_connecting">Connecting…</string>
+    <string name="settings_perm_wireless_error">Pairing or connection failed</string>
+    <string name="settings_perm_wireless_retry">Retry</string>
+    <string name="settings_perm_wireless_open_dev">Open developer options</string>
     <string name="settings_perm_files_title">Files access</string>
     <string name="settings_perm_files_desc">Read files in Downloads/Documents (Android 13+ needs "All files access")</string>
     <string name="settings_about_update_title">Check for updates</string>
@@ -153,4 +183,7 @@
     <string name="settings_developer_copy">Copy</string>
     <string name="settings_developer_copied">Copied</string>
     <string name="settings_developer_changelog">Changelog</string>
+    <string name="settings_perm_wireless_auto">Read the pairing code automatically</string>
+    <string name="settings_perm_wireless_auto_help">Requires UI automation (accessibility). After tapping, open Developer options → Wireless debugging → Pair device with pairing code; BAIC2 reads the code automatically.</string>
+    <string name="settings_perm_wireless_a11y_required">Enable UI automation on this page first</string>
 </resources>

@@ -75,6 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +101,7 @@ fun MessageRow(
     onEdit: (ChatMessage) -> Unit,
     onDelete: (ChatMessage) -> Unit,
     onSpeak: (ChatMessage) -> Unit,
+    compactTools: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     when (message.role) {
@@ -118,7 +120,11 @@ fun MessageRow(
                     attachments = message.attachments,
                     modifier = innerModifier,
                 )
-                else -> AssistantMessage(message = message, modifier = innerModifier)
+                else -> AssistantMessage(
+                    message = message,
+                    compactTools = compactTools,
+                    modifier = innerModifier,
+                )
             }
         }
 
@@ -276,6 +282,7 @@ private fun UserBubble(
 @Composable
 private fun AssistantMessage(
     message: ChatMessage,
+    compactTools: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -299,9 +306,30 @@ private fun AssistantMessage(
         if (message.content.isNotBlank()) {
             MarkdownMessage(text = message.content)
         }
-        message.toolCalls.forEach { call ->
-            Spacer(Modifier.size(Baic2Spacing.sm))
-            ToolCard(call = call)
+        if (!compactTools) {
+            message.toolCalls.forEach { call ->
+                Spacer(Modifier.size(Baic2Spacing.sm))
+                ToolCard(call = call)
+            }
+        }
+        message.attachments.filter { it.kind == AttachmentKind.IMAGE }.forEach { image ->
+            image.localPath?.let { path ->
+                Spacer(Modifier.size(Baic2Spacing.sm))
+                Text(
+                    text = stringResource(R.string.chat_result_screenshot),
+                    style = Baic2Mono.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(Baic2Spacing.xs))
+                LocalImageThumbnail(
+                    path = path,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+            }
         }
     }
 }
@@ -413,6 +441,166 @@ fun ThinkingCard(
             )
         }
     }
+}
+
+@Composable
+fun ActivityHintLine(
+    hint: ActivityHint,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.padding(vertical = Baic2Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ThinkingOrb(size = 14.dp)
+        Spacer(Modifier.width(Baic2Spacing.sm))
+        Text(
+            text = activityHintText(hint),
+            style = Baic2Mono.label.copy(brush = shimmerTextBrush()),
+        )
+    }
+}
+
+@Composable
+private fun activityHintText(hint: ActivityHint): String = when (hint.kind) {
+    ActivityHint.Kind.USING_APP -> hint.appLabel?.let {
+        stringResource(R.string.chat_activity_using, it)
+    } ?: stringResource(R.string.chat_activity_working)
+    ActivityHint.Kind.OPENING_APP -> hint.appLabel?.let {
+        stringResource(R.string.chat_activity_opening, it)
+    } ?: stringResource(R.string.chat_activity_working)
+    ActivityHint.Kind.MANAGING_APP -> hint.appLabel?.let {
+        stringResource(R.string.chat_activity_managing, it)
+    } ?: stringResource(R.string.chat_activity_working)
+    ActivityHint.Kind.READING_SCREEN -> stringResource(R.string.chat_activity_screen)
+    ActivityHint.Kind.SEARCHING_WEB -> stringResource(R.string.chat_activity_web_search)
+    ActivityHint.Kind.READING_WEB -> stringResource(R.string.chat_activity_web_read)
+    ActivityHint.Kind.READING_FILES -> stringResource(R.string.chat_activity_files)
+    ActivityHint.Kind.WORKING -> stringResource(R.string.chat_activity_working)
+}
+
+@Composable
+fun ToolSummaryCard(
+    calls: List<ToolCall>,
+    modifier: Modifier = Modifier,
+) {
+    val actions = calls.count {
+        it.status == ToolCallStatus.DONE || it.status == ToolCallStatus.FAILED
+    }
+    if (actions == 0) return
+    val failures = calls.count { it.status == ToolCallStatus.FAILED }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(failures) {
+        if (failures > 0) expanded = true
+    }
+    val context = LocalContext.current
+    val apps = remember(calls, context) {
+        calls.mapNotNull { appLabelOf(context, it) }.distinct()
+    }
+    val web = calls.any { it.name == "web_search" || it.name == "web_read" }
+    val files = calls.any { it.name == "files" || it.name == "file_write" || it.name == "ocr_file" }
+    val summary = when {
+        apps.isNotEmpty() -> if (apps.size == 1) {
+            stringResource(R.string.chat_activity_used_app, apps.first())
+        } else {
+            stringResource(R.string.chat_activity_used_apps, apps.joinToString(" · "))
+        }
+        web -> stringResource(R.string.chat_activity_used_web)
+        files -> stringResource(R.string.chat_activity_used_files)
+        else -> stringResource(R.string.chat_activity_used_screen)
+    }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = Baic2Motion.spatialFast(),
+        label = "activity-chevron",
+    )
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), shape),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { expanded = !expanded },
+                )
+                .padding(horizontal = Baic2Spacing.md, vertical = Baic2Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = summary,
+                style = Baic2Mono.body,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(Baic2Spacing.sm))
+            Text(
+                text = if (actions == 1) {
+                    stringResource(R.string.chat_activity_action, actions)
+                } else {
+                    stringResource(R.string.chat_activity_actions, actions)
+                },
+                style = Baic2Mono.label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (failures > 0) {
+                Spacer(Modifier.width(Baic2Spacing.xs))
+                Text(
+                    text = stringResource(R.string.chat_activity_failed, failures),
+                    style = Baic2Mono.label,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(rotation),
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(animationSpec = Baic2Motion.spatialDefault()) + fadeIn(),
+            exit = shrinkVertically(animationSpec = Baic2Motion.effectsFast()) + fadeOut(),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = Baic2Spacing.sm, end = Baic2Spacing.sm, bottom = Baic2Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Baic2Spacing.sm),
+            ) {
+                calls.forEach { ToolCard(call = it) }
+            }
+        }
+    }
+}
+
+private fun appLabelOf(context: android.content.Context, call: ToolCall): String? {
+    val args = runCatching { org.json.JSONObject(call.argumentsJson) }.getOrNull() ?: return null
+    val raw = listOf("app", "package", "name")
+        .firstNotNullOfOrNull { key ->
+            args.optString(key).trim().takeIf { it.isNotBlank() }
+        } ?: return null
+    if (raw.contains('.')) {
+        runCatching {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(raw, 0)).toString()
+        }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it.take(40) }
+    }
+    val leaf = if (raw.contains('.')) raw.substringAfterLast('.') else raw
+    return leaf.replace('_', ' ')
+        .take(40)
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
 
 @Composable

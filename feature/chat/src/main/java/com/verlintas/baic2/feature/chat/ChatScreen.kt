@@ -138,6 +138,7 @@ import com.verlintas.baic2.core.model.Attachment
 import com.verlintas.baic2.core.model.AttachmentKind
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
+import com.verlintas.baic2.core.model.ToolCall
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Motion
 import com.verlintas.baic2.designsystem.Baic2Spacing
@@ -160,6 +161,10 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val compactTools = state.mode == AppMode.ACT || state.mode == AppMode.MAX
+    val runCalls = remember(state.messages, state.isRunning, compactTools) {
+        if (!state.isRunning && compactTools) runToolCalls(state.messages) else emptyList()
+    }
     val context = LocalContext.current
 
     // Arrived from the Tasks center with "retry": re-run the failed turn once.
@@ -638,13 +643,27 @@ fun ChatScreen(
                     onEdit = { editTarget = it },
                     onDelete = { viewModel.deleteMessage(it.id) },
                     onSpeak = { viewModel.speakMessage(it.content) },
+                    compactTools = compactTools,
                     modifier = Modifier.animateItem(),
                 )
+            }
+
+            if (runCalls.isNotEmpty()) {
+                item(key = "activity-summary") {
+                    ToolSummaryCard(
+                        calls = runCalls,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
 
             if (state.isRunning) {
                 item(key = "streaming") {
                     Column(modifier = Modifier.animateItem()) {
+                        state.activityHint?.let { hint ->
+                            ActivityHintLine(hint = hint)
+                            Spacer(Modifier.size(Baic2Spacing.xs))
+                        }
                         when {
                             state.streamingThinking.isNotBlank() -> {
                                 ThinkingCard(text = state.streamingThinking, streaming = true)
@@ -653,7 +672,7 @@ fun ChatScreen(
                                 }
                             }
 
-                            state.streamingText.isBlank() -> {
+                            state.streamingText.isBlank() && state.activityHint == null -> {
                                 Row(
                                     modifier = Modifier.padding(vertical = Baic2Spacing.sm),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1679,10 +1698,18 @@ private fun PendingAttachmentChip(
     }
 }
 
+private fun runToolCalls(messages: List<ChatMessage>): List<ToolCall> {
+    val lastUser = messages.indexOfLast { it.role == ChatRole.USER }
+    if (lastUser < 0) return emptyList()
+    return messages.drop(lastUser + 1).flatMap { it.toolCalls }
+}
+
 @Composable
 internal fun LocalImageThumbnail(
     path: String,
     modifier: Modifier = Modifier,
+    contentScale: androidx.compose.ui.layout.ContentScale =
+        androidx.compose.ui.layout.ContentScale.Crop,
 ) {
     val bitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, path) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -1693,7 +1720,7 @@ internal fun LocalImageThumbnail(
         androidx.compose.foundation.Image(
             bitmap = image.asImageBitmap(),
             contentDescription = null,
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            contentScale = contentScale,
             modifier = modifier,
         )
     }

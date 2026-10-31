@@ -124,4 +124,23 @@
     <string name="chat_action_copied">已复制</string>
     <string name="chat_thinking_streaming">思考中 · %1$d 秒</string>
     <string name="chat_thought_for">思考 %1$d 秒</string>
+    <string name="chat_activity_using">正在使用 %1$s…</string>
+    <string name="chat_activity_opening">正在打开 %1$s…</string>
+    <string name="chat_activity_managing">正在管理 %1$s…</string>
+    <string name="chat_activity_screen">正在查看屏幕…</string>
+    <string name="chat_activity_web_search">正在搜索…</string>
+    <string name="chat_activity_web_read">正在阅读网页…</string>
+    <string name="chat_activity_files">正在读取文件…</string>
+    <string name="chat_activity_working">正在处理…</string>
+    <string name="chat_activity_used_app">使用了 %1$s</string>
+    <string name="chat_activity_used_apps">使用了 %1$s</string>
+    <string name="chat_activity_actions">%1$d 个动作</string>
+    <string name="chat_activity_action">%1$d 个动作</string>
+    <string name="chat_activity_failed">%1$d 个失败</string>
+    <string name="chat_activity_details">查看细节</string>
+    <string name="chat_activity_hide_details">收起细节</string>
+    <string name="chat_result_screenshot">后台执行截图</string>
+    <string name="chat_activity_used_screen">使用了当前屏幕</string>
+    <string name="chat_activity_used_web">使用了网页</string>
+    <string name="chat_activity_used_files">使用了文件</string>
 </resources>

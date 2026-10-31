@@ -125,6 +125,31 @@ class SpawnAgentToolTest {
     }
 
     @Test
+    fun chatPlusClampsMaxRequestToResearch() = runTest {
+        val shell = ToolCall(id = "c1", name = "run_shell", argumentsJson = "{}")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(shell),
+                textRound("research only"),
+            ),
+        )
+        var runnerCalls = 0
+        val tool = spawn(provider, listOf(shellSpec)) { _, _ ->
+            runnerCalls++
+            ToolResult.Success("must not run")
+        }
+
+        val result = tool.runChild(
+            task = "do the task",
+            mode = AppMode.MAX,
+            run = ToolRunContext(config = config, mode = AppMode.CHAT_PLUS),
+        )
+
+        assertTrue(result is ToolResult.Success)
+        assertEquals(0, runnerCalls, "CHAT+ must clamp a max child to research")
+    }
+
+    @Test
     fun taintedParentSpawnsATaintedChild() = runTest {
         val shell = ToolCall(id = "c1", name = "run_shell", argumentsJson = "{}")
         val provider = ScriptedProvider(

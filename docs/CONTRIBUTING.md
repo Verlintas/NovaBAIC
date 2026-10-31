@@ -40,13 +40,13 @@ core/designsystem 设计系统 token 与组件
 feature/*       chat / conversations / tasks / settings / agents / library
 device/api      设备能力接口（截图/OCR/无障碍/语音/提醒/运行通知）
 device/impl     Android 实现（服务与广播接收器）
-tools           48 个内置工具 + 技能 / 自动化 / 子代理
+tools           57 个内置工具 + 技能 / 自动化 / 子代理
 mcp             远程 MCP 客户端
 eval            场景评测 harness
 dev/            本地 mock 服务器
 ```
 
-依赖方向：`feature -> core / device:api / tools`，`app` 负责装配；`core:model` 与 `core:engine` 是纯 Kotlin，不得引入 Android 依赖。更详细的说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+依赖方向：`feature -> core / device:api / tools`，`app` 负责装配；`core:model` 与 `core:engine` 是纯 Kotlin，不得引入 Android 依赖。更详细的说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 提交 PR
 

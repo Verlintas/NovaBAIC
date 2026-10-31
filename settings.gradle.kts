@@ -30,6 +30,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // libadb-android: ADB pairing/shell without installing Shizuku.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

@@ -47,6 +47,9 @@ dependencies {
     implementation(libs.mlkit.text.recognition.chinese)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    implementation(libs.libadb.android)
+    implementation(libs.bcpkix)
+    implementation(libs.conscrypt.android)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

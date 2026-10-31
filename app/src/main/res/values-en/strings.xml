@@ -10,4 +10,15 @@
     <string name="dock_content_description">Open navigation</string>
     <string name="dock_footer">Local-first · no telemetry</string>
 
+    <string name="wireless_pair_channel">Wireless pairing</string>
+    <string name="wireless_pair_notification_title">Pair wireless debugging</string>
+    <string name="wireless_pair_notification_waiting">Open Developer options → Wireless debugging → Pair device with pairing code; BAIC2 reads the code automatically</string>
+    <string name="wireless_pair_notification_pairing">Pairing…</string>
+    <string name="wireless_pair_notification_connected">Connected — background virtual display ready</string>
+    <string name="wireless_pair_notification_failed">Pairing timed out or failed; return to BAIC2 to retry</string>
+    <string name="wireless_pair_notification_no_a11y">Enable UI automation (accessibility) first so BAIC2 can read the system pairing code</string>
+    <string name="display_keep_title">Background display</string>
+    <string name="display_keep_channel">Background display keepalive</string>
+    <string name="display_keep_active">Active · display %1$d</string>
+    <string name="display_keep_waiting">Waiting for a shell; an existing display session stays alive</string>
 </resources>

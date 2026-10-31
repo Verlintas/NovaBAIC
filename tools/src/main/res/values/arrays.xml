@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="app_research_search_terms">
+        <item>search</item>
+        <item>find</item>
+        <item>discover</item>
+        <item>explore</item>
+        <item>look up</item>
+    </string-array>
+    <string-array name="app_research_chrome">
+        <item>back</item>
+        <item>clear text</item>
+        <item>cancel</item>
+        <item>ok</item>
+        <item>search</item>
+        <item>x</item>
+        <item>apps</item>
+        <item>navigate up</item>
+        <item>recent searches</item>
+        <item>recent search results</item>
+    </string-array>
+    <string-array name="app_research_login_terms">
+        <item>sign in</item>
+        <item>log in</item>
+        <item>login</item>
+        <item>please sign in</item>
+        <item>please log in</item>
+    </string-array>
+    <string-array name="app_research_captcha_terms">
+        <item>captcha</item>
+        <item>security check</item>
+        <item>verify you are human</item>
+    </string-array>
+    <string-array name="app_research_risk_terms">
+        <item>unusual traffic</item>
+        <item>too many requests</item>
+        <item>risk control</item>
+        <item>try again later</item>
+    </string-array>
+</resources>

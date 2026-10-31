@@ -38,6 +38,8 @@ import com.verlintas.baic2.device.impl.recorder.AndroidScreenRecorder
 import com.verlintas.baic2.device.impl.speech.AndroidSpeechInput
 import com.verlintas.baic2.device.impl.reminder.AndroidReminderScheduler
 import com.verlintas.baic2.device.impl.run.AndroidRunNotifier
+import com.verlintas.baic2.device.impl.display.AndroidVirtualDisplayBridge
+import com.verlintas.baic2.device.impl.wireless.AndroidWirelessAdbBridge
 import com.verlintas.baic2.device.impl.shell.ShizukuShellBridge
 import dagger.Binds
 import dagger.Module
@@ -88,4 +90,16 @@ abstract class DeviceImplModule {
     @Binds
     @Singleton
     abstract fun bindReminderScheduler(impl: AndroidReminderScheduler): ReminderScheduler
+
+    @Binds
+    @Singleton
+    abstract fun bindVirtualDisplayBridge(
+        impl: AndroidVirtualDisplayBridge,
+    ): com.verlintas.baic2.device.api.VirtualDisplayBridge
+
+    @Binds
+    @Singleton
+    abstract fun bindWirelessAdbBridge(
+        impl: AndroidWirelessAdbBridge,
+    ): com.verlintas.baic2.device.api.WirelessAdbBridge
 }

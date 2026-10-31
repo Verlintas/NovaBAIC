@@ -71,9 +71,58 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    /**
+     * Opt-in consent for carrying local context in every chat request:
+     * timestamp plus the latest location fix (and fresh weather cache).
+     * Off by default; never fetched for scheduled or unattended runs.
+     */
+    val sceneEnhancement: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[SCENE_ENHANCEMENT] ?: false
+    }
+
+    suspend fun setSceneEnhancement(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[SCENE_ENHANCEMENT] = enabled
+        }
+    }
+
+    /**
+     * Opt-in: after a successful Act/Max multi-step UI flow, record it as a
+     * replayable skill. Off by default; identical flows are deduplicated by
+     * the skill repository and old auto-saved entries are pruned.
+     */
+    val autoSaveSkills: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[AUTO_SAVE_SKILLS] ?: false
+    }
+
+    suspend fun setAutoSaveSkills(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[AUTO_SAVE_SKILLS] = enabled
+        }
+    }
+
+    /**
+     * Opt-in: keep the resident virtual-display helper alive across Wi-Fi/ADB
+     * drops. The helper is a local Binder process, so an existing session can
+     * survive transport loss; a foreground service prevents the idle timer
+     * from releasing it.
+     */
+    val keepDisplayAlive: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEEP_DISPLAY_ALIVE] ?: false
+    }
+
+    suspend fun setKeepDisplayAlive(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEEP_DISPLAY_ALIVE] = enabled
+        }
+    }
+
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
         val HANDS_FREE_VOICE = booleanPreferencesKey("hands_free_voice")
+        val SCENE_ENHANCEMENT = booleanPreferencesKey("scene_enhancement")
+        val AUTO_SAVE_SKILLS = booleanPreferencesKey("auto_save_skills")
+        val KEEP_DISPLAY_ALIVE = booleanPreferencesKey("keep_display_alive")
     }
 }

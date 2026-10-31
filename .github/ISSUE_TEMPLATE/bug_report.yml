@@ -8,7 +8,7 @@ body:
       value: |
         感谢反馈！提交前请先搜索 [已有 Issues](https://github.com/Verlintas/NovaBAIC/issues?q=is%3Aissue)，
         并确认使用的是[最新版本](https://github.com/Verlintas/NovaBAIC/releases/latest)。
-        安全问题请走 [SECURITY.md](https://github.com/Verlintas/NovaBAIC/blob/main/SECURITY.md)。
+        安全问题请走 [SECURITY.md](https://github.com/Verlintas/NovaBAIC/blob/main/docs/SECURITY.md)。
   - type: input
     id: version
     attributes:

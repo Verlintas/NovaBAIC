@@ -11,6 +11,7 @@
     <string name="settings_provider_gemini">Gemini</string>
 
     <string name="settings_permissions_title">权限</string>
+    <string name="settings_skills_title">技能</string>
     <string name="settings_a11y_title">界面自动化</string>
     <string name="settings_a11y_description">允许 AI 看屏并执行点击、滑动与输入</string>
     <string name="settings_a11y_on">已开启</string>
@@ -35,6 +36,10 @@
     <string name="settings_agents_hint">点击服务可编辑；右侧圆点用于设为默认服务</string>
     <string name="settings_agents_delete_confirm">删除后该服务的密钥与配置将不可恢复。</string>
     <string name="settings_permissions_summary">自动化、屏幕、通知与运行时权限</string>
+    <string name="settings_skills_summary">自动保存与回放多步操作</string>
+    <string name="settings_skills_auto_title">自动保存技能</string>
+    <string name="settings_skills_auto_desc">Act / Max 成功完成多步 UI 流程后，自动保存为可回放技能。相同流程不会重复；最多保留 20 个自动技能。疑似密码/验证码/密钥类流程不会自动保存。默认关闭。</string>
+    <string name="settings_skills_hint">自动保存会把流程中输入的文本写入技能，请勿在密码、聊天等敏感流程中开启。自动技能可以在「库 → 技能」中查看、重命名或删除；关闭开关不会删除已有技能。</string>
 
     <string name="settings_permissions_hint">核心权限决定 AI 能否看屏与操作设备；运行时权限仅在对应工具被调用时使用。</string>
     <string name="settings_permissions_core">核心能力</string>
@@ -58,6 +63,8 @@
     <string name="settings_perm_contacts_desc">搜索联系人</string>
     <string name="settings_perm_location_title">位置</string>
     <string name="settings_perm_location_desc">获取当前位置</string>
+    <string name="settings_perm_scene_title">场景增强</string>
+    <string name="settings_perm_scene_desc">每条消息自动附带当前时间；开启后附带最近一次精确位置（坐标、精度、时间）和 30 分钟内的天气缓存。仅用于本轮请求，不写入聊天记录。需位置权限。</string>
     <string name="settings_perm_grant">去授权</string>
     <string name="settings_perm_granted">已授权</string>
 
@@ -127,6 +134,29 @@
     <string name="settings_perm_shizuku_ready">已就绪，AI 可执行 ADB 级命令</string>
     <string name="settings_perm_shizuku_denied">已安装但未授权，点此申请</string>
     <string name="settings_perm_shizuku_unavailable">未安装或服务未启动</string>
+    <string name="settings_perm_display_keep_title">后台虚拟屏保活</string>
+    <string name="settings_perm_display_keep_desc">Wi-Fi/ADB 断开后继续保持已启动的虚拟屏；常驻通知，耗电略增。重启后需等 shell 恢复。</string>
+    <string name="settings_perm_wireless_title">无线调试（无需 Shizuku）</string>
+    <string name="settings_perm_wireless_desc">使用 Android 自带的无线调试，配对一次即可运行 ADB 级命令</string>
+    <string name="settings_perm_wireless_not_paired">未配对，点此配对</string>
+    <string name="settings_perm_wireless_disconnected">已配对，未连接</string>
+    <string name="settings_perm_wireless_connected">已连接，可后台创建虚拟屏</string>
+    <string name="settings_perm_wireless_unsupported">需要 Android 11 或更新版本</string>
+    <string name="settings_perm_wireless_pair">配对</string>
+    <string name="settings_perm_wireless_connect">连接</string>
+    <string name="settings_perm_wireless_disconnect">断开</string>
+    <string name="settings_perm_wireless_dialog_title">配对无线调试</string>
+    <string name="settings_perm_wireless_dialog_help">开启 UI 自动化后点击“自动读取配对码”，按提示打开 开发者选项 → 无线调试 → 使用配对码配对设备，并停留在该页面。</string>
+    <string name="settings_perm_wireless_dialog_connect_help">已配对。保持无线调试开启，然后点击连接。</string>
+    <string name="settings_perm_wireless_port_hint">无线调试端口（可选）</string>
+    <string name="settings_perm_wireless_port_connect">用这个端口连接</string>
+    <string name="settings_perm_wireless_auto_reenable">自动重新打开无线调试</string>
+    <string name="settings_perm_wireless_keepalive_help">配对成功后，BAIC2 会通过 ADB shell 授予“修改系统设置”权限，并在无线调试被关闭、重启或切换 Wi-Fi 时尝试自动恢复；该授权可随时在系统设置中撤销。</string>
+    <string name="settings_perm_wireless_pairing">正在配对…</string>
+    <string name="settings_perm_wireless_connecting">正在连接…</string>
+    <string name="settings_perm_wireless_error">配对或连接失败</string>
+    <string name="settings_perm_wireless_retry">重试</string>
+    <string name="settings_perm_wireless_open_dev">打开开发者选项</string>
     <string name="settings_perm_files_title">文件访问</string>
     <string name="settings_perm_files_desc">读取 Downloads/Documents 中的文件（Android 13+ 需"所有文件访问"）</string>
     <string name="settings_about_update_title">检查更新</string>
@@ -153,4 +183,7 @@
     <string name="settings_developer_copy">复制</string>
     <string name="settings_developer_copied">已复制</string>
     <string name="settings_developer_changelog">更新日志</string>
+    <string name="settings_perm_wireless_auto">自动读取配对码</string>
+    <string name="settings_perm_wireless_auto_help">需要先开启 UI 自动化（无障碍）。点击后会打开开发者选项，请进入 无线调试 → 使用配对码配对设备，BAIC2 会自动读取配对码。</string>
+    <string name="settings_perm_wireless_a11y_required">请先在权限页开启 UI 自动化</string>
 </resources>

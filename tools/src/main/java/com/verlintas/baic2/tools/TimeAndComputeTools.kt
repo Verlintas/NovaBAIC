@@ -22,30 +22,8 @@ package com.verlintas.baic2.tools
 import com.verlintas.baic2.core.model.DangerLevel
 import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.core.model.ToolSpec
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-
-class GetTimeTool : DeviceTool {
-    override val spec = ToolSpec(
-        name = "get_time",
-        description = "Current local date, time, weekday and timezone of the device.",
-        parametersJson = """{"type":"object","properties":{}}""",
-        readOnly = true,
-        danger = DangerLevel.LOW,
-        parallelSafe = true,
-    )
-
-    override suspend fun execute(arguments: JsonObject, context: ToolContext): ToolResult {
-        val now = Date()
-        val date = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(now)
-        val weekday = SimpleDateFormat("EEEE", Locale.getDefault()).format(now)
-        val zone = java.util.TimeZone.getDefault()
-        return ToolResult.Success("$date $weekday (${zone.id}, UTC${zone.rawOffset / 3_600_000.0}h)")
-    }
-}
 
 class ComputeTool : DeviceTool {
     override val spec = ToolSpec(

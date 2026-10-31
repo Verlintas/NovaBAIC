@@ -24,6 +24,7 @@ import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.core.model.ToolSpec
 import com.verlintas.baic2.tools.DeviceTool
 import com.verlintas.baic2.tools.ToolContext
+import com.verlintas.baic2.tools.context.SceneContextProvider
 import java.io.IOException
 import java.net.URLDecoder
 import javax.inject.Inject
@@ -729,6 +730,7 @@ class WebReadTool @Inject constructor(
 class GetWeatherTool @Inject constructor(
     private val fetcher: WebFetcher,
     private val json: Json,
+    private val scene: SceneContextProvider,
 ) : DeviceTool {
 
     override val spec = ToolSpec(
@@ -763,6 +765,9 @@ class GetWeatherTool @Inject constructor(
                 append("\n${d.str("date")}: ${d.str("mintempC")}~${d.str("maxtempC")}°C")
             }
         }
+        // Remember a compact snapshot for the opt-in scene context; the next
+        // few chat requests can reuse it instead of calling the network again.
+        scene.rememberWeather(city, text)
         return ToolResult.Success(text)
     }
 

@@ -19,11 +19,15 @@
 
 package com.verlintas.baic2.tools
 
+import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.device.api.TextNode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class UiMatchTest {
 
@@ -67,5 +71,107 @@ class UiMatchTest {
     fun noMatchForEmptyInput() {
         assertNull(uiMatchScore("Settings", "  "))
         assertTrue(uiBestMatches(listOf(node("a")), "").isEmpty())
+    }
+
+    @Test
+    fun uiControlAdvertisesUnboundedSequenceWithSafetyBudget() {
+        val schema = UiControlTool().spec.parametersJson
+
+        assertTrue(schema.contains("\"sequence\""))
+        assertTrue(schema.contains("\"steps\""))
+        assertTrue(!schema.contains("\"maxItems\""))
+        assertTrue(schema.contains("\"snapshot\""))
+        assertTrue(schema.contains("\"assert_text\""))
+        assertTrue(schema.contains("\"read_text\""))
+        assertTrue(schema.contains("\"ref\""))
+    }
+
+    @Test
+    fun sequenceAcceptsMoreThanEightSteps() = runBlocking {
+        val steps = (1..12).map {
+            buildJsonObject { put("action", "tap"); put("text", "step$it") }
+        }
+        var calls = 0
+        val result = UiControlTool().runSequence(steps) { _, _ ->
+            calls++
+            ToolResult.Success("ok")
+        }
+
+        assertTrue(result is ToolResult.Success)
+        assertEquals(12, calls)
+    }
+
+    @Test
+    fun sequenceKeepsReadTextBeyondPerStepSummary() = runBlocking {
+        val body = "x".repeat(1_500)
+        val steps = listOf(
+            buildJsonObject { put("action", "tap"); put("ref", "e1") },
+            buildJsonObject { put("action", "read_text") },
+        )
+        val result = UiControlTool().runSequence(steps) { action, _ ->
+            if (action == "read_text") ToolResult.Success(body) else ToolResult.Success("ok")
+        }
+
+        assertTrue(result is ToolResult.Success)
+        assertTrue(result.output.contains(body))
+    }
+
+    @Test
+    fun sequenceFailureOutputIsBounded() = runBlocking {
+        val steps = listOf(
+            buildJsonObject { put("action", "read_text") },
+            buildJsonObject { put("action", "tap") },
+        )
+        val result = UiControlTool().runSequence(steps) { action, _ ->
+            if (action == "read_text") {
+                ToolResult.Success("x".repeat(20_000))
+            } else {
+                ToolResult.Failure("boom")
+            }
+        }
+
+        assertTrue(result is ToolResult.Failure)
+        assertTrue(result.reason.length <= 12_000)
+    }
+
+    @Test
+    fun sequenceClampsWaitToRemainingBudget() = runBlocking {
+        val steps = listOf(
+            buildJsonObject { put("action", "wait_for"); put("timeout_ms", 999_999) },
+            buildJsonObject { put("action", "tap") },
+        )
+        var observed = -1
+        val result = UiControlTool().runSequence(steps) { _, step ->
+            if (step["action"]?.toString()?.contains("wait_for") == true) {
+                observed = (step["timeout_ms"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content?.toInt() ?: -1
+            }
+            ToolResult.Success("ok")
+        }
+
+        assertTrue(result is ToolResult.Success)
+        assertTrue(observed in 1..300_000)
+    }
+
+    @Test
+    fun sequenceStopsAtFirstFailedStep() = runBlocking {
+        val steps = listOf(
+            buildJsonObject { put("action", "tap") },
+            buildJsonObject { put("action", "type") },
+            buildJsonObject { put("action", "press_key") },
+        )
+        var calls = 0
+        val result = UiControlTool().runSequence(steps) { action, _ ->
+            calls++
+            if (action == "type") {
+                ToolResult.Failure("field refused input")
+            } else {
+                ToolResult.Success("ok")
+            }
+        }
+
+        assertTrue(result is ToolResult.Failure)
+        assertTrue(result.reason.contains("step 2"))
+        assertEquals(2, calls)
     }
 }

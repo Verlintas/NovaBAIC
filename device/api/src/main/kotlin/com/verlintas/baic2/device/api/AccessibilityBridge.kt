@@ -28,6 +28,11 @@ data class TextNode(
     val top: Int,
     val right: Int,
     val bottom: Int,
+    val editable: Boolean = false,
+    val viewId: String? = null,
+    val className: String? = null,
+    val clickableClassName: String? = null,
+    val hasToggle: Boolean = false,
 ) {
     val centerX: Int get() = (left + right) / 2
     val centerY: Int get() = (top + bottom) / 2
@@ -56,6 +61,79 @@ interface AccessibilityBridge {
     fun findText(query: String): List<TextNode>
 
     fun screenText(maxNodes: Int = 200): String
+
+    /**
+     * Text nodes from [displayId] instead of the active display.
+     * Empty when the service cannot see that display.
+     */
+    fun findTextOnDisplay(displayId: Int, query: String): List<TextNode>
+
+    fun screenTextOnDisplay(displayId: Int, maxNodes: Int = 300): String
+
+    /** Text from every window (including system dialogs) on the default display. */
+    fun screenTextAllWindows(maxNodes: Int = 400): String
+
+    /** Text nodes from every window on the default display. */
+    fun findTextAllWindows(query: String, maxNodes: Int = 400): List<TextNode>
+
+    /**
+     * Labelled interactive elements on the default display, in stable
+     * top-to-bottom window order. Used to hand out short-lived element refs
+     * (`e1`, `e2`, ...) so a model can tap without repeating coordinates.
+     */
+    fun snapshotNodes(maxNodes: Int = 60): List<TextNode>
+
+    /** True when a text input on [displayId] owns input focus. */
+    fun editableFocusedOnDisplay(displayId: Int): Boolean
+
+    /**
+     * The best search-like control. It scores resource ids, search view
+     * classes, localized hints and editable fields; it is not a name match
+     * against one hard-coded button label.
+     */
+    fun findSearchNode(
+        hints: List<String> = emptyList(),
+        preferredViewId: String? = null,
+    ): TextNode?
+
+    fun findSearchNodeOnDisplay(
+        displayId: Int,
+        hints: List<String> = emptyList(),
+        preferredViewId: String? = null,
+    ): TextNode?
+
+    /** The first editable field on the active window, with its bounds. */
+    fun editableNode(): TextNode?
+
+    /** The first editable field on [displayId], with its bounds. */
+    fun editableNodeOnDisplay(displayId: Int): TextNode?
+
+    /** Click a text/description match on [displayId] via ACTION_CLICK. */
+    fun clickTextOnDisplay(displayId: Int, query: String): Result<Unit>
+
+    /** Click the first editable field on [displayId]. */
+    fun clickEditableOnDisplay(displayId: Int): Result<Unit>
+
+    /** Replace the focused/first editable field on [displayId]. */
+    fun setTextOnDisplay(displayId: Int, text: String): Result<Unit>
+
+    /** Submit the focused input on [displayId] (Android 11+). */
+    fun pressEnterOnDisplay(displayId: Int): Result<Unit>
+
+    /** Scroll the first scrollable node on [displayId]. */
+    fun scrollOnDisplay(displayId: Int, forward: Boolean = true): Result<Unit>
+
+    /**
+     * Wait until the visible text on [displayId] changes or [timeoutMs] runs
+     * out. Pass the text captured before an action as [previousText] so a
+     * change that landed before this call is still detected. Returns false on
+     * timeout; callers should keep a fallback instead of retrying forever.
+     */
+    suspend fun awaitContentChange(
+        displayId: Int,
+        timeoutMs: Long,
+        previousText: String? = null,
+    ): Boolean
 
     /** Package name of the app currently in the foreground, when known. */
     fun foregroundPackage(): String?

@@ -12,7 +12,7 @@
   <a href="../README.md">简体中文</a> ·
   <a href="README.en.md">English</a> ·
   <a href="HOW_IT_WORKS.md">How it works</a> ·
-  <a href="../CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
@@ -30,7 +30,10 @@ BetterAIChat2 is the successor rewrite (codename Nova) of [BetterAIChat](https:/
 
 It is a **local-first** AI agent — API keys are encrypted with the Android Keystore and stay on the device. There is no cloud, no telemetry, and no account. Through **function calling**, the AI actually operates your phone: read the screen, tap, type, browse files, set reminders, and run automations.
 
-- **It really touches the device**: 57 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, and Shizuku shell
+- **It really touches the device**: 57 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, built-in wireless debugging, and Shizuku shell
+- **Implicit activity**: Act/Max do not list tool calls; a live line says “Using WeChat…”, a collapsed summary follows the run, and a successful virtual-display run attaches its last frame to the reply
+- **Warm background display**: when a transport is available, the app starts the helper at launch and releases it after 10 minutes idle, so the first research request avoids the cold start
+- **Locale-independent controls**: in-app search prefers resource ids and control structure over labels such as “Search”, “Discover” or their translations; localized word lists are only a fallback
 - **No model lock-in**: DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / any compatible gateway — switch any time
 - **Four modes**: from plain chat, to read-only research, to per-call confirmation, to budgeted autonomous runs
 - **Unattended operation**: scheduled tasks, foreground services, subagents, remote MCP tools, and Skills
@@ -54,7 +57,7 @@ This project is developed with the participation of an AI coding assistant (open
    | Mode | When to use |
    | --- | --- |
    | `Chat` | Plain conversation, no device access |
-   | `Chat+` | Read-only research: notifications, files, web search, weather |
+   | `Chat+` | Read-only research: web and in-app search plus files/notifications/weather, loaded on demand; independent read-only calls can run in parallel |
    | `Act` | Every tool call is confirmed first — best for the first device-operating sessions |
    | `Max` | Autonomous multi-step runs, including scheduled tasks |
 
@@ -112,16 +115,16 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 **Perception & UI automation (accessibility + vision)**
 
 - `take_screenshot`, `screen_ocr` (Chinese + English OCR with coordinates), `screen_record`, `get_screen_state`, `get_foreground_app`
-- `ui_control`: fuzzy find by text / description, then tap / long press / scroll-to-find / type / press keys / wait-for; a single call does "locate → act → verify", using the screen diff before and after as the verification signal
+- `ui_control`: `snapshot` assigns short refs (e1, e2, …) to interactive elements; tap / long press by ref or text, scroll-to-find, type, press keys, wait-for, `assert_text`, `read_text`; a single call does "locate → act → verify", and `sequence` runs as many deterministic steps as the flow needs in one call (5-minute safety budget), stopping at the first failure and clamping each wait to the remaining budget
 - `open_app` / `manage_app` (fuzzy app-name resolution), `open_settings` (jump straight to system pages), `run_shell` (optional root-level shell via Shizuku)
 
 **System & device**
 
-`set_volume` · `set_brightness` · `set_flashlight` · `media_control` · `vibrate` · `send_notification` · `read_notifications` · `get_clipboard` / `set_clipboard` · `share_text` · `open_dialer` · `get_location` · `open_map` · `device_info` · `network_status` · `get_app_usage` · `list_installed_apps` · `get_time` · `compute`
+`set_volume` · `set_brightness` · `set_flashlight` · `media_control` · `vibrate` · `send_notification` · `read_notifications` · `get_clipboard` / `set_clipboard` · `share_text` · `open_dialer` · `get_location` · `open_map` · `device_info` · `network_status` · `get_app_usage` · `list_installed_apps` · `compute`
 
 **Content & web**
 
-`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `app_research` (read-only in-app search that identifies the search control by resource id, remembers the learned structural id, supports `open` / `open_top` and `session` reuse (a new query retargets the open results page when possible, otherwise relaunches the app on the same display); foreground accessibility without Shizuku/root, resident virtual display when available) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **Personal assistant**
 
@@ -129,7 +132,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 
 **Agent collaboration**
 
-- `spawn_agent`: a subagent with its own context and budget; multiple calls can run in parallel
+- `spawn_agent`: a subagent with its own context and budget; multiple calls can run in parallel, and CHAT+ always runs it as read-only research
 - `plan_update`: the plan artifact — a persistent plan card at the top of the chat whose step states update live
 - `load_skill`: load a skill as tools on demand
 - `automation`: create time-, battery- or **notification-triggered** automations
@@ -138,7 +141,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 ### Automation, skills & MCP
 
 - **Scheduled tasks**: daily / weekly schedules on top of system exact alarms; a foreground service runs the full agent unattended and reports back with a notification; toggle or run-now from the UI
-- **Skills v2**: declarative YAML recipes with `{{parameter}}` placeholders and a parameters schema — record once, reuse with different inputs; a completed run can also be "saved as a skill"
+- **Skills v2**: declarative YAML recipes with `{{parameter}}` placeholders and a parameters schema — record once, reuse with different inputs; the chat menu can save a run as a skill manually; Settings → Skills also offers an optional "Auto-save skills" switch that records only successful 2+ step UI flows, deduplicates them and keeps at most 20. Snapshot refs are resolved to text before the recipe is stored
 - **MCP**: add remote Streamable HTTP servers; their tools join the toolbox automatically
 - **Automations**: time (daily / weekly), battery and **notification** triggers (package/keyword filters with a cooldown) execute action sequences and report results
 
@@ -182,7 +185,10 @@ Everything is granted on demand. When a tool lacks a permission it returns an ac
 | Contacts / location | Contact and location tools | Prompted when used |
 | Alarms & reminders | Scheduled tasks (exact alarms) | Prompted when used |
 | All files access | File management tools | Enable on demand (Android 11+) |
-| Shizuku | Optional: root-level shell and app management | Install Shizuku and authorize |
+| Shizuku | Optional: root-level shell, app management, virtual-display helper | Install Shizuku and authorize; root works too |
+| Wireless debugging | Optional: background virtual display without Shizuku | Developer options → Wireless debugging, pair once; BAIC2 then tries to recover it automatically. Settings → Permissions also offers an opt-in "Keep background display" foreground service so a live session survives Wi-Fi/ADB loss (notification + slight battery cost). |
+
+`Scene awareness` (Settings → Permissions) is a separate opt-in: when on, each chat request carries the latest location fix (coordinates, accuracy, age) and a weather snapshot cached within 30 minutes. When off, location stays on-demand only.
 
 ## Privacy
 
@@ -271,7 +277,7 @@ This is an architecture rewrite (new package name, new signing key). It installs
 No services linger while idle. Long runs (Act / Max, scheduled tasks) hold a foreground service that can be stopped from the notification, and screen capture is owned by a foreground service only after you grant it.
 
 **Do I need Shizuku?**
-No. Most tools (accessibility, capture, files, web, personal assistant) work without it; Shizuku only unlocks `run_shell` and deep app management.
+No. Most tools (accessibility, capture, files, web, personal assistant) work without it; Shizuku only unlocks `run_shell` and deep app management. The background virtual display can also use Android's built-in Wireless debugging after a one-time pairing, with no Shizuku install. After pairing, BAIC2 uses its ADB shell to obtain the “modify system settings” grant and tries to re-enable Wireless debugging after it is turned off, after a reboot or on a Wi-Fi change. If the OEM refuses, you can still enable it manually or enter the port.
 
 **Can I use local models?**
 Yes. Point any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio…) at your server; cleartext HTTP is permitted only for loopback addresses.
@@ -279,11 +285,17 @@ Yes. Point any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio…) at your s
 **If a run is stopped mid-tool-call, does the conversation break?**
 No. Stopping synthesizes "cancelled" tool results for interrupted calls and rewrites their status, so the transcript always satisfies the model's protocol requirements — you can keep chatting or retry.
 
+## Documentation
+
+- [README.md](README.md): the documentation index
+- [HOW_IT_WORKS.md](HOW_IT_WORKS.md): the complete technical walkthrough
+- [ARCHITECTURE.md](ARCHITECTURE.md): architecture principles and module dependencies
+- [AGENT_EFFICIENCY_ROADMAP.md](AGENT_EFFICIENCY_ROADMAP.md): current agent capability roadmap
+
 ## Contributing
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) · [SECURITY.md](../SECURITY.md)
-- [CHANGELOG.md](../CHANGELOG.md): detailed changes for every release
-- [HOW_IT_WORKS.md](HOW_IT_WORKS.md): the complete technical walkthrough
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
+- [CHANGELOG.md](CHANGELOG.md): detailed changes for every release
 
 ## License
 

@@ -12,8 +12,8 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
 - API keys — encrypted with the Android Keystore (AES-256-GCM,
   `baic2_secret_v1`); plaintext exists only inside in-memory `ProviderConfig`.
 - Conversations, notes, run records — local Room database.
-- Device capabilities — accessibility automation, Shizuku shell, screen
-  capture, notifications, files, clipboard.
+- Device capabilities — accessibility automation, Shizuku shell, built-in
+  Wireless debugging shell, screen capture, notifications, files, clipboard.
 
 ## Trust boundaries
 
@@ -29,10 +29,12 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
 
 - **Mode gates.** Chat advertises only internal memory tools; Chat+ is
   read-only; Act confirms every call through `ConfirmationQueue`; Max runs
-  autonomously.
+  autonomously. `spawn_agent` is exposed to Chat+ as a read-only research
+  delegate; the child mode is clamped to Chat+, so a `mode=max` request cannot
+  escalate it. In Act/Max the read-only flag is not a gate.
 - **Unattended policy** (`AgentLoop.gate`, `unattended = true` for scheduled
   tasks): `DangerLevel.HIGH` tools and an explicit deny list — `run_shell`,
-  `manage_app`, `set_clipboard`, `share_text` — are refused outright. A
+  `manage_app`, `set_clipboard`, `share_text`, `app_research` — are refused outright. A
   poisoned prompt cannot turn "run this at 03:00" into arbitrary code
   execution. Per-automation whitelists are the planned opt-in for trusted
   schedules.
@@ -78,8 +80,8 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
   before a connection is opened. Host names are resolved and every address is
   validated (loopback / site-local / link-local / CGNAT), so DNS tricks like
   `localtest.me` are refused too.
-- **Location privacy.** Location is on-demand only: `get_location` reads the
-  last known fix and never starts background tracking, and the tool writes
+- **Location privacy.** Location is on-demand by default: `get_location` reads
+  the last known fix and never starts background tracking, and the tool writes
   nothing to the database. Reverse geocoding is fully offline against a
   bundled GeoNames gazetteer (CC BY 4.0) — no Android Geocoder, no GMS, and no
   coordinates leave the device for it. Route recording does not exist; if a
@@ -87,6 +89,48 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
   lower once expired and is labelled historical. `open_map` only hands
   WGS-84 (converted to GCJ-02/BD-09 as needed) to an installed map app via a
   `geo:` intent — BAIC2 renders no map itself.
+- **Resident display helper.** `app_research` prefers a shell-owned virtual
+  display. The app starts a small `app_process` helper through Shizuku, a root
+  shell, or the built-in Wireless debugging transport; the helper creates one
+  public display with an ImageReader surface owned by the app, so frames stay
+  in memory. It runs with shell/root identity, so the UI explains the
+  requirement and the tool falls back to the foreground when no privileged
+  transport exists. The helper never receives the model's text or memory; it
+  only creates the display. Its binder is accepted only from shell/root,
+  checked against the app's package and uid, and it exits when the app process
+  dies. Input is limited to the read-only research actions described above.
+- **Act/Max screenshot receipts.** A successful Act/Max run that used the
+  virtual display attaches its last frame to the final assistant message.
+  The image is stored locally with the conversation attachments and is
+  stripped from history before the next model request; it is never uploaded
+  by BAIC2. Deleting the message does not yet garbage-collect the attachment
+  file, so storage cleanup remains a maintenance task.
+- **Wireless debugging is opt-in.** The pairing service is started only from
+  Permissions → Wireless debugging. It generates an RSA key and self-signed
+  certificate in app-private storage, reads the six-digit system pairing code
+  through the accessibility service during the user-initiated pairing window,
+  and stops after three minutes. The code and key never leave the device. The
+  resulting ADB transport is used only to start the virtual-display helper and
+  send the same read-only research actions; it is not exposed as a general
+  shell tool.
+- **Wireless keepalive grant.** After the first successful pairing, the app
+  runs `pm grant <package> android.permission.WRITE_SECURE_SETTINGS` through
+  that same ADB shell. The grant is used to write
+  `Settings.Global.ADB_WIFI_ENABLED` when the system turns Wireless debugging
+  off after a reboot, a Wi-Fi change or a user toggle-off, and to retry the
+  connection. It is not used to read or write unrelated secure settings. The
+  grant survives app updates but can be revoked at any time in system
+  settings; if an OEM refuses the write, BAIC2 reports it and falls back to
+  the manual toggle or a manually entered port. The last-resort port scan is
+  restricted to loopback and this phone's own Wi-Fi addresses; it never probes
+  other devices on the LAN. Removing the app or revoking the permission in
+  system settings ends the automatic recovery path.
+- **Scene enhancement is opt-in.** Settings → Permissions → Scene awareness
+  is consent to attach the latest fix (coordinates, accuracy, age) and a
+  weather snapshot cached within 30 minutes to each interactive chat request.
+  It is off by default, never starts a location request, never runs for
+  scheduled/unattended runs, and the runtime block is not written into chat
+  history or memory. Turning it off restores on-demand-only location.
 - **Tool contracts.** Every tool validates its own arguments and returns
   actionable failures; `tools/check-tool-schemas.py` fails CI on malformed
   JSON schemas, and `tools/check-license-headers.sh` keeps provenance.

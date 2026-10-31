@@ -61,6 +61,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -234,6 +235,46 @@ private fun AgentRow(
             }
         },
     )
+}
+
+// -------------------------------------------------------------------- skills
+
+@Composable
+fun SkillsPage(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    SettingsPage(
+        title = stringResource(R.string.settings_skills_title),
+        onBack = onBack,
+    ) {
+        item(key = "auto-save") {
+            SettingsRow(
+                title = stringResource(R.string.settings_skills_auto_title),
+                summary = stringResource(R.string.settings_skills_auto_desc),
+                onClick = { viewModel.setAutoSaveSkills(!state.autoSaveSkills) },
+                trailing = {
+                    Switch(
+                        checked = state.autoSaveSkills,
+                        onCheckedChange = null,
+                    )
+                },
+            )
+        }
+        item(key = "hint") {
+            Text(
+                text = stringResource(R.string.settings_skills_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    start = Baic2Spacing.xs,
+                    top = Baic2Spacing.md,
+                ),
+            )
+        }
+    }
 }
 
 // ---------------------------------------------------------------- appearance
@@ -966,6 +1007,10 @@ fun LicensesPage(onBack: () -> Unit) {
         "ZXing" to "Apache-2.0",
         "Jsoup" to "MIT",
         "SnakeYAML" to "Apache-2.0",
+        "libadb-android (Muntashir Al-Islam)" to "Apache-2.0 / GPL-3.0",
+        "Conscrypt" to "Apache-2.0",
+        "BouncyCastle" to "MIT",
+        "Spake2-Java" to "Apache-2.0",
     )
     SettingsPage(
         title = stringResource(R.string.settings_licenses_title),

@@ -48,6 +48,7 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val accent: AccentColor = AccentColor.BLUE,
     val language: AppLanguage = AppLanguage.SYSTEM,
+    val autoSaveSkills: Boolean = false,
     val storage: StorageUsage? = null,
     val stats: UsageStats? = null,
 )
@@ -135,8 +136,13 @@ class SettingsViewModel @Inject constructor(
         },
         storage,
         stats,
-    ) { base, storageUsage, usageStats ->
-        base.copy(storage = storageUsage, stats = usageStats)
+        settingsRepository.autoSaveSkills,
+    ) { base, storageUsage, usageStats, autoSaveSkills ->
+        base.copy(
+            storage = storageUsage,
+            stats = usageStats,
+            autoSaveSkills = autoSaveSkills,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -153,6 +159,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setLanguage(language: AppLanguage) {
         localeStore.set(language)
+    }
+
+    fun setAutoSaveSkills(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoSaveSkills(enabled) }
     }
 
     fun setDefaultAgent(id: Long) {

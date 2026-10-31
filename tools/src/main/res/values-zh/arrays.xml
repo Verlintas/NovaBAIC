@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="app_research_search_terms">
+        <item>搜索</item>
+        <item>搜一搜</item>
+        <item>查找</item>
+        <item>搜寻</item>
+        <item>探索</item>
+        <item>检索</item>
+        <item>发现</item>
+        <item>搜</item>
+    </string-array>
+    <string-array name="app_research_chrome">
+        <item>返回</item>
+        <item>取消</item>
+        <item>搜索</item>
+        <item>清除</item>
+        <item>确定</item>
+        <item>应用</item>
+        <item>最近搜索</item>
+        <item>最近搜索记录</item>
+    </string-array>
+    <string-array name="app_research_login_terms">
+        <item>登录后</item>
+        <item>请登录</item>
+        <item>登录</item>
+        <item>登陆</item>
+    </string-array>
+    <string-array name="app_research_captcha_terms">
+        <item>验证码</item>
+        <item>安全验证</item>
+        <item>人机验证</item>
+        <item>滑块验证</item>
+    </string-array>
+    <string-array name="app_research_risk_terms">
+        <item>操作频繁</item>
+        <item>访问异常</item>
+        <item>系统繁忙</item>
+        <item>请稍后再试</item>
+    </string-array>
+</resources>

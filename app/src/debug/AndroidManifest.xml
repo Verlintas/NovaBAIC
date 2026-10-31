@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug-only: allows plain HTTP to a local mock server during development. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:usesCleartextTraffic="true" />
+    <application android:usesCleartextTraffic="true">
+        <activity
+            android:name=".DebugDisplayActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugResearchActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugUiActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugSkillActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugAgentActivity"
+            android:exported="true" />
+        <service
+            android:name=".DebugWirelessService"
+            android:exported="true" />
+    </application>
 </manifest>

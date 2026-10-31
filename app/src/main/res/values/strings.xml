@@ -11,4 +11,15 @@
     <string name="dock_footer">本地优先 · 无遥测</string>
     <string name="dock_channel" translatable="false">dev</string>
 
+    <string name="wireless_pair_channel">无线调试配对</string>
+    <string name="wireless_pair_notification_title">配对无线调试</string>
+    <string name="wireless_pair_notification_waiting">打开 开发者选项 → 无线调试 → 使用配对码配对设备，BAIC2 会自动读取配对码</string>
+    <string name="wireless_pair_notification_pairing">正在配对…</string>
+    <string name="wireless_pair_notification_connected">已连接，可后台创建虚拟屏</string>
+    <string name="wireless_pair_notification_failed">配对超时或失败，请回到 BAIC2 重试</string>
+    <string name="wireless_pair_notification_no_a11y">需要先开启 UI 自动化（无障碍），BAIC2 才能读取系统配对码</string>
+    <string name="display_keep_title">后台虚拟屏</string>
+    <string name="display_keep_channel">后台虚拟屏保活</string>
+    <string name="display_keep_active">运行中 · display %1$d</string>
+    <string name="display_keep_waiting">等待可用的 shell；已有虚拟屏会话仍会保持</string>
 </resources>

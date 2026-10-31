@@ -124,4 +124,23 @@
     <string name="chat_action_copied">Copied</string>
     <string name="chat_thinking_streaming">Thinking · %1$ds</string>
     <string name="chat_thought_for">Thought for %1$ds</string>
+    <string name="chat_activity_using">Using %1$s…</string>
+    <string name="chat_activity_opening">Opening %1$s…</string>
+    <string name="chat_activity_managing">Managing %1$s…</string>
+    <string name="chat_activity_screen">Looking at the screen…</string>
+    <string name="chat_activity_web_search">Searching…</string>
+    <string name="chat_activity_web_read">Reading a page…</string>
+    <string name="chat_activity_files">Reading files…</string>
+    <string name="chat_activity_working">Working…</string>
+    <string name="chat_activity_used_app">Used %1$s</string>
+    <string name="chat_activity_used_apps">Used %1$s</string>
+    <string name="chat_activity_actions">%1$d actions</string>
+    <string name="chat_activity_action">%1$d action</string>
+    <string name="chat_activity_failed">%1$d failed</string>
+    <string name="chat_activity_details">Details</string>
+    <string name="chat_activity_hide_details">Hide details</string>
+    <string name="chat_result_screenshot">Background screenshot</string>
+    <string name="chat_activity_used_screen">Used the screen</string>
+    <string name="chat_activity_used_web">Used the web</string>
+    <string name="chat_activity_used_files">Used files</string>
 </resources>

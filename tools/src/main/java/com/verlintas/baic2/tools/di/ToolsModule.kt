@@ -28,7 +28,6 @@ import com.verlintas.baic2.tools.ComputeTool
 import com.verlintas.baic2.tools.DeviceInfoTool
 import com.verlintas.baic2.tools.DeviceTool
 import com.verlintas.baic2.tools.DeviceToolRunner
-import com.verlintas.baic2.tools.GetTimeTool
 import com.verlintas.baic2.tools.ListInstalledAppsTool
 import com.verlintas.baic2.tools.MediaControlTool
 import com.verlintas.baic2.tools.NetworkStatusTool
@@ -168,7 +167,8 @@ object ToolsModule {
     fun getWeatherTool(
         fetcher: com.verlintas.baic2.tools.web.WebFetcher,
         json: kotlinx.serialization.json.Json,
-    ): DeviceTool = com.verlintas.baic2.tools.web.GetWeatherTool(fetcher, json)
+        scene: com.verlintas.baic2.tools.context.SceneContextProvider,
+    ): DeviceTool = com.verlintas.baic2.tools.web.GetWeatherTool(fetcher, json, scene)
 
     @Provides
     @IntoSet
@@ -248,11 +248,15 @@ object ToolsModule {
 
     @Provides
     @IntoSet
-    fun getTimeTool(): DeviceTool = GetTimeTool()
+    fun computeTool(): DeviceTool = ComputeTool()
 
     @Provides
     @IntoSet
-    fun computeTool(): DeviceTool = ComputeTool()
+    fun appResearchTool(
+        displays: com.verlintas.baic2.device.api.VirtualDisplayBridge,
+        sessions: com.verlintas.baic2.tools.apps.AppResearchSessions,
+        knowledge: com.verlintas.baic2.tools.apps.AppKnowledgeRepository,
+    ): DeviceTool = com.verlintas.baic2.tools.apps.AppResearchTool(displays, sessions, knowledge)
 
     @Provides
     @IntoSet
@@ -390,4 +394,10 @@ abstract class ToolsBindingModule {
     @Binds
     @Singleton
     abstract fun bindToolRunner(runner: DeviceToolRunner): ToolRunner
+
+    @Binds
+    @Singleton
+    abstract fun bindAppKnowledge(
+        store: com.verlintas.baic2.tools.apps.AppKnowledgeStore,
+    ): com.verlintas.baic2.tools.apps.AppKnowledgeRepository
 }

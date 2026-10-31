@@ -144,6 +144,9 @@ interface MessageDao {
     @Query("UPDATE messages SET toolCallsJson = :toolCallsJson WHERE id = :id")
     suspend fun updateToolCalls(id: Long, toolCallsJson: String)
 
+    @Query("UPDATE messages SET attachmentsJson = :attachmentsJson WHERE id = :id")
+    suspend fun updateAttachments(id: Long, attachmentsJson: String)
+
     @Query("UPDATE messages SET starred = :starred WHERE id = :id")
     suspend fun updateStarred(id: Long, starred: Boolean)
 

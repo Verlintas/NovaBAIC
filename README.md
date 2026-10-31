@@ -12,7 +12,7 @@
   <a href="README.md">简体中文</a> ·
   <a href="docs/README.en.md">English</a> ·
   <a href="docs/HOW_IT_WORKS.md">How it works</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="docs/CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
@@ -30,7 +30,10 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
 
 它是**本地优先**的 AI 智能体 —— API Key 经 Android Keystore 加密留在设备上，没有云端、没有遥测、不需要账号；AI 通过**函数调用**真实操作你的手机：看屏、点击、输入、读写文件、设置提醒、跑自动化。
 
-- **真操作设备**：57 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理与 Shizuku shell
+- **真操作设备**：57 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理、内置无线调试与 Shizuku shell
+- **隐式执行提示**：Act/Max 不逐条罗列工具调用，运行中显示“Using WeChat…”，结束后折叠为动作摘要；成功使用后台虚拟屏的运行会在回复里附上最后一张截图
+- **后台屏预热与保活**：App 启动时在可用传输存在的情况下提前启动虚拟屏 helper，10 分钟无活动自动回收；设置 → 权限里可开启「后台虚拟屏保活」，用一个可选的前台服务关闭空闲回收并定期 ensure，Wi-Fi/ADB 断开后已启动的会话仍可用（常驻通知，耗电略增）
+- **跨语言界面**：App 内搜索优先按资源 id/控件结构识别，不依赖“搜索/搜寻/discover”这类按钮文案；本地化词表只是兜底
 - **不锁定模型**：DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / 任意兼容网关，随时切换
 - **四种模式**：从纯聊天到逐项确认，再到带预算约束的自主运行
 - **无人值守**：定时任务、前台服务、子代理、MCP 远程工具、Skills 技能
@@ -54,7 +57,7 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
    | 模式 | 适合场景 |
    | --- | --- |
    | `Chat` | 纯对话，不碰设备 |
-   | `Chat+` | 只读检索：查通知、读文件、搜网页、问天气 |
+   | `Chat+` | 只读检索：搜网页、App 内搜索、读文件/通知/天气等工具按需加载；独立只读调用可并行 |
    | `Act` | 每个工具调用前逐项确认，第一次让 AI 操作设备时推荐 |
    | `Max` | 自主连续执行，适合多步长任务与定时任务 |
 
@@ -112,16 +115,16 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 **看屏与操作（无障碍 + 视觉）**
 
 - `take_screenshot`、`screen_ocr`（中英文 OCR，带坐标）、`screen_record`（录屏）、`get_screen_state`、`get_foreground_app`
-- `ui_control`：按文字 / 描述模糊查找，点击 / 长按 / 滚动查找 / 输入 / 按键 / 等待出现；一次调用完成「定位 → 操作 → 校验」，操作前后的界面差异作为验证信号
+- `ui_control`：`snapshot` 给可交互元素发短引用（e1、e2…），可按引用或文字点击 / 长按，支持滚动查找、输入、按键、等待、`assert_text`、`read_text`；一次调用完成「定位 → 操作 → 校验」，`sequence` 一次执行不限步数（5 分钟安全预算），失败即停，并把等待/断言限制在剩余预算内
 - `open_app` / `manage_app`（模糊匹配应用名）、`open_settings`（直达系统设置页）、`run_shell`（Shizuku，可选 root 级 shell）
 
 **系统与设备**
 
-`set_volume` · `set_brightness` · `set_flashlight` · `media_control` · `vibrate` · `send_notification` · `read_notifications` · `get_clipboard` / `set_clipboard` · `share_text` · `open_dialer` · `get_location` · `open_map` · `device_info` · `network_status` · `get_app_usage` · `list_installed_apps` · `get_time` · `compute`
+`set_volume` · `set_brightness` · `set_flashlight` · `media_control` · `vibrate` · `send_notification` · `read_notifications` · `get_clipboard` / `set_clipboard` · `share_text` · `open_dialer` · `get_location` · `open_map` · `device_info` · `network_status` · `get_app_usage` · `list_installed_apps` · `compute`
 
 **内容与网络**
 
-`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **个人助理**
 
@@ -129,7 +132,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 
 **Agent 协作**
 
-- `spawn_agent`：子代理独立上下文与预算，可并行发起
+- `spawn_agent`：子代理独立上下文与预算，可并行发起；CHAT+ 中固定为只读研究子代理
 - `plan_update`：计划工件，聊天顶部常驻计划卡，步骤状态实时更新
 - `load_skill`：按需把技能加载为工具
 - `automation`：创建定时 / 电量 / **通知触发**的自动化（收到某 App 的通知时执行）
@@ -138,7 +141,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 ### 自动化、技能与 MCP
 
 - **定时任务**：每日 / 按周调度（系统精确闹钟），前台服务无人值守执行，结束后通知汇报；可开关、立即运行
-- **Skills v2**：YAML recipe 声明式技能，支持 `{{参数}}` 占位符与 parameters schema——录一次、换输入多用；也可以把一次完成的操作序列「保存为技能」
+- **Skills v2**：YAML recipe 声明式技能，支持 `{{参数}}` 占位符与 parameters schema——录一次、换输入多用；聊天菜单可手动「保存为技能」；也可在设置 → 技能里开启「自动保存技能」，只记录成功且至少 2 步的 UI 流程，自动去重并最多保留 20 个。元素引用会先还原成文字再落盘
 - **MCP**：添加远程 Streamable HTTP 服务器，其工具自动并入工具箱
 - **自动化**：定时（每日 / 按周）、电量与**通知**触发（按包名 / 关键词过滤，60 秒冷却），动作序列执行并回报通知
 
@@ -182,7 +185,10 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 | 通讯录 / 位置 | 联系人、位置工具 | 使用时请求 |
 | 闹钟与提醒 | 定时任务（精确闹钟） | 使用时请求 |
 | 所有文件访问 | 文件管理工具 | 按需开启（Android 11+） |
-| Shizuku | 可选：root 级 shell、应用管理 | 自行安装 Shizuku 并授权 |
+| Shizuku | 可选：root 级 shell、应用管理、后台虚拟屏 helper | 自行安装 Shizuku 并授权；有 root 也可 |
+| 无线调试 | 可选：无需 Shizuku 的后台虚拟屏 | 开发者选项 → 无线调试，配对一次；之后尝试自动恢复 |
+
+`场景增强`（设置 → 权限）是独立开关：开启即同意每条聊天请求附带最近一次定位（坐标、精度、时间）和 30 分钟内的天气缓存；关闭时位置仍只按需读取。
 
 ## 隐私
 
@@ -271,7 +277,7 @@ Key 由 Android Keystore 加密（AES-GCM）后存在本机数据库；只有你
 空闲时不驻留任何服务；长任务（Act / Max、定时任务）运行期间用前台服务保持，通知栏可随时停止；屏幕捕获也只在授权后由前台服务持有。
 
 **没有 Shizuku 能用吗？**
-能。绝大多数工具（无障碍、截屏、文件、网络、个人助理）不依赖 Shizuku；它只解锁 `run_shell` 与深度应用管理。
+能。绝大多数工具（无障碍、截屏、文件、网络、个人助理）不依赖 Shizuku；它只解锁 `run_shell` 与深度应用管理。后台虚拟屏也可以用系统自带的“无线调试”配对一次，不需要安装 Shizuku。配对后 BAIC2 会通过 ADB shell 取得“修改系统设置”权限，在无线调试被关闭、重启或切换 Wi-Fi 时尝试自动重新打开并重连；如果系统不允许，仍可手动打开或填写端口。
 
 **支持本地模型吗？**
 支持。任何 OpenAI 兼容端点（Ollama、vLLM、LM Studio…）填好 Base URL 即可；明文 HTTP 只放行环回地址。
@@ -281,15 +287,15 @@ Key 由 Android Keystore 加密（AES-GCM）后存在本机数据库；只有你
 
 ## 文档
 
+- [docs/README.md](docs/README.md) — 文档入口与目录
 - [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) — 完整技术剖析：模块架构、请求管线、Agent 循环、工具系统、设备桥、数据层、评测与工程经验（英文）
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 架构原则、模块依赖与工具链决策；决策记录见 [docs/adr/](docs/adr/)
 - [docs/README.en.md](docs/README.en.md) — English README
-- [CHANGELOG.md](CHANGELOG.md) — 每个版本的详细变更
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — 每个版本的详细变更
 
 ## 参与贡献
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
-- [CHANGELOG.md](CHANGELOG.md)：每个版本的详细变更
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) · [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) · [docs/SECURITY.md](docs/SECURITY.md)
 
 ## License
 

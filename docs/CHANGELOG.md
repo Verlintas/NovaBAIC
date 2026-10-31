@@ -2,6 +2,44 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.9-alpha] - 2026-11-01
+
+> Pre-0.4.0：这一版重点是把 Agent 的多步 UI 流程压成一次本地执行，并让后台虚拟屏在 Wi-Fi/ADB 断开后仍能保住已经启动的会话。DB 仍为 v21，工具仍为 57。
+
+### 新增 Added
+
+- **Plan-once UI 流程**：`ui_control` 新增 `snapshot`、`assert_text`、`read_text`；`snapshot` 给可交互元素发短引用（e1、e2…），点击前按标签 + 位置重新校验，屏幕变化后拒绝旧引用。`sequence` 不再限制步数（保留 5 分钟总执行预算），支持任意数量的 tap/type/wait/assert/read/snapshot，失败立即停止并返回已完成步骤。
+- **输入与断言可靠性**：`type` 在刚打开的页面上短暂重试并尝试聚焦搜索框；回车提交后等待内容变化；`assert_text` 忽略仍停留在输入框里的文字，避免搜索词自己满足断言。
+- **App 研究**：`app_research` 增加全 application-window 读取（API 30 Settings 结果行）、可点击结果过滤、`open` / `open_top`、session 复用；同一 session 换 query 时优先在当前结果页重设搜索框，必要时在同一 display 上重启 App；搜索入口结构 view id 写入 App 私有知识卡。
+- **后台虚拟屏**：`ensure()` 先复用已有 helper Binder，再检查 shell 传输；新增设置 → 权限 →「后台虚拟屏保活」前台服务，开启时关闭空闲回收并定期检查，Wi-Fi/ADB 断开后已启动的会话仍可截图/操作（常驻通知，耗电略增）。
+- **内置无线调试**：配对后自授权 `WRITE_SECURE_SETTINGS`，自动重开无线调试；端口按缓存 → 系统属性 → 手动端口 → mDNS → 本机扫描兜底；配对码读取失败时界面仍提供手动端口/重试。无线配对与后台虚拟屏已在真实设备验证。
+- **自动保存技能**：设置 → 技能新增默认关闭的「自动保存技能」。仅记录最终完成且含成功 2 步以上 `ui_control sequence` 的 Act/Max 运行；只保存 DONE 步骤，过滤 memory/plan/观察型调用，按签名去重，最多保留 20 个；疑似密码/验证码/密钥输入跳过；保存技能时把元素引用还原成文字。
+- **CHAT+ 并行**：只读工具与 `spawn_agent` 研究子代理可在同一轮并行；父模式 CHAT+ 时子代理强制只读；`app_research` 用进程级互斥串行化，避免多个子代理抢同一虚拟屏。
+- **设置**：新增「技能」页（自动保存开关）与「后台虚拟屏保活」开关。
+
+### 修复 Fixed
+
+- `ui_control sequence` 失败输出加上总长度上限；等待/断言按剩余预算裁剪。
+- `app_research` 搜索入口不再依赖固定按钮文案，优先 view id/控件结构；登录/验证码/风控页改为 hand-off note，不硬失败。
+- API 30 `isVisibleToUser=false` 导致 RecyclerView 结果行被快照漏掉：改用屏幕内 bounds 判断。
+- 虚拟屏保活：Wi-Fi 关闭后不再因为“没有 shell”拒绝复用已存活 helper。
+- 自动保存技能不再把 `core_memory_update`、`plan_update`、snapshot 等观察步骤写成配方；失败重试步骤不会进入技能。
+
+### 测试 Tests
+
+- API 30（Android 11）与 API 35（Android 15）模拟器：Settings 搜索 → 快照 → 按引用打开结果 → 断言 → 读屏。
+- 真实 Xiaomi 17 Pro Max：内置无线 ADB 配对成功，后台虚拟屏创建/复用/截图成功；关闭 Wi-Fi 后已启动会话仍可复用（旧构建验证）；保活服务在模拟器验证开关、前台服务与 Wi-Fi 关闭后的 capture。
+- 自动保存端到端：真实模型 MAX 运行成功保存 7 步技能；技能内容检查无 memory/plan 污染。
+- 全模块单测、lint、debug/release 构建、许可证头、字符串同步、57 工具 schema、Markdown 链接通过。
+
+### 已知限制 Known limitations
+
+- 真实 OEM 矩阵（三星/OPPO/vivo 等）尚未覆盖；无线调试重启恢复、OEM 拒绝写设置仍需更多真机验证。
+- 截图附件生命周期（删除消息回收、保留期限、敏感页面）仍未完成。
+- 重启后 helper 不会自动复活；安装/更新后需要重新预热。自动保活只保护已启动的会话。
+- 自动保存技能尚未参数化，普通输入文本会写入技能；设置页已提示不要在密码/聊天等敏感流程开启。
+- 无障碍在 MIUI 上可能被 SmartPower 反复 unbind/rebind；失败时回退前台路径。
+
 ## [0.3.1] - 2026-10-30
 
 > 修复 issue #1 的文件访问权限，并完成第二轮全量复审：搜索超时真正可取消、运行隔离、记忆与技能边界收紧。DB 仍为 v21，工具仍为 57。

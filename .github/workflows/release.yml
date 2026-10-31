@@ -76,7 +76,7 @@ jobs:
           files: app/build/outputs/apk/release/*.apk
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
 
       # Release events created with GITHUB_TOKEN do not trigger other
       # workflows, so ask the site deployment to mirror the new APK.

@@ -19,6 +19,7 @@
 
 package com.verlintas.baic2.feature.chat
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -38,6 +39,7 @@ import com.verlintas.baic2.core.engine.AuxiliaryTasks
 import com.verlintas.baic2.core.engine.ConfirmationQueue
 import com.verlintas.baic2.core.engine.QuestionQueue
 import com.verlintas.baic2.core.engine.ToolCatalog
+import com.verlintas.baic2.core.engine.ToolRouter
 import com.verlintas.baic2.core.engine.UserQuestion
 import com.verlintas.baic2.core.engine.renderSystemPrompt
 import com.verlintas.baic2.core.model.Agent
@@ -47,6 +49,7 @@ import com.verlintas.baic2.core.model.Attachment
 import com.verlintas.baic2.core.model.AttachmentKind
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
+import com.verlintas.baic2.core.model.Conversation
 import com.verlintas.baic2.core.model.CoreMemory
 import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.DocumentTextCodec
@@ -70,6 +73,7 @@ import com.verlintas.baic2.core.model.ToolTrust
 import com.verlintas.baic2.device.api.PdfTextExtractor
 import com.verlintas.baic2.device.api.RunNotifier
 import com.verlintas.baic2.device.api.ScreenshotProvider
+import com.verlintas.baic2.device.api.VirtualDisplayBridge
 import com.verlintas.baic2.core.data.prefs.AppLocaleStore
 import com.verlintas.baic2.core.model.AppLanguage
 import com.verlintas.baic2.device.api.SpeechFailure
@@ -77,8 +81,12 @@ import com.verlintas.baic2.device.api.SpeechInputBridge
 import com.verlintas.baic2.device.api.SpeechSession
 import com.verlintas.baic2.device.api.SpeechSessionEvent
 import com.verlintas.baic2.device.api.SpeechOutput
+import com.verlintas.baic2.tools.context.SceneContextProvider
 import com.verlintas.baic2.tools.skills.SkillRepository
+import com.verlintas.baic2.tools.skills.isReplayableSequence
+import com.verlintas.baic2.tools.skills.shouldAutoSaveSkill
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -94,6 +102,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -105,12 +114,30 @@ data class StreamingState(
     val thinking: String = "",
 )
 
+/** Ephemeral, human-readable agent activity used instead of tool cards. */
+data class ActivityHint(
+    val kind: Kind,
+    val appLabel: String? = null,
+) {
+    enum class Kind {
+        USING_APP,
+        OPENING_APP,
+        MANAGING_APP,
+        READING_SCREEN,
+        SEARCHING_WEB,
+        READING_WEB,
+        READING_FILES,
+        WORKING,
+    }
+}
+
 data class ChatUiState(
     val title: String = "",
     val mode: AppMode = AppMode.CHAT,
     val messages: List<ChatMessage> = emptyList(),
     val streamingText: String = "",
     val streamingThinking: String = "",
+    val activityHint: ActivityHint? = null,
     val isRunning: Boolean = false,
     val error: ChatError? = null,
     val contextUsedTokens: Long? = null,
@@ -155,6 +182,7 @@ data class ExportLabels(
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val conversationRepository: ConversationRepository,
     private val agentRepository: AgentRepository,
     private val runRepository: RunRepository,
@@ -168,6 +196,7 @@ class ChatViewModel @Inject constructor(
     private val speechOutput: SpeechOutput,
     private val speechInput: SpeechInputBridge,
     private val screenshotProvider: ScreenshotProvider,
+    private val virtualDisplay: VirtualDisplayBridge,
     private val pdfTextExtractor: PdfTextExtractor,
     private val runNotifier: RunNotifier,
     private val confirmationQueue: ConfirmationQueue,
@@ -175,6 +204,7 @@ class ChatViewModel @Inject constructor(
     private val planRepository: PlanRepository,
     private val skillRepository: SkillRepository,
     private val settingsRepository: SettingsRepository,
+    private val sceneContext: SceneContextProvider,
     private val localeStore: AppLocaleStore,
     private val json: Json,
     savedStateHandle: SavedStateHandle,
@@ -190,6 +220,7 @@ class ChatViewModel @Inject constructor(
     private val attachmentError = MutableStateFlow<AttachmentError?>(null)
     private val confirmation = MutableStateFlow<ToolCall?>(null)
     private val notice = MutableStateFlow<String?>(null)
+    private val activityHint = MutableStateFlow<ActivityHint?>(null)
 
     /** A mid-run question from the agent, answered through [respondQuestion]. */
     private val _pendingQuestion = MutableStateFlow<UserQuestion?>(null)
@@ -320,6 +351,7 @@ class ChatViewModel @Inject constructor(
         val isRunning: Boolean,
         val error: ChatError?,
         val agents: List<Agent>,
+        val activityHint: ActivityHint?,
     )
 
     private data class ViewExtras(
@@ -337,8 +369,13 @@ class ChatViewModel @Inject constructor(
         conversationRepository.observeConversation(conversationId),
         conversationRepository.observeMessages(conversationId),
         streaming,
-        combine(running, error, agentRepository.observeAgents()) { isRunning, currentError, agents ->
-            SessionInfo(isRunning, currentError, agents)
+        combine(
+            running,
+            error,
+            agentRepository.observeAgents(),
+            activityHint,
+        ) { isRunning, currentError, agents, hint ->
+            SessionInfo(isRunning, currentError, agents, hint)
         },
         combine(
             auxBusy,
@@ -357,6 +394,7 @@ class ChatViewModel @Inject constructor(
         val mode = conversation?.mode ?: AppMode.CHAT
         val agent = session.agents.firstOrNull { it.id == conversation?.agentId }
             ?: session.agents.firstOrNull { it.isDefault }
+        val lastUser = messages.lastOrNull { it.role == ChatRole.USER }?.content
         val estimated = TokenEstimator.estimate(
             messages = messages,
             systemPrompt = renderSystemPrompt(
@@ -365,7 +403,7 @@ class ChatViewModel @Inject constructor(
                 extras.plan?.render(),
                 MemoryPrompt.context(extras.core, emptyList(), System.currentTimeMillis()),
             ),
-            toolSpecs = toolCatalog.specs(mode),
+            toolSpecs = ToolRouter.route(mode, toolCatalog.specs(mode), lastUser),
             streamingText = stream.text,
         )
         val reported = messages.asReversed()
@@ -378,6 +416,7 @@ class ChatViewModel @Inject constructor(
             messages = messages,
             streamingText = stream.text,
             streamingThinking = stream.thinking,
+            activityHint = session.activityHint,
             isRunning = session.isRunning,
             error = session.error,
             contextUsedTokens = (reported ?: estimated).takeIf { it > 0 },
@@ -470,6 +509,29 @@ class ChatViewModel @Inject constructor(
                 wasForeground = foreground
             }
         }
+    }
+
+    /**
+     * Opt-in skill capture. Only a completely successful Act/Max run that
+     * contains at least one 2+ step ui_control sequence is recorded, so a
+     * one-off chat turn never floods the library. Failures are swallowed:
+     * skill bookkeeping must never break the reply.
+     */
+    private suspend fun maybeAutoSaveSkill(conversation: Conversation, runStartedAt: Long) {
+        val enabled = runCatching { settingsRepository.autoSaveSkills.first() }
+            .getOrDefault(false)
+        if (!enabled) return
+        val messages = runCatching { conversationRepository.getMessages(conversationId) }
+            .getOrNull() ?: return
+        val calls = messages.asSequence()
+            .filter {
+                it.role == ChatRole.ASSISTANT && it.createdAt >= runStartedAt &&
+                    it.toolCalls.isNotEmpty()
+            }
+            .flatMap { it.toolCalls.asSequence() }
+            .toList()
+        if (!shouldAutoSaveSkill(calls)) return
+        runCatching { skillRepository.saveAutoFromToolCalls(conversation.title, calls) }
     }
 
     /** Config lookup that never raises UI errors (background tasks). */
@@ -878,6 +940,14 @@ class ChatViewModel @Inject constructor(
             now = turnNow,
             status = memoryRepository.memoryStatus(previousActivity),
         )
+        // Scene enhancement is explicit consent: only then do we read the
+        // last known fix (never a background request) or reuse a fresh
+        // weather snapshot cached by a deliberate get_weather call.
+        val scene = if (settingsRepository.sceneEnhancement.first()) {
+            sceneContext.snapshot()
+        } else {
+            null
+        }
         // Tasks record agentic work only: plain Chat / Chat+ turns are not runs.
         val agentic = conversation.mode.requiresConfirmation || conversation.mode == AppMode.MAX
         val runId: Long? = if (agentic) {
@@ -902,6 +972,8 @@ class ChatViewModel @Inject constructor(
         var failed = false
         var roundsUsed = 0
         var toolCallsUsed = 0
+        var virtualResearchUsed = false
+        var sawUiSequence = false
         val runStartedAt = System.currentTimeMillis()
 
         try {
@@ -915,10 +987,13 @@ class ChatViewModel @Inject constructor(
                 memoryContext = memoryContext,
                 triggerMessageId = history.lastOrNull { it.role == ChatRole.USER }?.id,
                 primedNoteIds = primed.map { it.id }.toSet(),
+                runtimeLocation = scene?.location,
+                runtimeWeather = scene?.weather,
             ).collect { event ->
                 when (event) {
                     is AgentEvent.RoundStarted -> {
                         if (event.round > 1) streaming.value = StreamingState()
+                        activityHint.value = null
                         roundsUsed = maxOf(roundsUsed, event.round)
                         pendingCalls = emptyList()
                     }
@@ -930,6 +1005,7 @@ class ChatViewModel @Inject constructor(
                         streaming.update { it.copy(thinking = it.thinking + event.text) }
 
                     is AgentEvent.AssistantMessage -> {
+                        activityHint.value = null
                         val storedId = conversationRepository.append(
                             event.message.copy(
                                 conversationId = conversationId,
@@ -942,6 +1018,7 @@ class ChatViewModel @Inject constructor(
                     }
 
                     is AgentEvent.ToolCallStarted -> {
+                        activityHint.value = activityHintFor(event.call)
                         pendingCalls = pendingCalls.map { call ->
                             if (call.id == event.call.id) {
                                 event.call.copy(status = ToolCallStatus.RUNNING)
@@ -961,6 +1038,17 @@ class ChatViewModel @Inject constructor(
                             event.call.status == ToolCallStatus.FAILED
                         ) {
                             toolCallsUsed++
+                        }
+                        if (event.call.name == "app_research") {
+                            virtualResearchUsed =
+                                event.call.status == ToolCallStatus.DONE &&
+                                event.call.result?.startsWith("Mode: virtual display") == true
+                        }
+                        if (event.call.name == "ui_control" &&
+                            event.call.status == ToolCallStatus.DONE &&
+                            isReplayableSequence(event.call)
+                        ) {
+                            sawUiSequence = true
                         }
                         pendingCalls = pendingCalls.map { call ->
                             if (call.id == event.call.id) event.call else call
@@ -1012,6 +1100,9 @@ class ChatViewModel @Inject constructor(
                                     conversationId,
                                 )
                             }
+                        }
+                        if (agentic && sawUiSequence) {
+                            maybeAutoSaveSkill(conversation, runStartedAt)
                         }
                     }
 
@@ -1081,6 +1172,7 @@ class ChatViewModel @Inject constructor(
             runId?.let { runRepository.finish(it, RunState.FAILED, roundsUsed, toolCallsUsed) }
         } finally {
             running.value = false
+            activityHint.value = null
             streaming.value = StreamingState()
             confirmation.value = null
             // A timed-out question must not keep an unanswerable dialog around.
@@ -1090,6 +1182,10 @@ class ChatViewModel @Inject constructor(
                 runNotifier.setStopHandler(null)
                 ownsRunNotification = false
             }
+        }
+
+        if (!failed && agentic && virtualResearchUsed) {
+            assistantMessageId?.let { id -> quietly { attachRunScreenshot(id) } }
         }
 
         if (!failed) {
@@ -1117,6 +1213,61 @@ class ChatViewModel @Inject constructor(
                 auxBusy.value = false
             }
         }
+    }
+
+    /**
+     * Attaches the last virtual-display frame to the final assistant message
+     * so Act/Max runs leave a visual receipt. Best-effort: capture failures do
+     * not affect the answer.
+     */
+    private suspend fun attachRunScreenshot(messageId: Long) {
+        val bytes = virtualDisplay.capture().getOrNull() ?: return
+        val attachment = attachmentProcessor
+            .importImageBytes(bytes, "run-${System.currentTimeMillis()}.png")
+            .getOrNull() ?: return
+        val message = conversationRepository.getMessages(conversationId)
+            .firstOrNull { it.id == messageId } ?: return
+        conversationRepository.updateAttachments(messageId, message.attachments + attachment)
+    }
+
+    private fun activityHintFor(call: ToolCall): ActivityHint {
+        val args = runCatching { org.json.JSONObject(call.argumentsJson) }.getOrNull()
+        val app = listOf("app", "package", "name")
+            .firstNotNullOfOrNull { key ->
+                args?.optString(key)?.trim()?.takeIf { it.isNotBlank() }
+            }
+            ?.let(::shortAppLabel)
+        return when (call.name) {
+            "app_research", "ui_control" ->
+                ActivityHint(ActivityHint.Kind.USING_APP, app)
+            "open_app" ->
+                ActivityHint(ActivityHint.Kind.OPENING_APP, app)
+            "manage_app" ->
+                ActivityHint(ActivityHint.Kind.MANAGING_APP, app)
+            "screen_ocr" ->
+                ActivityHint(ActivityHint.Kind.READING_SCREEN)
+            "web_search" ->
+                ActivityHint(ActivityHint.Kind.SEARCHING_WEB)
+            "web_read" ->
+                ActivityHint(ActivityHint.Kind.READING_WEB)
+            "files", "file_write", "ocr_file" ->
+                ActivityHint(ActivityHint.Kind.READING_FILES)
+            else -> ActivityHint(ActivityHint.Kind.WORKING)
+        }
+    }
+
+    private fun shortAppLabel(value: String): String {
+        val raw = value.trim()
+        if (raw.contains('.')) {
+            runCatching {
+                val pm = appContext.packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(raw, 0)).toString()
+            }.getOrNull()?.takeIf { it.isNotBlank() }?.let { return it.take(40) }
+        }
+        val leaf = if (raw.contains('.')) raw.substringAfterLast('.') else raw
+        return leaf.replace('_', ' ')
+            .take(40)
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
     private suspend fun quietly(block: suspend () -> Unit) {
@@ -1180,6 +1331,11 @@ class ChatViewModel @Inject constructor(
                 message
             }
             if (aged.attachments.isEmpty()) return@map aged
+            // Assistant attachments are UI receipts (e.g. the background
+            // screenshot); they must never become model input on later turns.
+            if (aged.role == ChatRole.ASSISTANT) {
+                return@map aged.copy(attachments = emptyList())
+            }
             if (aged.id == lastUserId) {
                 aged.copy(
                     attachments = aged.attachments.map { attachmentProcessor.withBase64(it) },
@@ -1462,7 +1618,11 @@ class ChatViewModel @Inject constructor(
                 "",
                 planRepository.getPlan(conversationId)?.render(),
             ),
-            toolSpecs = toolCatalog.specs(mode),
+            toolSpecs = ToolRouter.route(
+                mode,
+                toolCatalog.specs(mode),
+                messages.lastOrNull { it.role == ChatRole.USER }?.content,
+            ),
         )
         val reported = messages.asReversed().firstOrNull { it.usageInput != null }?.usageInput
         val used = reported ?: estimated

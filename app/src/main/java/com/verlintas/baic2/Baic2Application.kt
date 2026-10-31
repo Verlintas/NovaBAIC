@@ -20,13 +20,19 @@
 package com.verlintas.baic2
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.data.repository.RunRepository
+import com.verlintas.baic2.device.api.VirtualDisplayBridge
+import com.verlintas.baic2.device.api.WirelessAdbBridge
 import com.verlintas.baic2.mcp.McpManager
 import com.verlintas.baic2.tools.automation.AutomationBootstrap
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @HiltAndroidApp
@@ -41,14 +47,42 @@ class Baic2Application : Application() {
     @Inject
     lateinit var runRepository: RunRepository
 
+    @Inject
+    lateinit var settings: SettingsRepository
+
+    @Inject
+    lateinit var wirelessAdb: WirelessAdbBridge
+
+    @Inject
+    lateinit var virtualDisplay: VirtualDisplayBridge
+
     override fun onCreate() {
         super.onCreate()
         runCatching { automationBootstrap.start() }
+        runCatching { wirelessAdb.start() }
+        CoroutineScope(Dispatchers.IO).launch {
+            // Prewarm the resident helper so the first research request does
+            // not pay the app_process/VirtualDisplay cold start.
+            runCatching { if (virtualDisplay.available()) virtualDisplay.ensure() }
+        }
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { mcpManager.refresh() }
         }
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { runRepository.cancelStaleRuns() }
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                if (settings.keepDisplayAlive.first()) {
+                    ContextCompat.startForegroundService(
+                        this@Baic2Application,
+                        Intent(
+                            this@Baic2Application,
+                            VirtualDisplayKeepAliveService::class.java,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

@@ -13,3 +13,13 @@
 # SnakeYAML references desktop java.beans introspection we never use.
 -dontwarn java.beans.**
 -keep class org.yaml.snakeyaml.** { *; }
+
+# Loaded by name via app_process as the resident virtual-display helper.
+-keep class com.verlintas.baic2.device.impl.display.DisplayHelperMain { *; }
+
+# Wireless debugging: Conscrypt is selected by reflection in libadb, and the
+# ADB/Spake2/BouncyCastle stacks are used through reflection or JCA lookups.
+-keep class org.conscrypt.** { *; }
+-keep class io.github.muntashirakon.adb.** { *; }
+-keep class io.github.muntashirakon.crypto.spake2.** { *; }
+-keep class org.bouncycastle.** { *; }

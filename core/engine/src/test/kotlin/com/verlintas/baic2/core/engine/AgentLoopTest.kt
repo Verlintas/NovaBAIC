@@ -462,6 +462,39 @@ class AgentLoopTest {
     }
 
     @Test
+    fun parallelSafeReadsRunConcurrentlyInChatPlus() = runTest {
+        val first = ToolCall(id = "c1", name = "web_search", argumentsJson = "{\"query\":\"a\"}")
+        val second = ToolCall(id = "c2", name = "web_read", argumentsJson = "{\"url\":\"https://a\"}")
+        val provider = ScriptedProvider(
+            listOf(toolRound(first, second), textRound("done")),
+        )
+        val running = java.util.concurrent.atomic.AtomicInteger(0)
+        val maxConcurrent = java.util.concurrent.atomic.AtomicInteger(0)
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(name = "web_search", description = "a", readOnly = true, parallelSafe = true),
+                    ToolSpec(name = "web_read", description = "b", readOnly = true, parallelSafe = true),
+                ),
+            ),
+            toolRunner = { _, _ ->
+                val now = running.incrementAndGet()
+                maxConcurrent.updateAndGet { maxOf(it, now) }
+                kotlinx.coroutines.delay(120)
+                running.decrementAndGet()
+                ToolResult.Success("ok")
+            },
+        )
+
+        val events = loop.run(config, AppMode.CHAT_PLUS, history = history).toList()
+
+        assertEquals(2, maxConcurrent.get(), "CHAT+ read-only calls should overlap")
+        assertEquals(2, events.filterIsInstance<AgentEvent.ToolCallFinished>().size)
+        assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
     fun budgetOverrideCapsRounds() = runTest {
         val call = ToolCall(id = "c1", name = "loop_thing", argumentsJson = "{}")
         val loop = AgentLoop(
@@ -520,6 +553,59 @@ class AgentLoopTest {
             prompt.indexOf("Aviiya") < prompt.indexOf("Reasoning policy"),
             "character comes before the policy",
         )
+    }
+
+    @Test
+    fun promptAndOfferedToolsStayStableAcrossRounds() = runTest {
+        val requests = mutableListOf<ChatRequest>()
+        val call = ToolCall(id = "c1", name = "web_read", argumentsJson = "{}")
+        val rounds = listOf(
+            toolRound(call),
+            toolRound(call.copy(id = "c2")),
+            textRound("done"),
+        )
+        var cursor = 0
+        val provider = object : ChatProvider {
+            override fun stream(request: ChatRequest): Flow<StreamEvent> = flow {
+                requests += request
+                rounds.getOrElse(cursor) { emptyList() }.forEach { emit(it) }
+                cursor++
+            }
+        }
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(ToolSpec(name = "web_read", description = "read", readOnly = true)),
+            ),
+            toolRunner = { _, _ -> ToolResult.Success("page") },
+        )
+
+        val events = loop.run(
+            config = config,
+            mode = AppMode.CHAT_PLUS,
+            history = history,
+            planContext = "plan-marker",
+            memoryContext = "memory-marker",
+            runtimeLocation = "location-marker",
+            runtimeWeather = "weather-marker",
+        ).toList()
+
+        assertEquals(AgentEvent.Completed, events.last())
+        assertEquals(1, requests.map { it.systemPrompt }.distinct().size)
+        assertEquals(1, requests.map { request -> request.tools.map { it.name } }.distinct().size)
+        assertTrue(requests.first().tools.any { it.name == "web_read" })
+        val first = requests.first()
+        assertTrue("Current date and time" !in first.systemPrompt)
+        assertTrue("plan-marker" !in first.systemPrompt)
+        assertTrue("memory-marker" !in first.systemPrompt)
+        assertTrue(
+            first.messages.last().content.contains("<runtime_state>"),
+            "volatile state rides the tail, not the cached system prefix",
+        )
+        assertTrue(first.messages.last().content.contains("plan-marker"))
+        assertTrue(first.messages.last().content.contains("memory-marker"))
+        assertTrue(first.messages.last().content.contains("location-marker"))
+        assertTrue(first.messages.last().content.contains("weather-marker"))
     }
 
     @Test

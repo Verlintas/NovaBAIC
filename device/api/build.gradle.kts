@@ -29,6 +29,10 @@ android {
         minSdk = 26
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -39,6 +43,6 @@ dependencies {
     api(project(":core:model"))
     api(libs.kotlinx.coroutines.android)
 
-    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
 }

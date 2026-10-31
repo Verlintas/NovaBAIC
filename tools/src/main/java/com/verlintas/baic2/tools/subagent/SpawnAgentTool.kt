@@ -62,10 +62,13 @@ class SpawnAgentTool @Inject constructor(
     override val spec = ToolSpec(
         name = "spawn_agent",
         description = "Delegate a self-contained task to a sub-agent with its own context and budget. " +
-            "mode=research (read-only tools, default) or mode=max (full tools). Returns the sub-agent's report. " +
-            "Use several spawn_agent calls in one round for parallel work.",
+            "mode=research (read-only tools, default) or mode=max (full tools; clamped to research " +
+            "outside MAX). Returns the sub-agent's report. Use several spawn_agent calls in one " +
+            "round for parallel work; CHAT+ always runs them as read-only research.",
         parametersJson = """{"type":"object","properties":{"task":{"type":"string"},"mode":{"type":"string","enum":["research","max"]}},"required":["task"]}""",
-        readOnly = false,
+        // In CHAT+ this tool is a read-only research delegate: the child mode is
+        // clamped to CHAT_PLUS. In ACT/MAX the read-only flag is not a gate.
+        readOnly = true,
         danger = DangerLevel.MEDIUM,
         parallelSafe = true,
     )

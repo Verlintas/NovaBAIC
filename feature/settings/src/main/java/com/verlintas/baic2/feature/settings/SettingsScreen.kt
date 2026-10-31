@@ -77,6 +77,7 @@ private object SettingsRoute {
     const val AGENTS = "settings_agents"
     const val AGENT_WIZARD = "settings_agent_wizard?agentId={agentId}"
     const val PERMISSIONS = "settings_permissions"
+    const val SKILLS = "settings_skills"
     const val APPEARANCE = "settings_appearance"
     const val LANGUAGE = "settings_language"
     const val STORAGE = "settings_storage"
@@ -120,6 +121,7 @@ fun SettingsScreen(
                 buildInfo = buildInfo,
                 onOpenAgents = { navController.navigate(SettingsRoute.AGENTS) },
                 onOpenPermissions = { navController.navigate(SettingsRoute.PERMISSIONS) },
+                onOpenSkills = { navController.navigate(SettingsRoute.SKILLS) },
                 onOpenAppearance = { navController.navigate(SettingsRoute.APPEARANCE) },
                 onOpenLanguage = { navController.navigate(SettingsRoute.LANGUAGE) },
                 onOpenStorage = { navController.navigate(SettingsRoute.STORAGE) },
@@ -145,6 +147,9 @@ fun SettingsScreen(
         }
         composable(SettingsRoute.PERMISSIONS) {
             PermissionsPage(onBack = { navController.popBackStack() })
+        }
+        composable(SettingsRoute.SKILLS) {
+            SkillsPage(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoute.APPEARANCE) {
             AppearancePage(onBack = { navController.popBackStack() })
@@ -173,6 +178,7 @@ private fun SettingsRoot(
     buildInfo: BuildInfo,
     onOpenAgents: () -> Unit,
     onOpenPermissions: () -> Unit,
+    onOpenSkills: () -> Unit,
     onOpenAppearance: () -> Unit,
     onOpenLanguage: () -> Unit,
     onOpenStorage: () -> Unit,
@@ -233,6 +239,15 @@ private fun SettingsRoot(
                 icon = Icons.Outlined.Lock,
                 showChevron = true,
                 onClick = onOpenPermissions,
+            )
+        }
+        item(key = "skills") {
+            SettingsRow(
+                title = stringResource(R.string.settings_skills_title),
+                summary = stringResource(R.string.settings_skills_summary),
+                icon = Icons.Outlined.Build,
+                showChevron = true,
+                onClick = onOpenSkills,
             )
         }
 

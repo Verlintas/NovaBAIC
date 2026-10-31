@@ -21,7 +21,7 @@ done < <(
 if [ "$missing" -gt 0 ]; then
     echo ""
     echo "$missing file(s) are missing the license header."
-    echo "See CONTRIBUTING.md for the exact header."
+    echo "See docs/CONTRIBUTING.md for the exact header."
     exit 1
 fi
 

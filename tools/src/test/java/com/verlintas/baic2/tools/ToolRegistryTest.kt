@@ -57,7 +57,7 @@ class ToolRegistryTest {
 
     private val registry = ToolRegistry(
         setOf(
-            fakeTool("get_time", readOnly = true),
+            fakeTool("get_weather", readOnly = true),
             fakeTool("open_app", readOnly = false),
             fakeTool("compute", readOnly = true),
         ),
@@ -71,7 +71,7 @@ class ToolRegistryTest {
     @Test
     fun chatPlusExposesOnlyReadOnlyTools() {
         val names = registry.specs(AppMode.CHAT_PLUS).map { it.name }.sorted()
-        assertEquals(listOf("compute", "get_time"), names)
+        assertEquals(listOf("compute", "get_weather"), names)
     }
 
     @Test
