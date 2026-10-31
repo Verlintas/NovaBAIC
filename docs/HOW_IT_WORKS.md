@@ -56,7 +56,7 @@ NovaBAIC/  (Gradle root project: BetterAIChat2)
 │   ├── model/                       # pure Kotlin: ChatMessage, ToolCall, ToolResult, Agent,
 │   │                                #   AppMode, RunBudget, Plan, Skill, ModelCatalog, TokenEstimator…
 │   ├── engine/                      # AgentLoop, AgentEvent, ConfirmationQueue, AuxiliaryTasks
-│   ├── data/                        # Room (v13), repositories, mappers, Keystore crypto,
+│   ├── data/                        # Room (v21), repositories, mappers, Keystore crypto,
 │   │                                #   attachment processor, settings/locale stores
 │   ├── network/                     # SSE parser, three provider adapters, HTTP helpers,
 │   │                                #   ToolCallHistory sanitizer
@@ -318,7 +318,7 @@ data class RunBudget(val maxRounds: Int, val maxToolCalls: Int, val maxWallClock
 
 `Plan` is a first-class artifact — a list of `PlanStep(title, status ∈ PENDING/DOING/DONE/FAILED)` persisted per conversation (primary key `conversationId`), rendered as a live card in chat, and maintained by the `plan_update` tool.
 
-Memory follows the biological division of labour (v0.1.14, DB v15):
+Memory follows the biological division of labour (introduced in v0.1.14 / DB v15, extended through DB v21):
 
 - **Working memory** is the context window. It never grows with history: the always-on block (`CoreMemory`: "about you" + "what's ongoing", both editable) plus at most a few notes primed by the current message. Priming runs three passes: **prospective** (plan/event notes whose `whenAt` is within 7 days, or overdue by up to 30) surface on their own; **entity** priming matches known entity names against the current context ("about 张伟"); then **context-dependent** cue recall ranks keyword hits (`MemoryScoring`: cue hits × importance × pin × retrievability × source × freshness), with cues taken from the current message, the recent user turns and the conversation title.
 - **Episodic memory** is the `messages` table itself — every raw turn, never summarized away. `memory_search` queries it across conversations with cue terms (CJK bigrams + Latin words, filler dropped), optional date bounds, conversation filters and a speaker filter (`role=user` recalls what the person themselves said); ranking weights **user messages double** (`MemoryScoring.messageScore`) so assistant echoes cannot crowd out the user's own traces, with recency breaking ties. Results are compact snippets carrying conversation title, message id and a "3 days ago" phrasing; like notes, each hit states `rank k/N`, its `score`, which cue terms matched (with coverage) and a `weak match` label when coverage is thin. `memory_read` opens the original window around a hit.
@@ -730,12 +730,12 @@ The foreground path is the built-in fallback and needs no external app: it opens
 
 The no-Shizuku shell transport is Android's own Wireless debugging. The app generates a local RSA key and self-signed certificate, pairs through the system "Pair device with pairing code" screen, and then speaks the ADB protocol to the device's `adbd` with Conscrypt TLS. Pairing is user-initiated from Permissions → Wireless debugging; a foreground service reads the six-digit code from the system dialog through the accessibility service, pairs while the dialog is still visible, and stops after three minutes. The key lives in app-private storage. Each shell command uses a fresh connection and a sentinel that is assembled on the device (`M=__BAIC2_; echo ${M}DONE__`), so the echoed command line cannot be mistaken for completion.
 
-After the first successful pairing, the app runs `pm grant <package> android.permission.WRITE_SECURE_SETTINGS` through that same ADB shell. The grant lets it write `Settings.Global.ADB_WIFI_ENABLED` later, so a reboot, a Wi-Fi change or a system toggle-off does not require another manual pairing. Connection candidates are tried in order: last successful port, `service.adb.tls.port` (read reflectively), a port entered by the user, the library's mDNS resolver, and finally a scan of this phone's own loopback/Wi-Fi addresses for the random adbd port; the last good port is cached. The scan never touches other devices on the LAN. A boot receiver and a Wi-Fi/content observer call the same reconnect path. The app states plainly when an OEM refuses the setting write or the system immediately turns the toggle back off; in that case the user can still enable Wireless debugging manually and enter the port.
+After the first successful pairing, the app runs `pm grant <package> android.permission.WRITE_SECURE_SETTINGS` through that same ADB shell. The grant lets it write `Settings.Global.ADB_WIFI_ENABLED` later, so it can try to recover from a reboot, a Wi-Fi change or a system toggle-off without another manual pairing. Connection candidates are tried in order: last successful port, `service.adb.tls.port` (read reflectively), a port entered by the user, the library's mDNS resolver, and finally a scan of this phone's own loopback/Wi-Fi addresses for the random adbd port; the last good port is cached. The scan never touches other devices on the LAN. A boot receiver, a settings observer and a Wi-Fi network callback call the same reconnect path. This recovery is best-effort: on HyperOS, turning Wi-Fi off resets `adb_wifi_enabled` to 0 and clears the TLS port, and the app may not be able to turn it back on until the user opens Wireless debugging again. The app states plainly when an OEM refuses the setting write or the system immediately turns the toggle back off; in that case the user can still enable Wireless debugging manually and enter the port. An already-started virtual display is a local Binder session and can survive the drop, especially with the keepalive service.
 - **Personal**: `search_contacts`, `send_email`, `create_calendar_event`, `reminder`, `transcribe_audio`
 - **Memory**: `memory_search`, `memory_read`, `memory_write`, `memory_forget`, `memory_hold`, `memory_alias`, `core_memory_update`, `memory_overview` (available in every mode)
 - **Agent collaboration**: `spawn_agent`, `plan_update`, `ask_user`, `load_skill`, `automation`
 
-`ui_control` deserves its own paragraph: `action=snapshot` walks every `TYPE_APPLICATION` window, labels the visible interactive elements with short refs (`e1`, `e2`, …), and remembers label + bounds for 5 minutes. A tap/long-press by `ref` re-reads the same label from the current tree and only fires when it still sits within 32 px of the snapshot position; a recycled or scrolled-away item fails with "take a new snapshot" instead of tapping a stale coordinate. Refs are snapshot-scoped and replaced on every snapshot. Targets can also be resolved by fuzzy text matching (`uiMatchScore`: exact → normalized → prefix → substring → label-inside-query → edit distance ≤ 2), falling back to OCR when the accessibility tree lacks the text. It scrolls up to 4 times to find off-screen targets and **scrolls back** if it fails (so the model's mental map stays valid), and verifies each action by comparing foreground package + window title before and after. That verification is why a single `ui_control` call is usually enough instead of a follow-up `screen_ocr`. `action=sequence` chains as many of those actions as the flow needs in one tool call (5-minute safety budget) (each step still verifies itself), and now also supports `assert_text` (a real acceptance check) and `read_text` (bounded screen read). `assert_text` ignores text that is still sitting inside an input field, so the query in a search box cannot satisfy an assertion about the results; `wait_for` remains a lower bar for "the field/page is ready". The sequence stops at the first failure, returns completed steps plus the failure point, and clamps every wait/assert timeout to the remaining 5-minute budget. `type` retries briefly and focuses a visible search field when a just-opened screen has not settled yet, instead of failing on the first rejected `ACTION_SET_TEXT`. This is the main lever for reducing model rounds on multi-step UI tasks.
+`ui_control` deserves its own paragraph: `action=snapshot` walks every `TYPE_APPLICATION` window, labels the visible interactive elements with short refs (`e1`, `e2`, …), and remembers label + bounds for 5 minutes. A tap/long-press by `ref` re-reads the same label from the current tree and only fires when it still sits within 32 px of the snapshot position; a recycled or scrolled-away item fails with "take a new snapshot" instead of tapping a stale coordinate. Refs are snapshot-scoped and replaced on every snapshot. Targets can also be resolved by fuzzy text matching (`uiMatchScore`: exact → normalized → prefix → substring → label-inside-query → edit distance ≤ 2), falling back to OCR when the accessibility tree lacks the text. It scrolls up to 4 times to find off-screen targets and **scrolls back** if it fails (so the model's mental map stays valid), and verifies each action by comparing foreground package + window title before and after. That verification is why a single `ui_control` call is usually enough instead of a follow-up `screen_ocr`. `action=sequence` chains as many of those actions as the flow needs in one tool call (each step still verifies itself, with a 5-minute safety budget), and also supports `assert_text` (a real acceptance check) and `read_text` (bounded screen read). `assert_text` ignores text that is still sitting inside an input field, so the query in a search box cannot satisfy an assertion about the results; `wait_for` remains a lower bar for "the field/page is ready". The sequence stops at the first failure, returns completed steps plus the failure point, and clamps every wait/assert timeout to the remaining 5-minute budget. `type` retries briefly and focuses a visible search field when a just-opened screen has not settled yet, instead of failing on the first rejected `ACTION_SET_TEXT`. This is the main lever for reducing model rounds on multi-step UI tasks.
 
 `files` / `file_write` use MediaStore scopes (Download/Documents) with a smart locate fallback (`report.md` finds `report (1).md`). `run_shell` and `manage_app` run through Shizuku with output caps, timeouts, and a package-name regex whitelist; only `run_shell` is intentionally unrestricted.
 
@@ -916,22 +916,28 @@ The parent receives one `ToolResult.Success` containing the child's final answer
 
 ## 17. Storage: Room, DataStore, Keystore
 
-### 17.1 Room schema (version 13)
+### 17.1 Room schema (version 21)
 
 | Table | Purpose | Notable columns |
 | --- | --- | --- |
 | `agents` | AI service configs | `encryptedApiKey`, provider, baseUrl, model, temperature, maxTokens, reasoning, systemPrompt, isDefault |
 | `conversations` | chats | title, agentId, mode, timestamps |
-| `messages` | transcript | role, content, thinking, thinkingSignature, thinkingMs, toolCallsJson, attachmentsJson, toolCallId, starred, usageInput/Output |
+| `messages` | transcript | role, content, thinking, thinkingSignature, thinkingMs, toolCallsJson, attachmentsJson, toolCallId, toolName, model, starred, usageInput/Output |
 | `runs` | ACT/MAX run records | mode, state, startedAt/updatedAt, roundsUsed, toolCallsUsed |
+| `notes` | semantic memory notes | kind, content, importance, pinned, provenance (`conversationId`, `messageId`), `whenAt`, `expiresAt`, `strength`, `source`, `entities`, `suppressed`, `supersededBy`, `archived` |
+| `note_links` | Hebbian associations between notes | a, b, weight, updatedAt |
+| `note_revisions` | note history | noteId, content, importance, entities, replacedAt |
+| `memory_holds` | "don't record this" promises | content, reason, createdAt |
+| `curator_runs` | consolidation audit log | trigger, window, counts, `parsed`, `error` |
+| `memory_aliases` | alias → entity resolution | alias, entity, createdAt |
+| `core_memory` | always-on core blocks | slot, content, updatedAt |
 | `plans` | one plan per conversation | stepsJson, updatedAt (PK conversationId) |
-| `memories` | distilled facts + snapshots | kind, content |
+| `automations` | trigger → actions | trigger, timeOfDay, daysOfWeekJson, batteryBelow, notification filters (`notificationPackagesJson`, `notificationKeyword`), actionsJson |
+| `mcp_servers` | remote MCP endpoints | url, headersJson, enabled |
 | `message_snapshots` | pre-compression backups | carrierId, keepFromMessageId, payloadJson |
 | `scheduled_tasks` | scheduled agent runs | prompt, mode, agentId, timeOfDay, daysOfWeekJson, nextRunAt, lastResult |
-| `automations` | trigger → actions | trigger, timeOfDay, daysOfWeekJson, batteryBelow, actionsJson |
-| `mcp_servers` | remote MCP endpoints | url, headersJson, enabled |
 
-Migration discipline: every schema change adds an explicit `Migration`, old schema JSONs are exported (`core/data/schemas/*.json`), and there is **no destructive fallback** — a missing migration is a crash in development, never data loss in production. Notable steps: 6→7 usage columns, 7→8 snapshots, 8→9 `DELETE FROM runs WHERE mode NOT IN ('ACT','MAX')`, 9→10 rounds/tool counts, 10→11 scheduled tasks, 11→12 thinking signature, 12→13 thinking duration.
+Migration discipline: every schema change adds an explicit `Migration`, old schema JSONs are exported (`core/data/schemas/*.json`), and there is **no destructive fallback** — a missing migration is a crash in development, never data loss in production. Notable steps: 6→7 usage columns, 7→8 snapshots, 8→9 `DELETE FROM runs WHERE mode NOT IN ('ACT','MAX')`, 9→10 rounds/tool counts, 10→11 scheduled tasks, 11→12 thinking signature, 12→13 thinking duration, 13→14 notes/core memory replace the old `memories` table, 14→15 strength + `note_links`, 15→16 source/entities/suppressed, 16→17 `note_revisions` + `memory_holds`, 17→18 `expiresAt`, 18→19 `curator_runs`, 19→20 `memory_aliases` + `curator_runs.reviewed`, 20→21 notification filters.
 
 ### 17.2 Mappers & serialization
 
@@ -999,7 +1005,7 @@ The threat model is "the model is untrusted and the user grants capabilities exp
 
 Pure JVM modules (`core:model`, `core:engine`, `core:network`, `tools`, `mcp`, `eval`) use `kotlin-test`; Android modules use JUnit. Notable suites:
 
-- `SseParserTest`, three provider adapter tests (39 tests total in `:core:network` at the time of writing) with MockWebServer: fragment accumulation, reasoning fields, usage, retries, auth errors, reasoning round-trips per vendor.
+- `SseParserTest` and the three provider adapter tests with MockWebServer: fragment accumulation, reasoning fields, usage, retries, auth errors, reasoning round-trips per vendor.
 - `ToolCallHistoryTest` — the transcript repair matrix.
 - `ModelContextWindowsTest`, `TokenEstimatorTest`, `RunBudgetTest`, `ScheduledTaskTest`, `UiMatchTest`, `SkillCodecTest`, `ArgumentHealer` behavior inside tool tests, `ScenarioRunnerTest`.
 
@@ -1132,7 +1138,9 @@ Extend `ScenarioCatalog.builtIn()` with rounds/tools/expectations. If the scenar
 - **Memory cues are lexical.** CJK bigrams + Latin words with a stopword layer, no synonyms and no number/date normalisation (`2010-11-23` vs "16 岁") — cross-language and paraphrase recall is what the planned on-device embedding layer is for.
 - **Eval metrics are steps/tools/text size**, not tokens/latency (the intent in ARCHITECTURE.md §5 is broader than the implementation).
 - **No OAuth for MCP**: static headers only.
-- **Real-device gaps**: Shizuku, voice, screen recording, and "All files access" flows are code-verified but need per-device acceptance testing.
+- **Real-device gaps**: Shizuku, voice, screen recording, and "All files access" flows are code-verified but need per-device acceptance testing. Wireless ADB, virtual-display creation/reuse and the keepalive service have been exercised on a Xiaomi 17 Pro Max; the wider OEM matrix is still incomplete.
+- **Wireless-debugging recovery is best-effort**: some OEMs (observed on HyperOS) reset `adb_wifi_enabled` on Wi-Fi loss and expose no TLS port until the user reopens Wireless debugging; the boot/network/settings hooks cannot override that.
+- **Display keepalive protects only a live session**: it disables idle release and re-checks every four minutes, but a reboot, app-process death, or a system kill still requires a new shell; the helper does not resurrect itself.
 - **Platform limits**: Android 14+ projection single-token rules; Android 12+ exact-alarm and FGS-start rules; notification-listener and accessibility can be revoked at any time (tools then return enablement instructions).
 
 ---
@@ -1159,6 +1167,7 @@ Extend `ScenarioCatalog.builtIn()` with rounds/tools/expectations. If the scenar
 - Dev environment: JDK 17, Android SDK 37 platform + build-tools 37.0.0, emulator for UI/behavior, real device for Shizuku/voice/recording.
 - Local mock: `dev/mock-openai-server.py` + `adb reverse tcp:8765 tcp:8765`; `dev/mock-mcp-server.py` + `tcp:8766`.
 - Docs to keep in sync on architectural change: this file, `docs/ARCHITECTURE.md`, `README.md`, `docs/README.en.md`, `docs/CHANGELOG.md`.
+- References: the memory/design sources, the original project and direct dependencies are listed in [README.en.md](README.en.md#references--acknowledgements).
 
 ---
 

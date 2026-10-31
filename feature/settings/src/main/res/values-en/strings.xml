@@ -95,6 +95,8 @@
     <string name="settings_storage_attachments">Attachments</string>
     <string name="settings_storage_screenshots">Screenshots</string>
     <string name="settings_storage_skills">Skills</string>
+    <string name="settings_storage_keep_screenshots">Keep execution screenshots</string>
+    <string name="settings_storage_keep_screenshots_desc">Attach the last background-display frame to a successful Act/Max run; turn off to stop saving receipts</string>
     <string name="settings_storage_cleanup">Cleanup</string>
     <string name="settings_storage_clear_attachments">Clear attachments</string>
     <string name="settings_storage_clear_attachments_desc">Delete cached images and files from all conversations</string>

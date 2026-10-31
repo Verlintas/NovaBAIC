@@ -34,9 +34,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Best-effort re-arm after reboot. The wireless transport holds the pairing
- * key in app-private storage; with WRITE_SECURE_SETTINGS it can turn the
- * system toggle back on and reconnect without another manual pairing.
+ * Best-effort re-arm after reboot or an app update. The wireless transport
+ * holds the pairing key in app-private storage; with WRITE_SECURE_SETTINGS it
+ * can turn the system toggle back on and reconnect without another pairing.
+ * The display keepalive is started even when wireless auto-enable is off, so
+ * an existing session can be re-checked once a transport becomes available.
  */
 @AndroidEntryPoint
 class WirelessBootReceiver : BroadcastReceiver() {
@@ -48,13 +50,17 @@ class WirelessBootReceiver : BroadcastReceiver() {
     lateinit var settings: SettingsRepository
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED || !wireless.autoEnable) return
+        val boot = intent.action == Intent.ACTION_BOOT_COMPLETED
+        val updated = intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        if (!boot && !updated) return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                runCatching { wireless.connect() }
-                runCatching {
-                    if (settings.keepDisplayAlive.first()) {
+                if (boot && wireless.autoEnable) {
+                    runCatching { wireless.connect() }
+                }
+                if (settings.keepDisplayAlive.first()) {
+                    runCatching {
                         ContextCompat.startForegroundService(
                             context,
                             Intent(context, VirtualDisplayKeepAliveService::class.java),

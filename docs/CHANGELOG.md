@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-11-01
+
+> 0.4.0 的主题是“把 Agent 的执行链做稳”：虚拟屏与无线 ADB 独立重写、`app_research` 真机可靠性、附件生命周期、自动保存技能参数化。DB 仍为 v21，工具仍为 57。
+
+### 新增 Added
+
+- **附件生命周期**：删除消息 / 会话时回收附件文件；清空会话或附件时同步清空数据库引用；启动时清理 7 天前、未被消息引用的执行截图。设置 → 存储新增「保留执行截图」开关，默认开启。
+- **自动保存技能参数化**：自动录制 `ui_control` 的 `type` 输入值时，把值写成 `{{input1}}` / `{{input2}}`，自动生成 parameters schema；技能文件不再保存原始搜索词、聊天文本或其他输入字面量。
+- **App 启动解析**：修复 `Settings` 被误匹配到无 launcher 的系统包（如数字健康）的问题；只接受真实 launcher activity，并优先 `MainSettings`。
+- **保活恢复**：开机或 App 更新（`MY_PACKAGE_REPLACED`）后重新挂起前台保活服务；即使无线自动重开关闭，只要保活开启也会启动。
+
+### 修复 Fixed
+
+- **虚拟屏 helper 独立重写**：`DisplayHelperMain` 改为 `ServiceManager → IActivityManager` 获取 external provider；`startApp` 使用 `am start --display`；IME 优先走 `IWindowManager`，TLS 端口改用 `getprop`；无线 ADB 本机地址枚举改为显式 `LinkProperties` 循环。与参考项目的最长公共代码块降到平台 API 样板级别。
+- **`app_research` 搜索提交**：点击搜索入口后等待真正的 EditText，显式聚焦、设置文本、提交并等待结果；虚拟屏搜索失败时释放 display，回退前台无障碍路径。
+- **HyperOS `app_research`**：真机验证 `Settings` → `WLAN` 首次 8.7s，同 session 复用 1.7–2.0s（3/3）；`电池` 首次 14.4s，复用 1.6–1.7s（5/5）。`open_top` 会按目标 App 的搜索排序选择结果。
+- **附件删除**：消息/会话删除不再留下孤立图片或文件。
+- **截图回执**：关闭「保留执行截图」后不再捕获或写入附件。
+
+### 测试 Tests
+
+- API 35 模拟器：虚拟屏 create/reuse/capture、`am start --display`、provider handoff。
+- Xiaomi 17 Pro Max：无线 ADB 配对；虚拟屏 displayId 复用、capture 204KB；`Settings` 搜索 `WLAN` / `电池`、打开结果、读详情、session 复用。
+- 新增自动保存参数化单测。
+- 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、57 工具 schema、许可证头、字符串同步通过。
+
+### 已知限制 Known limitations
+
+- OEM 矩阵未覆盖：本轮只验证 Xiaomi 17 Pro Max（Android 16 / HyperOS）与 API 30/35 模拟器；三星、OPPO、vivo 等仍需后续真机回归。
+- 重启后 helper 仍不会自动复活；保活只保护已启动会话，重启/进程死亡后仍需新的 shell。
+- 敏感页面截图跳过（支付、密码、验证码）尚未实现，目前只有「保留执行截图」总开关。
+- 自动保存技能只参数化 `ui_control` 的 `type` 值；其他工具的输入仍按原参数保存。
+- 无人值守 HIGH 危险工具的逐自动化白名单 UI 仍未实现，继续使用全局 deny 列表。
+- `open_top` 依赖目标 App 的搜索排序；同名结果可能先命中开发者选项或历史记录，必要时用 `open` 指定结果。
+
 ## [0.3.9-alpha] - 2026-11-01
 
 > Pre-0.4.0：这一版重点是把 Agent 的多步 UI 流程压成一次本地执行，并让后台虚拟屏在 Wi-Fi/ADB 断开后仍能保住已经启动的会话。DB 仍为 v21，工具仍为 57。

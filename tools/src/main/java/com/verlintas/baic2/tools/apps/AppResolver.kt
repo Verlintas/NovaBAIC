@@ -19,7 +19,9 @@
 
 package com.verlintas.baic2.tools.apps
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import com.verlintas.baic2.tools.uiDistance
@@ -48,7 +50,7 @@ object AppResolver {
         return pm.getInstalledApplications(PackageManager.MATCH_DISABLED_COMPONENTS)
             .asSequence()
             .filter { app ->
-                !launchableOnly || pm.getLaunchIntentForPackage(app.packageName) != null
+                !launchableOnly || launchIntent(context, app.packageName) != null
             }
             .mapNotNull { app ->
                 val label = pm.getApplicationLabel(app).toString()
@@ -60,6 +62,26 @@ object AppResolver {
             .distinctBy { it.packageName }
             .take(limit)
             .toList()
+    }
+
+    /**
+     * A launch intent for an app. Prefer the package's real launcher activity;
+     * ACTION_MAIN alone is not enough because some system packages (for
+     * example Digital Wellbeing) expose main activities but no launcher.
+     */
+    fun launchIntent(context: Context, packageName: String): Intent? {
+        val pm = context.packageManager
+        pm.getLaunchIntentForPackage(packageName)?.let { return it }
+        val launcher = Intent(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+            .setPackage(packageName)
+        val candidates = pm.queryIntentActivities(launcher, PackageManager.MATCH_DISABLED_COMPONENTS)
+        val preferred = candidates.firstOrNull { it.activityInfo.name == "$packageName.MainSettings" }
+            ?: candidates.firstOrNull()
+            ?: return null
+        return Intent(launcher).setComponent(
+            ComponentName(preferred.activityInfo.packageName, preferred.activityInfo.name),
+        )
     }
 
     fun isSystemApp(context: Context, packageName: String): Boolean = runCatching {

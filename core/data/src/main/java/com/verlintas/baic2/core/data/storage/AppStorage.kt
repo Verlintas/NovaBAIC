@@ -64,6 +64,7 @@ class AppStorage @Inject constructor(
     }
 
     suspend fun clearAttachments() = withContext(Dispatchers.IO) {
+        db.messageDao().clearAllAttachments()
         File(context.filesDir, "attachments").deleteRecursively()
     }
 
@@ -77,6 +78,7 @@ class AppStorage @Inject constructor(
      */
     suspend fun clearConversations() = withContext(Dispatchers.IO) {
         db.withTransaction {
+            db.messageDao().clearAllAttachments()
             db.messageDao().deleteAll()
             db.snapshotDao().deleteAll()
             db.planDao().deleteAll()
@@ -84,6 +86,7 @@ class AppStorage @Inject constructor(
             db.scheduledTaskDao().clearAllConversations()
             db.conversationDao().deleteAll()
         }
+        File(context.filesDir, "attachments").deleteRecursively()
     }
 
     private fun File.directorySize(): Long =

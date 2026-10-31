@@ -122,6 +122,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY id ASC")
     suspend fun getByConversation(conversationId: Long): List<MessageEntity>
 
+    @Query("SELECT * FROM messages")
+    suspend fun getAllOnce(): List<MessageEntity>
+
     /** Newest message of a role strictly before [before], across conversations. */
     @Query("SELECT MAX(createdAt) FROM messages WHERE role = :role AND createdAt < :before")
     suspend fun latestAtBefore(role: String, before: Long): Long?
@@ -146,6 +149,9 @@ interface MessageDao {
 
     @Query("UPDATE messages SET attachmentsJson = :attachmentsJson WHERE id = :id")
     suspend fun updateAttachments(id: Long, attachmentsJson: String)
+
+    @Query("UPDATE messages SET attachmentsJson = '[]' WHERE attachmentsJson != '[]'")
+    suspend fun clearAllAttachments()
 
     @Query("UPDATE messages SET starred = :starred WHERE id = :id")
     suspend fun updateStarred(id: Long, starred: Boolean)

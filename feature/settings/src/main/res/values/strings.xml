@@ -95,6 +95,8 @@
     <string name="settings_storage_attachments">附件</string>
     <string name="settings_storage_screenshots">截图</string>
     <string name="settings_storage_skills">技能</string>
+    <string name="settings_storage_keep_screenshots">保留执行截图</string>
+    <string name="settings_storage_keep_screenshots_desc">成功的 Act/Max 运行结束后，附上最后一张后台虚拟屏截图作为回执；关闭后不再保存</string>
     <string name="settings_storage_cleanup">清理</string>
     <string name="settings_storage_clear_attachments">清理附件</string>
     <string name="settings_storage_clear_attachments_desc">删除所有对话中缓存的图片与文件</string>

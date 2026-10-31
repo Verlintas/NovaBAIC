@@ -133,6 +133,31 @@ class SkillAutoSaveTest {
     }
 
     @Test
+    fun autoStepsParameterizeTypedValues() {
+        val steps = listOf(
+            SkillStep(
+                tool = "ui_control",
+                argsJson = sequence(
+                    """{"action":"tap","text":"Search settings"},""" +
+                        """{"action":"type","value":"display","submit":true},""" +
+                        """{"action":"tap","text":"Search settings"},""" +
+                        """{"action":"type","value":"battery","submit":true}""",
+                ),
+            ),
+        )
+
+        val parameterized = parameterizeAutoSteps(steps)
+        val json = parameterized.steps.single().argsJson
+
+        assertFalse(json.contains("display"))
+        assertFalse(json.contains("battery"))
+        assertTrue(json.contains("{{input1}}"))
+        assertTrue(json.contains("{{input2}}"))
+        assertTrue(parameterized.parametersJson.contains("\"input1\""))
+        assertTrue(parameterized.parametersJson.contains("\"required\""))
+    }
+
+    @Test
     fun credentialFlowsAreNotAutoSaved() {
         val password = call(
             args = sequence("""{"action":"tap","text":"Password"},""" +

@@ -20,6 +20,7 @@
 package com.verlintas.baic2.core.data.repository
 
 import androidx.room.withTransaction
+import com.verlintas.baic2.core.data.attachment.AttachmentProcessor
 import com.verlintas.baic2.core.data.db.Baic2Database
 import com.verlintas.baic2.core.data.db.MessageSearchRow
 import com.verlintas.baic2.core.data.db.SnapshotEntity
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.map
 class ConversationRepository @Inject constructor(
     private val db: Baic2Database,
     private val mapper: ChatMapper,
+    private val attachments: AttachmentProcessor,
 ) {
 
     fun observeConversations(): Flow<List<ConversationPreview>> =
@@ -124,25 +126,37 @@ class ConversationRepository @Inject constructor(
         db.conversationDao().updateMeta(id, agentId, mode.name, System.currentTimeMillis())
     }
 
-    suspend fun delete(id: Long) = db.withTransaction {
-        // Orphans here would leak snapshot payloads and inflate run stats.
-        db.messageDao().deleteAllForConversation(id)
-        db.snapshotDao().deleteForConversation(id)
-        db.planDao().deleteForConversation(id)
-        db.runDao().deleteForConversation(id)
-        // Scheduled tasks must not keep writing into a deleted conversation.
-        db.scheduledTaskDao().clearConversation(id)
-        db.conversationDao().delete(id)
+    suspend fun delete(id: Long) {
+        val messages = db.messageDao().getByConversation(id).map(mapper::messageToModel)
+        db.withTransaction {
+            // Orphans here would leak snapshot payloads and inflate run stats.
+            db.messageDao().deleteAllForConversation(id)
+            db.snapshotDao().deleteForConversation(id)
+            db.planDao().deleteForConversation(id)
+            db.runDao().deleteForConversation(id)
+            // Scheduled tasks must not keep writing into a deleted conversation.
+            db.scheduledTaskDao().clearConversation(id)
+            db.conversationDao().delete(id)
+        }
+        deleteAttachmentFiles(messages)
     }
 
     suspend fun clearMessages(id: Long) {
+        val messages = db.messageDao().getByConversation(id).map(mapper::messageToModel)
         db.messageDao().deleteAllForConversation(id)
+        deleteAttachmentFiles(messages)
     }
 
-    suspend fun deleteMessagesAfter(conversationId: Long, afterMessageId: Long) = db.withTransaction {
-        db.messageDao().deleteAfter(conversationId, afterMessageId)
-        // The last provider report described a history that no longer exists.
-        db.messageDao().clearUsage(conversationId)
+    suspend fun deleteMessagesAfter(conversationId: Long, afterMessageId: Long) {
+        val messages = db.messageDao().getByConversation(conversationId)
+            .filter { it.id > afterMessageId }
+            .map(mapper::messageToModel)
+        db.withTransaction {
+            db.messageDao().deleteAfter(conversationId, afterMessageId)
+            // The last provider report described a history that no longer exists.
+            db.messageDao().clearUsage(conversationId)
+        }
+        deleteAttachmentFiles(messages)
     }
 
     fun observeStarredMessages(): Flow<List<ChatMessage>> =
@@ -160,16 +174,38 @@ class ConversationRepository @Inject constructor(
      * Deletes a message; an assistant message also takes its orphaned tool
      * results with it so the transcript stays protocol-valid.
      */
-    suspend fun deleteMessage(messageId: Long) = db.withTransaction {
-        val entity = db.messageDao().getById(messageId) ?: return@withTransaction
+    suspend fun deleteMessage(messageId: Long) {
+        val entity = db.messageDao().getById(messageId) ?: return
         val message = mapper.messageToModel(entity)
-        db.messageDao().deleteById(messageId)
-        if (message.toolCalls.isNotEmpty()) {
-            // Scoped to the conversation: Gemini synthesises call ids from the
-            // tool name and can collide with other conversations.
-            db.messageDao().deleteByToolCallIds(message.conversationId, message.toolCalls.map { it.id })
+        db.withTransaction {
+            db.messageDao().deleteById(messageId)
+            if (message.toolCalls.isNotEmpty()) {
+                // Scoped to the conversation: Gemini synthesises call ids from
+                // the tool name and can collide with other conversations.
+                db.messageDao().deleteByToolCallIds(
+                    message.conversationId,
+                    message.toolCalls.map { it.id },
+                )
+            }
+            db.messageDao().clearUsage(message.conversationId)
         }
-        db.messageDao().clearUsage(message.conversationId)
+        deleteAttachmentFiles(listOf(message))
+    }
+
+    /** Remove expired run screenshots that no message references any more. */
+    suspend fun pruneScreenshots(olderThanDays: Int): Int {
+        val messages = db.messageDao().getAllOnce().map(mapper::messageToModel)
+        val keep = messages.flatMap { it.attachments }
+            .mapNotNull { it.localPath }
+            .toSet()
+        return attachments.pruneScreenshotFiles(olderThanDays, keep)
+    }
+
+    /** Delete files only after the transaction commits; a DB failure keeps them. */
+    private suspend fun deleteAttachmentFiles(messages: List<ChatMessage>) {
+        messages.flatMap { it.attachments }.forEach { attachment ->
+            attachments.delete(attachment)
+        }
     }
 
     /**

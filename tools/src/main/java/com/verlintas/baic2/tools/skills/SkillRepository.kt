@@ -131,7 +131,8 @@ class SkillRepository @Inject constructor(
         if (containsSensitiveInput(replayCalls)) return@withContext null
         // Snapshot calls are filtered from the recipe, but their labels are
         // still needed to resolve refs in the remaining sequence steps.
-        val steps = buildAutoSteps(calls)
+        val parameterized = parameterizeAutoSteps(buildAutoSteps(calls))
+        val steps = parameterized.steps
         val id = "auto-${skillSignature(steps)}"
         val manifest = File(root, id)
         if (manifest.exists()) {
@@ -145,7 +146,7 @@ class SkillRepository @Inject constructor(
             id = id,
             name = name,
             description = "Auto-saved from a successful multi-step run",
-            tools = listOf(skillTool(id, replayCalls, steps)),
+            tools = listOf(skillTool(id, replayCalls, steps, parameterized.parametersJson)),
         )
         save(skill)
         pruneAutoSkills()
@@ -181,10 +182,12 @@ class SkillRepository @Inject constructor(
         id: String,
         calls: List<ToolCall>,
         steps: List<SkillStep>,
+        parametersJson: String = """{"type":"object","properties":{}}""",
     ): SkillToolDef = SkillToolDef(
         id = id.replace('-', '_'),
         description = "Replays the recorded sequence: ${calls.joinToString(", ") { it.name }}",
         steps = steps,
+        parametersJson = parametersJson,
     )
 
     private fun pruneAutoSkills() {
@@ -339,6 +342,80 @@ internal fun buildAutoSteps(calls: List<ToolCall>): List<SkillStep> {
         steps += SkillStep(tool = call.name, argsJson = args)
     }
     return steps
+}
+
+internal data class ParameterizedSteps(
+    val steps: List<SkillStep>,
+    val parametersJson: String,
+)
+
+/**
+ * Replace literals typed by the original run with {{inputN}} parameters. This
+ * keeps the recipe reusable and prevents personal text (search terms, chat
+ * messages) from being copied into a skill file.
+ */
+internal fun parameterizeAutoSteps(steps: List<SkillStep>): ParameterizedSteps {
+    val names = LinkedHashMap<String, String>()
+    fun nameFor(value: String): String =
+        names.getOrPut(value) { "input${names.size + 1}" }
+
+    fun replaceTypedValue(step: JsonObject): JsonObject {
+        val action = (step["action"] as? JsonPrimitive)?.content?.trim()?.lowercase()
+        if (action != "type") return step
+        val value = (step["value"] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.takeIf { it.isNotBlank() && !it.contains("{{") }
+            ?: return step
+        val parameter = nameFor(value)
+        return JsonObject(step + ("value" to JsonPrimitive("{{${parameter}}}")))
+    }
+
+    val transformed = steps.map { step ->
+        if (step.tool != "ui_control") return@map step
+        val root = runCatching {
+            Json.parseToJsonElement(step.argsJson) as? JsonObject
+        }.getOrNull() ?: return@map step
+        val action = (root["action"] as? JsonPrimitive)?.content?.trim()?.lowercase()
+        val rewritten = when (action) {
+            "type" -> replaceTypedValue(root)
+            "sequence" -> {
+                val sequence = root["steps"] as? JsonArray ?: return@map step
+                val newSteps = sequence.map { element ->
+                    (element as? JsonObject)?.let(::replaceTypedValue) ?: element
+                }
+                JsonObject(root + ("steps" to JsonArray(newSteps)))
+            }
+            else -> return@map step
+        }
+        step.copy(argsJson = rewritten.toString())
+    }
+
+    if (names.isEmpty()) {
+        return ParameterizedSteps(
+            steps = transformed,
+            parametersJson = """{"type":"object","properties":{}}""",
+        )
+    }
+    val properties = JsonObject(
+        names.values.associateWith { name ->
+            JsonObject(
+                mapOf(
+                    "type" to JsonPrimitive("string"),
+                    "description" to JsonPrimitive("Text to type for $name"),
+                ),
+            )
+        },
+    )
+    val required = JsonArray(names.values.map { JsonPrimitive(it) })
+    val schema = JsonObject(
+        mapOf(
+            "type" to JsonPrimitive("object"),
+            "properties" to properties,
+            "required" to required,
+        ),
+    )
+    return ParameterizedSteps(transformed, schema.toString())
 }
 
 /** A single successful ui_control sequence with at least two steps. */

@@ -16,6 +16,7 @@
 
 ## 项目治理
 
+- [Code provenance](CODE_PROVENANCE.md) — 参考项目、虚拟屏实现来源与相似度审计
 - [Contributing](CONTRIBUTING.md) — 开发环境、代码结构、PR 约定
 - [Code of Conduct](CODE_OF_CONDUCT.md) — 社区行为准则
 - [Security model](SECURITY.md) — 威胁模型、信任边界与已实现的防御
@@ -23,6 +24,8 @@
 
 ## 资源
 
+- [参考与致谢](../README.md#参考与致谢) — 实际查阅/引用的资料、原项目、参考项目与关键依赖
+- [References & acknowledgements](README.en.md#references--acknowledgements) — English version
 - [icon.png](icon.png) — 文档图标
 - [screenshots/](screenshots/) — 界面截图
 

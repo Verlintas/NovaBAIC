@@ -117,6 +117,17 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    /** Attach the final virtual-display frame to a successful Act/Max run. */
+    val keepExecutionScreenshots: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEEP_EXECUTION_SCREENSHOTS] ?: true
+    }
+
+    suspend fun setKeepExecutionScreenshots(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEEP_EXECUTION_SCREENSHOTS] = enabled
+        }
+    }
+
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
@@ -124,5 +135,6 @@ class SettingsRepository @Inject constructor(
         val SCENE_ENHANCEMENT = booleanPreferencesKey("scene_enhancement")
         val AUTO_SAVE_SKILLS = booleanPreferencesKey("auto_save_skills")
         val KEEP_DISPLAY_ALIVE = booleanPreferencesKey("keep_display_alive")
+        val KEEP_EXECUTION_SCREENSHOTS = booleanPreferencesKey("keep_execution_screenshots")
     }
 }

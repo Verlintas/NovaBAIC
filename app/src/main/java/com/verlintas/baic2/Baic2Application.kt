@@ -23,6 +23,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.verlintas.baic2.core.data.prefs.SettingsRepository
+import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.RunRepository
 import com.verlintas.baic2.device.api.VirtualDisplayBridge
 import com.verlintas.baic2.device.api.WirelessAdbBridge
@@ -51,6 +52,9 @@ class Baic2Application : Application() {
     lateinit var settings: SettingsRepository
 
     @Inject
+    lateinit var conversations: ConversationRepository
+
+    @Inject
     lateinit var wirelessAdb: WirelessAdbBridge
 
     @Inject
@@ -70,6 +74,11 @@ class Baic2Application : Application() {
         }
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { runRepository.cancelStaleRuns() }
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            // Execution screenshots are UI receipts, not transcripts. Keep a
+            // bounded window and reclaim files that no message references.
+            runCatching { conversations.pruneScreenshots(7) }
         }
         CoroutineScope(Dispatchers.IO).launch {
             runCatching {

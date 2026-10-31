@@ -1,7 +1,7 @@
 # Agent 效率与隐式交互路线图
 
 > 状态：进行中
-> 基线：v0.3.9-alpha（Pre-0.4.0）
+> 基线：v0.4.0
 > 最后更新：2026-11-01
 > 原则：版本、CHANGELOG、官网与 release 说明统一在“发”之前处理。
 
@@ -59,7 +59,7 @@
 - 内置无线调试已在真实 Xiaomi 17 Pro Max 完成配对、后台虚拟屏与 Wi-Fi 关闭后的会话复用；重启恢复、OEM 拒绝写设置仍需更多真机验证。
 - 无线端口扫描已实现，但只在 JVM 单测和模拟器上验证；真机上的扫描耗时、OEM 网络限制仍待测。
 - 前台输入已增加焦点重试与提交后内容等待；MIUI 无障碍仍可能被 SmartPower 反复解绑，失败会回退前台。
-- v0.3.9-alpha 已发布；剩余项见下方发布门禁与后续优化。
+- v0.4.0 已发布；剩余项见下方发布门禁与后续优化。
 
 ## 2. 设计原则
 
@@ -485,6 +485,7 @@ data class AppKnowledge(
 - 2026-10-31：CHAT+ 只读并行落地。`AgentLoop` 对 CHAT+ 中全部 `parallelSafe` 且 gate Allow 的调用并行执行，结果仍按原顺序写回；单测验证两个只读调用重叠执行。
 - 2026-10-31：去掉 `app_research` 的搜索/UI 文案硬编码。搜索入口先按 view id（含 `search`）识别，失败才用 `tools` 资源数组里的本地化标签；动作词、开关前缀、登录/验证码/风控词也全部资源化（默认英文 + 中文）。模拟器英文 Settings 验证通过；中文 Settings 在英文 App 语言下也能靠 view id 找到入口。
 - 2026-10-31：`ui_control` 增加 `sequence`：一次调用不限步数（5 分钟安全预算），逐步校验，失败即停；用于把“搜索 → 点结果 → 读详情”等多步 UI 流程压成一轮模型调用。
+- 2026-11-01：v0.4.0 收版。虚拟屏 helper / provider 交接 / 无线 ADB 本机枚举独立重写；`app_research` 增加 EditText 聚焦与提交重试，虚拟屏搜索失败回退前台；修复 Settings 误匹配数字健康包；附件删除/7 天截图清理/保留截图开关；自动保存技能把输入值参数化；开机和 App 更新后重挂保活。真机：`Settings` → `WLAN` 首次 8.7s、同 session 1.7–2.0s（3/3）；`电池` 首次 14.4s、复用 1.6–1.7s（5/5）；虚拟屏 capture 204KB。
 - 2026-11-01：虚拟屏本地会话复用与保活。`ensure()` 先检查已有 helper Binder，再检查 shell 传输；实测 Wi-Fi 关闭后 `adb_wifi_enabled=0`、无 TLS 端口，helper 仍存活，`ensure/capture` 继续成功。新增设置 → 权限 → 「后台虚拟屏保活」前台服务；开启时关闭空闲回收，并每 4 分钟 ensure 一次；常驻通知、耗电略增，重启后等待新的 shell。真实设备验证（旧测试构建，未含保活服务）：Wi-Fi 关闭后 `adb_wifi_enabled=0`，helper 仍存活，displayId=8 复用成功，capture 约 215KB；保活服务在 API 35 模拟器验证：开关开启后前台服务运行，关闭 Wi-Fi 后 helper 仍在，`ensure/capture` 成功。测试包已卸载。
 - 2026-10-31：虚拟屏预热落地。App 启动时若已有可用 shell 传输（Shizuku/root/无线），后台调用 `ensure()` 预热 helper；每次 ensure/capture/动作刷新 10 分钟 idle 计时，空闲自动释放。API 35 实测：冷启动首调约 12.2s，预热后首调约 4.2s。
 - 2026-10-31：API 30 模拟器（Android 11）前台路径验证。Settings 搜索结果分布在多个 application window；`app_research` 增加 all-application-window 读取、系统窗口过滤、可点击结果过滤和搜索结果等待。API 30 `battery` + `open_top` 成功打开 `Battery optimization`；API 35 虚拟屏回归通过。
@@ -496,12 +497,11 @@ data class AppKnowledge(
 - 2026-10-31：`app_research` session 支持换 query。session 记录是否停在详情页：结果页先尝试搜索节点/本地化搜索控件/可编辑节点并重新提交；详情页或找不到搜索框时在同一虚拟屏上重启目标 App，避免不可靠的返回键把虚拟屏置空。模拟器验证：Settings `battery` → `display` 成功返回 `Display size and text` 等结果，耗时约 8.6–9.4s（首次约 8.8s，省去 display/helper 重建但收益有限）；同 query 复用仍约 2.3s。Settings 的结果页搜索框位于独立窗口，当前 fast path 常回落到“同一 display 重启 App”；后续需用 App 知识卡记录搜索入口/返回路径，而不是依赖 active root 查找。
 - 2026-10-31：结构化快照与元素引用落地。`ui_control snapshot` 跨 `TYPE_APPLICATION` 窗口列出带标签的可交互元素，分配 `e1…` 引用；引用 5 分钟过期、下次快照覆盖，点击前按标签 + 32px 位置重新校验，屏幕变化后拒绝旧引用而不是盲点。保存技能时优先用本次运行的快照结果把引用还原成文字，避免回放依赖瞬时句柄；设置 → 技能新增默认关闭的「自动保存技能」，只对最终完成、含成功 2 步以上 `ui_control sequence` 的 Act/Max 运行生效；失败的重试步骤会被跳过，自动去重并最多保留 20 个。`sequence` 新增 `assert_text` / `read_text`，不限步数、5 分钟安全预算，等待/断言按剩余预算裁剪；`type` 在刚打开的页面上短暂重试并尝试聚焦搜索框。API 35 模拟器验证：Settings 搜索 → 输入 battery → 等待 → 快照 → 按 e6 引用打开 `Battery Saver` → 断言 `Extreme Battery Saver` → 读屏，7 步约 2.8s；首次复测暴露的输入过早问题已由重试 + 提交后内容等待修复。API 30 验证同一流程（断言 `Turn on now`）7 步约 1.8s，快照 25 个元素；同时修掉 API 30 `isVisibleToUser=false` 导致 RecyclerView 结果行被快照漏掉的问题，改用屏幕内 bounds 判断。
 
-## 17. v0.3.9-Alpha / Pre-0.4.0 发布门禁
+## 17. v0.4.0 / 稳定性发布门禁
 
-- **只在功能开发完成、只剩测试和收尾时发布**；当前不 bump 版本。
-- `v0.3.9-Alpha` 是 Pre-0.4.0，允许在模拟器 + 少量真机上发布，前提是构建/单测/lint/核心流程通过，已知问题明确写入 release notes；不把完整 OEM 矩阵作为 Alpha 门槛。
-- 完整 OEM 矩阵（Pixel/三星/小米/OPPO/vivo，Android 11–16）作为 0.4.0 正式版门槛。
-- Alpha 前完成：真实设备/OEM 上的无线调试重启恢复、前台路径重复回归、`ui_control sequence` 与并行子 Agent 真实模型验证、截图/附件生命周期至少完成代码收尾。
-- 版本目标：`0.3.9-Alpha`，更新 `versionName`、`versionCode`、CHANGELOG、README/docs、release notes。
+- **只在功能开发完成、只剩测试和收尾时发布**。
+- `v0.4.0` 以 Xiaomi 17 Pro Max（Android 16 / HyperOS）+ API 30/35 模拟器为实际覆盖；完整 OEM 矩阵（Pixel/三星/OPPO/vivo）暂不作为本轮门槛，后续继续补。
+- 0.4.0 前完成：虚拟屏/无线 ADB 独立实现、`app_research` 真机搜索与 session 复用、附件删除/截图保留策略、自动保存技能参数化、开机/更新保活重挂。
+- 版本目标：`0.4.0`，更新 `versionName`、`versionCode`、CHANGELOG、README/docs、release notes。
 - 发布说明只描述本项目自己的实现与依赖许可；不追加参考仓库链接，不复制第三方代码。
 - 发布门禁：全量测试、lint、debug/release、57 工具 schema、许可证头、字符串同步、release helper `app_process` 加载、APK SHA-256。

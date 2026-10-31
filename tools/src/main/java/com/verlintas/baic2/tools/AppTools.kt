@@ -49,14 +49,13 @@ class OpenAppTool : DeviceTool {
             ?: (arguments["name"] as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotBlank() }
             ?: return ToolResult.Failure("Provide 'name' (app label) or 'package'")
 
-        val pm = context.appContext.packageManager
         val matches = AppResolver.resolve(context.appContext, query, launchableOnly = true)
         val best = matches.firstOrNull()
             ?: return ToolResult.Failure(
                 "No launchable app matches '$query'. Use list_installed_apps to see what is installed.",
             )
 
-        val launchIntent = pm.getLaunchIntentForPackage(best.packageName)
+        val launchIntent = AppResolver.launchIntent(context.appContext, best.packageName)
             ?: return ToolResult.Failure("'${best.label}' (${best.packageName}) has no launchable activity.")
         return try {
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

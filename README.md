@@ -32,7 +32,7 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
 
 - **真操作设备**：57 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理、内置无线调试与 Shizuku shell
 - **隐式执行提示**：Act/Max 不逐条罗列工具调用，运行中显示“Using WeChat…”，结束后折叠为动作摘要；成功使用后台虚拟屏的运行会在回复里附上最后一张截图
-- **后台屏预热与保活**：App 启动时在可用传输存在的情况下提前启动虚拟屏 helper，10 分钟无活动自动回收；设置 → 权限里可开启「后台虚拟屏保活」，用一个可选的前台服务关闭空闲回收并定期 ensure，Wi-Fi/ADB 断开后已启动的会话仍可用（常驻通知，耗电略增）
+- **后台屏预热与保活**：App 启动时若已有可用传输，会提前启动虚拟屏 helper；默认 10 分钟无活动自动回收。设置 → 权限可开启「后台虚拟屏保活」：开启后关闭空闲回收并每 4 分钟检查一次，Wi-Fi/ADB 断开后已启动的会话仍可截图/操作（常驻通知，耗电略增；重启后仍需先恢复 shell）
 - **跨语言界面**：App 内搜索优先按资源 id/控件结构识别，不依赖“搜索/搜寻/discover”这类按钮文案；本地化词表只是兜底
 - **不锁定模型**：DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / 任意兼容网关，随时切换
 - **四种模式**：从纯聊天到逐项确认，再到带预算约束的自主运行
@@ -141,7 +141,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 ### 自动化、技能与 MCP
 
 - **定时任务**：每日 / 按周调度（系统精确闹钟），前台服务无人值守执行，结束后通知汇报；可开关、立即运行
-- **Skills v2**：YAML recipe 声明式技能，支持 `{{参数}}` 占位符与 parameters schema——录一次、换输入多用；聊天菜单可手动「保存为技能」；也可在设置 → 技能里开启「自动保存技能」，只记录成功且至少 2 步的 UI 流程，自动去重并最多保留 20 个。元素引用会先还原成文字再落盘
+- **Skills v2**：YAML recipe 声明式技能，支持 `{{参数}}` 占位符与 parameters schema——录一次、换输入多用；聊天菜单可手动「保存为技能」；也可在设置 → 技能里开启「自动保存技能」：只记录包含成功且至少 2 步 `ui_control sequence` 的 Act/Max 运行，只保留 DONE 步骤，自动去重并最多保留 20 个；`type` 输入值会参数化为 `{{inputN}}`，不把原始搜索词/聊天文本写进技能；疑似密码/验证码/密钥输入会跳过。元素引用会先还原成文字再落盘
 - **MCP**：添加远程 Streamable HTTP 服务器，其工具自动并入工具箱
 - **自动化**：定时（每日 / 按周）、电量与**通知**触发（按包名 / 关键词过滤，60 秒冷却），动作序列执行并回报通知
 
@@ -185,8 +185,9 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 | 通讯录 / 位置 | 联系人、位置工具 | 使用时请求 |
 | 闹钟与提醒 | 定时任务（精确闹钟） | 使用时请求 |
 | 所有文件访问 | 文件管理工具 | 按需开启（Android 11+） |
+| 执行截图 | 成功 Act/Max 运行后的虚拟屏回执 | 设置 → 存储可关闭；截图最长保留 7 天 |
 | Shizuku | 可选：root 级 shell、应用管理、后台虚拟屏 helper | 自行安装 Shizuku 并授权；有 root 也可 |
-| 无线调试 | 可选：无需 Shizuku 的后台虚拟屏 | 开发者选项 → 无线调试，配对一次；之后尝试自动恢复 |
+| 无线调试 | 可选：无需 Shizuku 的后台虚拟屏 | 开发者选项 → 无线调试，配对一次；之后尝试自动恢复。设置 → 权限还可开启「后台虚拟屏保活」，让已启动的会话在 Wi-Fi/ADB 断开后继续可用 |
 
 `场景增强`（设置 → 权限）是独立开关：开启即同意每条聊天请求附带最近一次定位（坐标、精度、时间）和 30 分钟内的天气缓存；关闭时位置仍只按需读取。
 
@@ -262,7 +263,9 @@ adb reverse tcp:8765 tcp:8765
 - **已完成 · M0 骨架**：模块化、设计系统、CI 门禁
 - **已完成 · M1 Agent Runtime v2**：运行持久化、四模式、工具契约、计划工件、MCP、子代理、评测骨架
 - **已完成 · v0.1.x 快速迭代**：隐式 CoT、任务中心与定时任务、持久截屏、Shizuku、录屏 / 转写 / 免手对话、全量模型目录
-- **进行中**：真机能力全量验收（Shizuku / 语音 / 录屏）、UI 细节持续打磨、评测场景扩充
+- **已完成 · v0.3.x Agent 效率**：计划一次执行（snapshot / ref / sequence / assert）、后台虚拟屏预热 / 复用 / 保活、内置无线 ADB、自动保存技能、CHAT+ 并行研究子代理
+- **已完成 · v0.4.0 稳定性**：虚拟屏与无线 ADB 独立实现、`app_research` 真机搜索/session 复用、附件生命周期与截图保留、自动保存技能参数化、开机/更新保活
+- **进行中**：OEM 矩阵扩展与重启 / 断网恢复验证、Shizuku / 语音 / 录屏全量验收、UI 细节与评测场景扩充
 - **计划中**：更丰富的设备能力与技能生态、更多模型协议跟进
 
 ## 常见问题
@@ -274,10 +277,10 @@ Key 由 Android Keystore 加密（AES-GCM）后存在本机数据库；只有你
 新版是架构重写（新包名、新签名密钥），与旧版并存安装、数据不互通；后续升级共用新签名，可覆盖升级。
 
 **耗电吗？**
-空闲时不驻留任何服务；长任务（Act / Max、定时任务）运行期间用前台服务保持，通知栏可随时停止；屏幕捕获也只在授权后由前台服务持有。
+默认状态下空闲不驻留服务；长任务（Act / Max、定时任务）运行期间用前台服务保持，通知栏可随时停止；屏幕捕获也只在你授权后由前台服务持有。若开启「后台虚拟屏保活」，会常驻一个低优先级前台服务并定期检查虚拟屏，耗电略增，可随时关闭。
 
 **没有 Shizuku 能用吗？**
-能。绝大多数工具（无障碍、截屏、文件、网络、个人助理）不依赖 Shizuku；它只解锁 `run_shell` 与深度应用管理。后台虚拟屏也可以用系统自带的“无线调试”配对一次，不需要安装 Shizuku。配对后 BAIC2 会通过 ADB shell 取得“修改系统设置”权限，在无线调试被关闭、重启或切换 Wi-Fi 时尝试自动重新打开并重连；如果系统不允许，仍可手动打开或填写端口。
+能。绝大多数工具（无障碍、截屏、文件、网络、个人助理）不依赖 Shizuku；它只解锁 `run_shell` 与深度应用管理。后台虚拟屏也可以用系统自带的“无线调试”配对一次，不需要安装 Shizuku。配对后 BAIC2 会通过 ADB shell 取得“修改系统设置”权限，在无线调试被关闭、重启或切换 Wi-Fi 时尝试自动重新打开并重连；这是尽力而为：部分系统（如 HyperOS）在 Wi-Fi 断开时会把无线调试重置为关闭，自动恢复不保证成功，此时手动打开无线调试并连接即可。已启动的后台虚拟屏可用「后台虚拟屏保活」在 Wi-Fi/ADB 断开后继续存活；重启后仍需先恢复 shell。
 
 **支持本地模型吗？**
 支持。任何 OpenAI 兼容端点（Ollama、vLLM、LM Studio…）填好 Base URL 即可；明文 HTTP 只放行环回地址。
@@ -296,6 +299,51 @@ Key 由 Android Keystore 加密（AES-GCM）后存在本机数据库；只有你
 ## 参与贡献
 
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) · [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) · [docs/SECURITY.md](docs/SECURITY.md)
+
+## 参考与致谢
+
+> 这里只列设计/实现阶段实际查阅或引用过、或代码直接依赖的公开资料；它不是学术引用，也不表示本项目实现了论文中的方法。没有留下查阅或依赖记录的来源不补列。记忆部分来自 2026-10-04 的一次设计检索（arXiv、HN 与官方博客）。
+
+### 记忆系统
+
+- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — 分层工作记忆、外存与分页
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — 检索、反思与行为连续性
+- [HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models](https://arxiv.org/abs/2405.14831) — 联想索引与图扩散
+- [A-MEM: Agentic Memory for LLM Agents](https://arxiv.org/abs/2502.12110) — 笔记自动建链与演化
+- [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956) — 时序知识、版本与状态演化
+- [Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory](https://arxiv.org/abs/2504.19413) — 蒸馏式记忆与更新
+- [Letta: Sleep-time Compute](https://www.letta.com/blog/sleep-time-compute) — 离线巩固与睡眠期整理
+- [Anthropic: Context management](https://www.anthropic.com/news/context-management) — 上下文清理与记忆工具
+- [LangChain: LangMem SDK](https://blog.langchain.com/langmem-sdk-launch/) — 语义 / 情景 / 程序记忆分类
+- [Agents Don't Need Memory. They Need Documentation.](https://liao.gg/blog/agents-dont-need-memory) — 反方观点：文档式工作区 vs 检索式记忆（HN 讨论）
+
+### 参考项目（设计启发）
+
+> 只作产品与交互参考，不是运行时依赖。Mika 的后台虚拟屏为思路参考，实现审计见 [docs/CODE_PROVENANCE.md](docs/CODE_PROVENANCE.md)。
+
+- [Orca](https://www.onorca.dev/) — 官网视觉与信息架构参考；也是本项目使用的 Agent 工作环境
+- [OpenCode](https://github.com/anomalyco/opencode) — 本项目开发使用的 AI coding agent；技能格式与子代理设计参考
+- [OpenVisum](https://github.com/Verlintas/OpenVisum) — 侧边栏 / UI 与 GitHub 仓库结构参考
+- [Mika](https://github.com/wangzan101/Mika) — Android 端 on-device agent；后台虚拟屏思路来源（Apache-2.0）
+
+### 原项目与关键依赖
+
+> 完整依赖版本见 [`gradle/libs.versions.toml`](gradle/libs.versions.toml)；这里只列对架构有直接影响的项目。
+
+- 原项目：[BetterAIChat](https://github.com/Verlintas/BetterAIChat) — 前身与行为参考；本重制版独立实现
+- 设备与网络：[Shizuku](https://github.com/RikkaApps/Shizuku) · [libadb-android](https://github.com/MuntashirAkon/libadb-android) · [OkHttp](https://github.com/square/okhttp) · [Conscrypt](https://github.com/google/conscrypt) · [Bouncy Castle](https://www.bouncycastle.org/)
+- Android 与 UI：[AndroidX](https://developer.android.com/jetpack/androidx) · [Jetpack Compose](https://developer.android.com/jetpack/compose) · [Hilt](https://dagger.dev/hilt/) · [Room](https://developer.android.com/training/data-storage/room) · [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) · [ML Kit](https://developers.google.com/ml-kit/vision/text-recognition/v2/android)
+- 内容与媒体：[kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) · [Jsoup](https://jsoup.org/) · [ZXing](https://github.com/zxing/zxing) · [SnakeYAML](https://bitbucket.org/snakeyaml/snakeyaml) · [GeoNames](https://www.geonames.org/)
+
+### 模型服务文档
+
+模型目录、上下文窗口与思考模式按各服务商的公开文档维护：
+
+[DeepSeek](https://api-docs.deepseek.com/) · [OpenAI](https://platform.openai.com/docs/models) · [Anthropic](https://docs.claude.com/en/docs/about-claude/models/overview) · [Google Gemini](https://ai.google.dev/gemini-api/docs/models) · [Kimi](https://platform.kimi.com/docs/) · [Qwen](https://help.aliyun.com/zh/model-studio/models) · [GLM](https://docs.z.ai/) · [MiniMax](https://platform.minimax.io/docs)
+
+### 平台文档
+
+[ADB 无线调试](https://developer.android.com/tools/adb#wireless-adb-android-11) · [AccessibilityService](https://developer.android.com/guide/topics/ui/accessibility/service) · [MediaProjection](https://developer.android.com/media/grow/media-projection) · [VirtualDisplay](https://developer.android.com/reference/android/hardware/display/VirtualDisplay) · [前台服务](https://developer.android.com/develop/background-work/services/fgs) · [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 
 ## License
 

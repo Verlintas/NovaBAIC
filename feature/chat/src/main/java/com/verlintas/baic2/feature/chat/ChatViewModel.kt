@@ -1221,6 +1221,7 @@ class ChatViewModel @Inject constructor(
      * not affect the answer.
      */
     private suspend fun attachRunScreenshot(messageId: Long) {
+        if (!settingsRepository.keepExecutionScreenshots.first()) return
         val bytes = virtualDisplay.capture().getOrNull() ?: return
         val attachment = attachmentProcessor
             .importImageBytes(bytes, "run-${System.currentTimeMillis()}.png")

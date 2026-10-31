@@ -20,7 +20,6 @@
 package com.verlintas.baic2.device.impl.display
 
 import android.annotation.SuppressLint
-import android.app.ActivityOptions
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
@@ -30,7 +29,9 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Surface
 import com.verlintas.baic2.device.api.IVirtualDisplayService
 import java.util.concurrent.CountDownLatch
@@ -48,15 +49,16 @@ class ShellDisplayService(private val context: Context) : IVirtualDisplayService
     private val main = Handler(Looper.getMainLooper())
     private val displays = HashMap<Int, VirtualDisplay>()
 
+    /**
+     * A DisplayManager built on the shell context. The system-managed
+     * instance reports the system package and is rejected for uid 2000, so
+     * the helper constructs its own manager through the hidden constructor.
+     */
     @SuppressLint("PrivateApi")
     private val displayManager: DisplayManager? = runCatching {
-        // getSystemService() returns a manager bound to the system context,
-        // whose package name does not match the shell uid. Construct it with
-        // our shell context so createVirtualDisplay() sees com.android.shell.
-        DisplayManager::class.java
-            .getDeclaredConstructor(Context::class.java)
-            .apply { isAccessible = true }
-            .newInstance(context)
+        val constructor = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
+        constructor.isAccessible = true
+        constructor.newInstance(context) as DisplayManager
     }.getOrNull()
 
     override fun createDisplay(
@@ -97,89 +99,21 @@ class ShellDisplayService(private val context: Context) : IVirtualDisplayService
     override fun startApp(displayId: Int, component: String?): Boolean {
         if (component.isNullOrBlank() || !ownsDisplay(displayId)) return false
         val target = ComponentName.unflattenFromString(component) ?: return false
-        val intent = Intent()
-            .setComponent(target)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        val options = ActivityOptions.makeBasic()
-            .setLaunchDisplayId(displayId)
-            .toBundle()
-        // Context.startActivity() uses the system context's package "android"
-        // and is rejected for uid 2000. Talk to ActivityTaskManager directly
-        // with the shell package, which is the same identity adb shell uses.
-        return runCatching {
-            val atmClass = Class.forName("android.app.ActivityTaskManager")
-            val atm = atmClass.getMethod("getService").invoke(null) ?: return false
-            val methods = atm.javaClass.methods
-            val userId = android.os.Process.myUid() / 100_000
-            val asUser = methods.firstOrNull { method ->
-                method.name == "startActivityAsUser" &&
-                    method.parameterTypes.size == 12 &&
-                    method.parameterTypes[3] == Intent::class.java
-            }
-            if (asUser != null) {
-                val result = asUser.invoke(
-                    atm,
-                    null,
-                    ShellContext.SHELL_PACKAGE,
-                    null,
-                    intent,
-                    null,
-                    null,
-                    null,
-                    0,
-                    0,
-                    null,
-                    options,
-                    userId,
-                ) as? Int ?: -1
-                return@runCatching result == 0
-            }
-            val direct = methods.firstOrNull { method ->
-                method.name == "startActivity" &&
-                    method.parameterTypes.size == 11 &&
-                    method.parameterTypes[3] == Intent::class.java
-            } ?: return@runCatching false
-            val result = direct.invoke(
-                atm,
-                null,
-                ShellContext.SHELL_PACKAGE,
-                null,
-                intent,
-                null,
-                null,
-                null,
-                0,
-                0,
-                null,
-                options,
-            ) as? Int ?: -1
-            if (result == 0) return@runCatching true
-            // ActivityTaskManager can reject a display launch (START_CANCELED);
-            // the shell command is the reliable fallback and stays inside the
-            // helper, so the app still avoids an extra ADB round trip.
-            amStart(displayId, component)
-        }.onFailure {
-            android.util.Log.e("BAIC2HELPER", "startApp failed", it)
-        }.getOrDefault(false)
+        // `am` already runs inside the shell helper, so it is both simpler and
+        // more OEM-tolerant than reflecting into ActivityTaskManager. The
+        // helper still avoids an extra ADB round trip.
+        return amStart(displayId, target.flattenToString())
     }
 
     private fun amStart(displayId: Int, component: String): Boolean = runCatching {
-        val process = ProcessBuilder(
-            "am",
-            "start",
-            "--display",
-            displayId.toString(),
-            "-f",
-            "0x10008000",
-            "-n",
-            component,
-        ).redirectErrorStream(true).start()
-        if (!process.waitFor(5, TimeUnit.SECONDS)) {
-            process.destroy()
-            false
-        } else {
-            process.exitValue() == 0
-        }
+        val argv = listOf(
+            "am", "start", "--display", displayId.toString(),
+            "-f", "0x10008000", "-n", component,
+        )
+        val process = ProcessBuilder(argv).redirectErrorStream(true).start()
+        val finished = process.waitFor(5, TimeUnit.SECONDS)
+        if (!finished) process.destroy()
+        finished && process.exitValue() == 0
     }.getOrDefault(false)
 
     override fun tap(displayId: Int, x: Int, y: Int): Boolean =
@@ -250,30 +184,47 @@ class ShellDisplayService(private val context: Context) : IVirtualDisplayService
     }
 
     private fun displayFlags(): Int {
-        // PUBLIC | OWN_CONTENT_ONLY | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT |
-        // DESTROY_CONTENT_ON_REMOVAL
-        var flags = 1 or 8 or 64 or 128 or 256
+        var flags = DISPLAY_PUBLIC or DISPLAY_OWN_CONTENT or DISPLAY_TOUCH or
+            DISPLAY_ROTATE or DISPLAY_DESTROY
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | TOUCH_FEEDBACK_DISABLED
-            flags = flags or (1 shl 10) or (1 shl 11) or (1 shl 12) or (1 shl 13)
+            flags = flags or DISPLAY_TRUSTED or DISPLAY_OWN_GROUP or
+                DISPLAY_UNLOCKED or DISPLAY_NO_TOUCH_FEEDBACK
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // OWN_FOCUS | STEAL_TOP_FOCUS_DISABLED: the display can take input
-            // focus without stealing the user's main-screen focus.
-            flags = flags or (1 shl 14) or (1 shl 16)
+            // Take input focus on the virtual display without stealing the
+            // user's main-screen focus.
+            flags = flags or DISPLAY_OWN_FOCUS or DISPLAY_KEEP_MAIN_FOCUS
         }
         return flags
     }
 
     private fun setImePolicy(displayId: Int) {
+        val viaWindowService = runCatching {
+            val serviceManager = Class.forName("android.os.ServiceManager")
+            val binder = serviceManager.getMethod("getService", String::class.java)
+                .invoke(null, "window") as? IBinder
+                ?: return@runCatching false
+            val stub = Class.forName("android.view.IWindowManager\$Stub")
+            val manager = stub.getMethod("asInterface", IBinder::class.java)
+                .invoke(null, binder)
+                ?: return@runCatching false
+            val call = manager.javaClass.methods.firstOrNull {
+                it.name == "setDisplayImePolicy" && it.parameterTypes.size == 2
+            } ?: return@runCatching false
+            call.invoke(manager, displayId, IME_POLICY_LOCAL)
+            true
+        }.getOrDefault(false)
+        if (viaWindowService) return
+
+        // Some OEM builds only expose the WindowManagerGlobal accessor.
         runCatching {
-            val wm = Class.forName("android.view.WindowManagerGlobal")
-                .getMethod("getWindowManagerService").invoke(null)!!
-            wm.javaClass.getMethod(
-                "setDisplayImePolicy",
-                Int::class.javaPrimitiveType,
-                Int::class.javaPrimitiveType,
-            ).invoke(wm, displayId, 0) // DISPLAY_IME_POLICY_LOCAL
+            val global = Class.forName("android.view.WindowManagerGlobal")
+            val accessor = global.getDeclaredMethod("getWindowManagerService")
+                .apply { isAccessible = true }
+            val manager = accessor.invoke(null) ?: return@runCatching
+            manager.javaClass.methods.firstOrNull {
+                it.name == "setDisplayImePolicy" && it.parameterTypes.size == 2
+            }?.invoke(manager, displayId, IME_POLICY_LOCAL)
         }
     }
 
@@ -287,5 +238,23 @@ class ShellDisplayService(private val context: Context) : IVirtualDisplayService
         }
         if (!latch.await(8, TimeUnit.SECONDS)) return null
         return result
+    }
+
+    private companion object {
+        // DisplayManager.VIRTUAL_DISPLAY_FLAG_* (some are hidden constants).
+        const val DISPLAY_PUBLIC = 1 shl 0
+        const val DISPLAY_OWN_CONTENT = 1 shl 3
+        const val DISPLAY_TOUCH = 1 shl 6
+        const val DISPLAY_ROTATE = 1 shl 7
+        const val DISPLAY_DESTROY = 1 shl 8
+        const val DISPLAY_TRUSTED = 1 shl 10
+        const val DISPLAY_OWN_GROUP = 1 shl 11
+        const val DISPLAY_UNLOCKED = 1 shl 12
+        const val DISPLAY_NO_TOUCH_FEEDBACK = 1 shl 13
+        const val DISPLAY_OWN_FOCUS = 1 shl 14
+        const val DISPLAY_KEEP_MAIN_FOCUS = 1 shl 16
+
+        // WindowManager.DISPLAY_IME_POLICY_LOCAL
+        const val IME_POLICY_LOCAL = 0
     }
 }

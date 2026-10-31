@@ -21,6 +21,7 @@ package com.verlintas.baic2.device.impl.display
 
 import android.content.AttributionSource
 import android.content.pm.ProviderInfo
+import androidx.annotation.RequiresApi
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
@@ -62,12 +63,12 @@ object DisplayHelperMain {
         }
 
         Looper.prepareMainLooper()
-        val context = ShellContext.create()
+        val context = createShellContext()
         val service = ShellDisplayService(context)
 
         Thread({
             val accepted = runCatching {
-                attach(authority, packageName, appUid, userId, nonce, service)
+                attach(context, authority, packageName, appUid, userId, nonce, service)
             }.onFailure {
                 it.printStackTrace()
             }.getOrDefault(false)
@@ -86,11 +87,13 @@ object DisplayHelperMain {
     }
 
     /**
-     * Fetches the app's provider by authority and calls it directly. The
-     * provider permission still sees shell/root as the caller, and the
-     * package/uid check rejects a same-named authority owned by another app.
+     * The helper is an `app_process` without an ApplicationThread, so
+     * ContentResolver cannot resolve an app provider. Ask ActivityManager for
+     * an external provider handle instead, verify that the authority belongs
+     * to the expected package/uid, and call it directly.
      */
     private fun attach(
+        context: android.content.Context,
         authority: String,
         packageName: String,
         appUid: Int,
@@ -98,101 +101,137 @@ object DisplayHelperMain {
         nonce: String,
         service: ShellDisplayService,
     ): Boolean {
-        val amClass = Class.forName("android.app.ActivityManager")
-        val am = amClass.getMethod("getService").invoke(null) ?: return false
+        // The context is intentionally unused here: the external-provider path
+        // is the only one that works for an app_process caller.
+        val activityManager = activityManager()
+        if (activityManager == null) return false
         val token = Binder()
-        val holder = am.javaClass.getMethod(
-            "getContentProviderExternal",
-            String::class.java,
-            Int::class.javaPrimitiveType,
-            IBinder::class.java,
-            String::class.java,
-        ).invoke(am, authority, userId, token, "BAIC2") ?: return false
-
-        try {
-            val holderClass = holder.javaClass
-            val info = holderClass.getField("info").get(holder) as? ProviderInfo
-                ?: return false
-            if (info.packageName != packageName || info.applicationInfo?.uid != appUid) {
-                return false
-            }
-            val provider = holderClass.getField("provider").get(holder) ?: return false
-            val extras = Bundle().apply {
-                putBinder(VirtualDisplayHandoff.KEY_BINDER, service.asBinder())
-                putInt(VirtualDisplayHandoff.KEY_PID, Process.myPid())
-                putString(VirtualDisplayHandoff.KEY_NONCE, nonce)
-            }
-            val result = invokeProviderCall(
+        val holder = acquireProvider(activityManager, authority, userId, token)
+        if (holder == null) return false
+        return try {
+            val info = providerInfo(holder)
+            if (info == null || !belongsTo(info, packageName, appUid)) return false
+            val provider = providerBinder(holder)
+            if (provider == null) return false
+            val reply = invokeProviderCall(
                 provider = provider,
                 authority = authority,
-                extras = extras,
+                extras = handoffExtras(service, nonce),
             ) ?: return false
-            if (result?.getBoolean(VirtualDisplayHandoff.KEY_ACCEPTED) != true) return false
-            result.getBinder(VirtualDisplayHandoff.KEY_APP_TOKEN)?.let { appToken ->
-                runCatching {
-                    appToken.linkToDeath({ kotlin.system.exitProcess(0) }, 0)
-                }
-            }
-            return true
+            if (reply.getBoolean(VirtualDisplayHandoff.KEY_ACCEPTED) != true) return false
+            watchApp(reply.getBinder(VirtualDisplayHandoff.KEY_APP_TOKEN))
+            true
         } finally {
-            runCatching {
-                am.javaClass.getMethod(
-                    "removeContentProviderExternalAsUser",
-                    String::class.java,
-                    IBinder::class.java,
-                    Int::class.javaPrimitiveType,
-                ).invoke(am, authority, token, userId)
-            }
+            releaseProvider(activityManager, authority, token, userId)
         }
     }
 
-    /**
-     * Android 11+ exposes `call(AttributionSource, authority, method, arg,
-     * extras)` on IContentProvider; older releases use the four-argument
-     * form. Both carry the binder in `extras`.
-     */
+    private fun activityManager(): Any? = runCatching {
+        val serviceManager = Class.forName("android.os.ServiceManager")
+        val binder = serviceManager.getMethod("getService", String::class.java)
+            .invoke(null, "activity") as? IBinder
+            ?: return@runCatching null
+        Class.forName("android.app.IActivityManager\$Stub")
+            .getMethod("asInterface", IBinder::class.java)
+            .invoke(null, binder)
+    }.getOrNull()
+
+    private fun acquireProvider(
+        activityManager: Any,
+        authority: String,
+        userId: Int,
+        token: IBinder,
+    ): Any? {
+        val method = activityManager.javaClass.methods.firstOrNull {
+            it.name == "getContentProviderExternal" && it.parameterTypes.size == 4
+        } ?: return null
+        return runCatching {
+            method.invoke(activityManager, authority, userId, token, CALLER_TAG)
+        }.getOrNull()
+    }
+
+    private fun belongsTo(info: ProviderInfo, packageName: String, appUid: Int): Boolean =
+        packageName == info.packageName && appUid == info.applicationInfo?.uid
+
+    private fun providerInfo(holder: Any): ProviderInfo? = runCatching {
+        holder.javaClass.getField("info").get(holder) as? ProviderInfo
+    }.getOrNull()
+
+    private fun providerBinder(holder: Any): Any? = runCatching {
+        holder.javaClass.getField("provider").get(holder)
+    }.getOrNull()
+
+    private fun releaseProvider(
+        activityManager: Any,
+        authority: String,
+        token: IBinder,
+        userId: Int,
+    ) {
+        val method = activityManager.javaClass.methods.firstOrNull {
+            it.name == "removeContentProviderExternalAsUser" && it.parameterTypes.size == 3
+        } ?: return
+        runCatching { method.invoke(activityManager, authority, token, userId) }
+    }
+
+    private fun handoffExtras(service: ShellDisplayService, nonce: String): Bundle =
+        Bundle().apply {
+            putBinder(VirtualDisplayHandoff.KEY_BINDER, service.asBinder())
+            putInt(VirtualDisplayHandoff.KEY_PID, Process.myPid())
+            putString(VirtualDisplayHandoff.KEY_NONCE, nonce)
+        }
+
+    private fun watchApp(token: IBinder?) {
+        token ?: return
+        runCatching { token.linkToDeath({ kotlin.system.exitProcess(0) }, 0) }
+    }
+
     private fun invokeProviderCall(
         provider: Any,
         authority: String,
         extras: Bundle,
     ): Bundle? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val five = provider.javaClass.methods.firstOrNull { method ->
-                method.name == "call" &&
-                    method.parameterTypes.size == 5 &&
-                    method.parameterTypes[0] == AttributionSource::class.java
-            }
-            if (five != null) {
-                val caller = AttributionSource.Builder(Process.myUid())
-                    .setPackageName(ShellContext.SHELL_PACKAGE)
-                    .build()
-                return five.invoke(
-                    provider,
-                    caller,
-                    authority,
-                    VirtualDisplayHandoff.METHOD_ATTACH,
-                    null,
-                    extras,
-                ) as? Bundle
-            }
-        }
-        val four = provider.javaClass.methods.firstOrNull { method ->
+        val legacy = provider.javaClass.methods.firstOrNull { method ->
             method.name == "call" &&
                 method.parameterTypes.size == 4 &&
                 method.parameterTypes[0] == String::class.java &&
                 method.parameterTypes[3] == Bundle::class.java
+        }
+        if (legacy != null) {
+            val reply = runCatching {
+                legacy.invoke(provider, authority, VirtualDisplayHandoff.METHOD_ATTACH, null, extras)
+            }.getOrNull() as? Bundle
+            if (reply != null) return reply
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+        val modern = provider.javaClass.methods.firstOrNull { method ->
+            method.name == "call" &&
+                method.parameterTypes.size == 5 &&
+                method.parameterTypes[0] == AttributionSource::class.java
         } ?: return null
-        return four.invoke(
-            provider,
-            authority,
-            VirtualDisplayHandoff.METHOD_ATTACH,
-            null,
-            extras,
-        ) as? Bundle
+        return runCatching {
+            modern.invoke(
+                provider,
+                attributionSource(),
+                authority,
+                VirtualDisplayHandoff.METHOD_ATTACH,
+                null,
+                extras,
+            )
+        }.getOrNull() as? Bundle
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun attributionSource(): AttributionSource {
+        val builder = AttributionSource.Builder(Process.myUid())
+        builder.setPackageName(ShellIdentity.PACKAGE)
+        return builder.build()
     }
 
     private fun arg(args: Array<String>, key: String): String? {
-        val index = args.indexOf(key)
-        return if (index >= 0) args.getOrNull(index + 1) else null
+        val keyIndex = args.indexOf(key)
+        return if (keyIndex < 0) null else args.getOrNull(keyIndex + 1)
     }
+
+    private const val CALLER_TAG = "BAIC2"
 }

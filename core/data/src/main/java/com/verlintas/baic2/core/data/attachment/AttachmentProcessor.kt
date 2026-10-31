@@ -191,6 +191,25 @@ class AttachmentProcessor @Inject constructor(
         attachment.localPath?.let { runCatching { File(it).delete() } }
     }
 
+    /**
+     * Remove old execution screenshots that are no longer referenced by a
+     * message. User-picked images and documents are never touched.
+     */
+    suspend fun pruneScreenshotFiles(
+        olderThanDays: Int,
+        keepPaths: Set<String>,
+    ): Int = withContext(Dispatchers.IO) {
+        val cutoff = System.currentTimeMillis() - olderThanDays.coerceAtLeast(1) * 24L * 60L * 60L * 1000L
+        val directory = File(context.filesDir, ATTACHMENT_DIR)
+        directory.listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile && it.lastModified() < cutoff }
+            ?.filter { it.name.startsWith("run-") || it.name.startsWith("screenshot") }
+            ?.filter { it.absolutePath !in keepPaths }
+            ?.count { runCatching { it.delete() }.getOrDefault(false) }
+            ?: 0
+    }
+
     private fun scaleDown(bitmap: Bitmap, maxDimension: Int): Bitmap {
         val longest = maxOf(bitmap.width, bitmap.height)
         if (longest <= maxDimension) return bitmap

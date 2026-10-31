@@ -32,7 +32,7 @@ It is a **local-first** AI agent — API keys are encrypted with the Android Key
 
 - **It really touches the device**: 57 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, built-in wireless debugging, and Shizuku shell
 - **Implicit activity**: Act/Max do not list tool calls; a live line says “Using WeChat…”, a collapsed summary follows the run, and a successful virtual-display run attaches its last frame to the reply
-- **Warm background display**: when a transport is available, the app starts the helper at launch and releases it after 10 minutes idle, so the first research request avoids the cold start
+- **Warm background display**: when a transport is available, the app starts the helper at launch and releases it after 10 minutes idle by default, so the first research request avoids the cold start. Settings → Permissions offers an opt-in "Keep background display" service that disables idle release and re-checks every four minutes, so an already-started session survives Wi-Fi/ADB loss (ongoing notification, slight battery cost; after a reboot it still waits for a shell).
 - **Locale-independent controls**: in-app search prefers resource ids and control structure over labels such as “Search”, “Discover” or their translations; localized word lists are only a fallback
 - **No model lock-in**: DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / any compatible gateway — switch any time
 - **Four modes**: from plain chat, to read-only research, to per-call confirmation, to budgeted autonomous runs
@@ -141,7 +141,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 ### Automation, skills & MCP
 
 - **Scheduled tasks**: daily / weekly schedules on top of system exact alarms; a foreground service runs the full agent unattended and reports back with a notification; toggle or run-now from the UI
-- **Skills v2**: declarative YAML recipes with `{{parameter}}` placeholders and a parameters schema — record once, reuse with different inputs; the chat menu can save a run as a skill manually; Settings → Skills also offers an optional "Auto-save skills" switch that records only successful 2+ step UI flows, deduplicates them and keeps at most 20. Snapshot refs are resolved to text before the recipe is stored
+- **Skills v2**: declarative YAML recipes with `{{parameter}}` placeholders and a parameters schema — record once, reuse with different inputs; the chat menu can save a run as a skill manually; Settings → Skills also offers an optional "Auto-save skills" switch that records only Act/Max runs containing a successful `ui_control sequence` of at least two steps. Only DONE calls become steps; memory/orchestration/observation calls are filtered, `type` values are parameterized as `{{inputN}}` instead of storing the original text, a best-effort password/PIN/OTP guard skips sensitive flows, duplicate signatures are collapsed, and at most 20 auto-saved skills are kept. Snapshot refs are resolved to text before the recipe is stored
 - **MCP**: add remote Streamable HTTP servers; their tools join the toolbox automatically
 - **Automations**: time (daily / weekly), battery and **notification** triggers (package/keyword filters with a cooldown) execute action sequences and report results
 
@@ -185,8 +185,9 @@ Everything is granted on demand. When a tool lacks a permission it returns an ac
 | Contacts / location | Contact and location tools | Prompted when used |
 | Alarms & reminders | Scheduled tasks (exact alarms) | Prompted when used |
 | All files access | File management tools | Enable on demand (Android 11+) |
+| Execution screenshots | Visual receipt after a successful Act/Max run | Disable in Settings → Storage; kept for at most 7 days |
 | Shizuku | Optional: root-level shell, app management, virtual-display helper | Install Shizuku and authorize; root works too |
-| Wireless debugging | Optional: background virtual display without Shizuku | Developer options → Wireless debugging, pair once; BAIC2 then tries to recover it automatically. Settings → Permissions also offers an opt-in "Keep background display" foreground service so a live session survives Wi-Fi/ADB loss (notification + slight battery cost). |
+| Wireless debugging | Optional: background virtual display without Shizuku | Developer options → Wireless debugging, pair once; BAIC2 then tries to recover it automatically. This is best-effort — some OEMs (for example HyperOS) reset Wireless debugging when Wi-Fi drops, so you may need to re-enable it manually. Settings → Permissions also offers an opt-in "Keep background display" foreground service so a live session survives Wi-Fi/ADB loss (notification + slight battery cost; after a reboot it waits for a shell). |
 
 `Scene awareness` (Settings → Permissions) is a separate opt-in: when on, each chat request carries the latest location fix (coordinates, accuracy, age) and a weather snapshot cached within 30 minutes. When off, location stays on-demand only.
 
@@ -262,7 +263,9 @@ adb reverse tcp:8765 tcp:8765
 - **Done · M0 skeleton**: modules, design system, CI gates
 - **Done · M1 Agent Runtime v2**: run persistence, four modes, tool contracts, plan artifact, MCP, subagents, eval harness
 - **Done · v0.1.x rapid iteration**: implicit CoT, task center + scheduled tasks, persistent screen capture, Shizuku, recording / transcription / hands-free, full model catalog
-- **In progress**: real-device acceptance (Shizuku / voice / recording), continuous UI polish, more eval scenarios
+- **Done · v0.3.x agent efficiency**: plan-once UI (snapshot / refs / sequence / assert), virtual-display prewarm / reuse / keepalive, built-in wireless ADB, auto-save skills, parallel CHAT+ research subagents
+- **Done · v0.4.0 stability**: independent virtual-display / wireless ADB implementation, real-device `app_research` search and session reuse, attachment lifecycle and screenshot retention, parameterized auto-save skills, boot/update keepalive re-arm
+- **In progress**: OEM matrix expansion and reboot / network-recovery validation, Shizuku / voice / recording acceptance, continuous UI polish and more eval scenarios
 - **Planned**: richer device capabilities and skill ecosystem, more model protocols
 
 ## FAQ
@@ -274,10 +277,10 @@ Keys are encrypted with the Android Keystore (AES-GCM) and stored in the local d
 This is an architecture rewrite (new package name, new signing key). It installs side by side with the old app and shares no data. Later releases share this new key and upgrade in place.
 
 **Does it drain the battery?**
-No services linger while idle. Long runs (Act / Max, scheduled tasks) hold a foreground service that can be stopped from the notification, and screen capture is owned by a foreground service only after you grant it.
+By default no service lingers while idle. Long runs (Act / Max, scheduled tasks) hold a foreground service that can be stopped from the notification, and screen capture is owned by a foreground service only after you grant it. If you enable "Keep background display", a low-priority foreground service stays resident and re-checks the virtual display; it uses a little more battery and can be turned off at any time.
 
 **Do I need Shizuku?**
-No. Most tools (accessibility, capture, files, web, personal assistant) work without it; Shizuku only unlocks `run_shell` and deep app management. The background virtual display can also use Android's built-in Wireless debugging after a one-time pairing, with no Shizuku install. After pairing, BAIC2 uses its ADB shell to obtain the “modify system settings” grant and tries to re-enable Wireless debugging after it is turned off, after a reboot or on a Wi-Fi change. If the OEM refuses, you can still enable it manually or enter the port.
+No. Most tools (accessibility, capture, files, web, personal assistant) work without it; Shizuku only unlocks `run_shell` and deep app management. The background virtual display can also use Android's built-in Wireless debugging after a one-time pairing, with no Shizuku install. After pairing, BAIC2 uses its ADB shell to obtain the “modify system settings” grant and tries to re-enable Wireless debugging after it is turned off, after a reboot or on a Wi-Fi change. This is best-effort: on some systems (for example HyperOS) Wi-Fi loss resets Wireless debugging to off and automatic recovery is not guaranteed; re-enable it manually and reconnect. If the OEM refuses, you can still enable it manually or enter the port. An already-started background display can survive that drop via "Keep background display"; after a reboot it still needs a shell.
 
 **Can I use local models?**
 Yes. Point any OpenAI-compatible endpoint (Ollama, vLLM, LM Studio…) at your server; cleartext HTTP is permitted only for loopback addresses.
@@ -296,6 +299,51 @@ No. Stopping synthesizes "cancelled" tool results for interrupted calls and rewr
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
 - [CHANGELOG.md](CHANGELOG.md): detailed changes for every release
+
+## References & acknowledgements
+
+> Only sources actually consulted or cited during design/implementation, or projects the code directly depends on. This is not an academic citation list, and it does not claim that the code implements any paper's method. Sources without a recorded lookup or dependency are not added. The memory entries come from a 2026-10-04 design review (arXiv, HN and vendor blogs).
+
+### Memory system
+
+- [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560) — hierarchical working memory, external storage and paging
+- [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442) — retrieval, reflection and behavioural continuity
+- [HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models](https://arxiv.org/abs/2405.14831) — associative indexing and graph diffusion
+- [A-MEM: Agentic Memory for LLM Agents](https://arxiv.org/abs/2502.12110) — automatic note linking and evolution
+- [Zep: A Temporal Knowledge Graph Architecture for Agent Memory](https://arxiv.org/abs/2501.13956) — temporal knowledge, versions and state evolution
+- [Mem0: Building Production-Ready AI Agents with Scalable Long-Term Memory](https://arxiv.org/abs/2504.19413) — distilled memory and updates
+- [Letta: Sleep-time Compute](https://www.letta.com/blog/sleep-time-compute) — offline consolidation and sleep-time review
+- [Anthropic: Context management](https://www.anthropic.com/news/context-management) — context editing and memory tooling
+- [LangChain: LangMem SDK](https://blog.langchain.com/langmem-sdk-launch/) — semantic / episodic / procedural memory taxonomy
+- [Agents Don't Need Memory. They Need Documentation.](https://liao.gg/blog/agents-dont-need-memory) — the counterpoint: a documentation workspace instead of retrieval memory (HN discussion)
+
+### Reference projects (design inspiration)
+
+> Product and interaction references only; not runtime dependencies. Mika's background virtual display is an idea reference; see [CODE_PROVENANCE.md](CODE_PROVENANCE.md) for the implementation audit.
+
+- [Orca](https://www.onorca.dev/) — website visual and information-architecture reference; also the agent workspace used for this project
+- [OpenCode](https://github.com/anomalyco/opencode) — the AI coding agent used to develop this project; skill-format and subagent reference
+- [OpenVisum](https://github.com/Verlintas/OpenVisum) — sidebar / UI and GitHub repository-structure reference
+- [Mika](https://github.com/wangzan101/Mika) — on-device Android agent; background virtual-display idea reference (Apache-2.0)
+
+### Original project & key dependencies
+
+> Full dependency versions live in [`gradle/libs.versions.toml`](../gradle/libs.versions.toml); this list only covers projects with a direct architectural impact.
+
+- Original project: [BetterAIChat](https://github.com/Verlintas/BetterAIChat) — predecessor and behavioural reference; this rewrite is an independent implementation
+- Device & networking: [Shizuku](https://github.com/RikkaApps/Shizuku) · [libadb-android](https://github.com/MuntashirAkon/libadb-android) · [OkHttp](https://github.com/square/okhttp) · [Conscrypt](https://github.com/google/conscrypt) · [Bouncy Castle](https://www.bouncycastle.org/)
+- Android & UI: [AndroidX](https://developer.android.com/jetpack/androidx) · [Jetpack Compose](https://developer.android.com/jetpack/compose) · [Hilt](https://dagger.dev/hilt/) · [Room](https://developer.android.com/training/data-storage/room) · [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) · [ML Kit](https://developers.google.com/ml-kit/vision/text-recognition/v2/android)
+- Content & media: [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) · [Jsoup](https://jsoup.org/) · [ZXing](https://github.com/zxing/zxing) · [SnakeYAML](https://bitbucket.org/snakeyaml/snakeyaml) · [GeoNames](https://www.geonames.org/)
+
+### Model provider docs
+
+Model catalogs, context windows and thinking modes are maintained against the providers' public documentation:
+
+[DeepSeek](https://api-docs.deepseek.com/) · [OpenAI](https://platform.openai.com/docs/models) · [Anthropic](https://docs.claude.com/en/docs/about-claude/models/overview) · [Google Gemini](https://ai.google.dev/gemini-api/docs/models) · [Kimi](https://platform.kimi.com/docs/) · [Qwen](https://help.aliyun.com/zh/model-studio/models) · [GLM](https://docs.z.ai/) · [MiniMax](https://platform.minimax.io/docs)
+
+### Platform docs
+
+[ADB wireless debugging](https://developer.android.com/tools/adb#wireless-adb-android-11) · [AccessibilityService](https://developer.android.com/guide/topics/ui/accessibility/service) · [MediaProjection](https://developer.android.com/media/grow/media-projection) · [VirtualDisplay](https://developer.android.com/reference/android/hardware/display/VirtualDisplay) · [Foreground services](https://developer.android.com/develop/background-work/services/fgs) · [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
 
 ## License
 

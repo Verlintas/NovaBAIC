@@ -179,6 +179,7 @@
               <li>Time (daily / weekly) and battery triggers</li>
               <li>Exact alarms survive Doze; a foreground service runs the full agent</li>
               <li>Boot receiver re-arms every schedule automatically</li>
+              <li>Optional “Keep background display” service keeps a live virtual display across Wi-Fi/ADB drops</li>
               <li>MAX runs report back — an in-app summary, or a notification while you are away</li>
               <li>Inline voice dictation with a live transcript; hands-free pauses while replies are read aloud</li>
             </ul>
@@ -393,11 +394,11 @@ tools:
         </details>
         <details>
           <summary>Do I need Shizuku or root?</summary>
-          <p>No. Most tools — accessibility automation, screen capture, files, web, personal-assistant tasks — work without it. The background virtual display can use Android's built-in Wireless debugging after a one-time pairing. Shizuku only unlocks <code>run_shell</code> and deep app management, and it's optional.</p>
+          <p>No. Most tools — accessibility automation, screen capture, files, web, personal-assistant tasks — work without it. The background virtual display can use Android's built-in Wireless debugging after a one-time pairing, and an opt-in “Keep background display” service can keep an already-started session alive across Wi-Fi/ADB drops. Recovery is best-effort: some OEMs (for example HyperOS) reset Wireless debugging when Wi-Fi drops, so you may need to re-enable it manually. Shizuku only unlocks <code>run_shell</code> and deep app management, and it's optional.</p>
         </details>
         <details>
           <summary>Does it drain the battery?</summary>
-          <p>Nothing lingers while idle. Long runs (Act / Max, scheduled tasks) hold a foreground service that can be stopped from the notification, and screen capture is owned by a foreground service only after you grant it.</p>
+          <p>By default no service lingers while idle. Long runs (Act / Max, scheduled tasks) hold a foreground service that can be stopped from the notification, and screen capture is owned by a foreground service only after you grant it. If you enable “Keep background display”, a low-priority foreground service stays resident and re-checks the virtual display; it uses a little more battery and can be turned off at any time.</p>
         </details>
         <details>
           <summary>What happens if a run is stopped mid-tool-call?</summary>
@@ -453,6 +454,7 @@ tools:
       <a href="https://github.com/Verlintas/NovaBAIC/blob/main/docs/README.en.md">English README</a>
       <a href="https://github.com/Verlintas/NovaBAIC/blob/main/docs/HOW_IT_WORKS.md">How it works</a>
       <a href="https://github.com/Verlintas/NovaBAIC/blob/main/docs/ARCHITECTURE.md">Architecture</a>
+      <a href="https://github.com/Verlintas/NovaBAIC/blob/main/docs/README.en.md#references--acknowledgements">References &amp; credits</a>
     </div>
     <div>
       <h4>Project</h4>

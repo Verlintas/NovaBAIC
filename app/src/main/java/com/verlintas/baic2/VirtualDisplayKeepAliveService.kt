@@ -19,16 +19,15 @@
 
 package com.verlintas.baic2
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.device.api.VirtualDisplayBridge
@@ -64,17 +63,13 @@ class VirtualDisplayKeepAliveService : Service() {
     private var job: Job? = null
     private var lastText: String? = null
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(serviceIntent: Intent?): IBinder? = null
 
-    override fun onCreate() {
-        super.onCreate()
+    override fun onStartCommand(command: Intent?, mode: Int, requestId: Int): Int {
         ensureChannel()
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundCompat(getString(R.string.display_keep_waiting))
         displays.setKeepAlive(true)
-        if (job == null) job = scope.launch { loop() }
+        if (job?.isActive != true) job = scope.launch { loop() }
         return START_STICKY
     }
 
@@ -124,7 +119,7 @@ class VirtualDisplayKeepAliveService : Service() {
         manager.notify(NOTIFICATION_ID, buildNotification(text))
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String): android.app.Notification {
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -132,27 +127,27 @@ class VirtualDisplayKeepAliveService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        return Notification.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentTitle(getString(R.string.display_keep_title))
             .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(open)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
     private fun ensureChannel() {
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    getString(R.string.display_keep_channel),
-                    NotificationManager.IMPORTANCE_LOW,
-                ),
-            )
-        }
+        val manager = getSystemService(NotificationManager::class.java)
+        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.display_keep_channel),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
     }
 
     private companion object {

@@ -19,10 +19,6 @@
 
 package com.verlintas.baic2
 
-import android.content.ContentProvider
-import android.content.ContentValues
-import android.database.Cursor
-import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.IBinder
@@ -36,13 +32,13 @@ import com.verlintas.baic2.device.api.VirtualDisplayHandoff
  * restricts callers to system-level identities; the explicit uid check is
  * defense in depth. The nonce makes an old helper's late handoff useless.
  */
-class VirtualDisplayHelperProvider : ContentProvider() {
+class VirtualDisplayHelperProvider : CallOnlyProvider() {
 
     override fun onCreate(): Boolean = true
 
-    override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
+    override fun call(operation: String, argument: String?, payload: Bundle?): Bundle {
         val reply = Bundle()
-        if (method != VirtualDisplayHandoff.METHOD_ATTACH) return reply
+        if (operation != VirtualDisplayHandoff.METHOD_ATTACH) return reply
 
         val caller = Binder.getCallingUid()
         if (caller != SHELL_UID && caller != ROOT_UID) {
@@ -50,9 +46,9 @@ class VirtualDisplayHelperProvider : ContentProvider() {
             return reply
         }
 
-        val binder = extras?.getBinder(VirtualDisplayHandoff.KEY_BINDER)
-        val nonce = extras?.getString(VirtualDisplayHandoff.KEY_NONCE).orEmpty()
-        val pid = extras?.getInt(VirtualDisplayHandoff.KEY_PID) ?: -1
+        val binder = payload?.getBinder(VirtualDisplayHandoff.KEY_BINDER)
+        val nonce = payload?.getString(VirtualDisplayHandoff.KEY_NONCE).orEmpty()
+        val pid = payload?.getInt(VirtualDisplayHandoff.KEY_PID) ?: -1
         val accepted = binder != null &&
             VirtualDisplayHandoff.accept(binder, pid, nonce)
         reply.putBoolean(VirtualDisplayHandoff.KEY_ACCEPTED, accepted)
@@ -65,27 +61,6 @@ class VirtualDisplayHelperProvider : ContentProvider() {
         }
         return reply
     }
-
-    override fun query(
-        uri: Uri,
-        projection: Array<out String>?,
-        selection: String?,
-        selectionArgs: Array<out String>?,
-        sortOrder: String?,
-    ): Cursor? = null
-
-    override fun getType(uri: Uri): String? = null
-
-    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-
-    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
-
-    override fun update(
-        uri: Uri,
-        values: ContentValues?,
-        selection: String?,
-        selectionArgs: Array<out String>?,
-    ): Int = 0
 
     private companion object {
         const val SHELL_UID = 2000

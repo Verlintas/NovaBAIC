@@ -49,6 +49,7 @@ data class SettingsUiState(
     val accent: AccentColor = AccentColor.BLUE,
     val language: AppLanguage = AppLanguage.SYSTEM,
     val autoSaveSkills: Boolean = false,
+    val keepExecutionScreenshots: Boolean = true,
     val storage: StorageUsage? = null,
     val stats: UsageStats? = null,
 )
@@ -137,11 +138,13 @@ class SettingsViewModel @Inject constructor(
         storage,
         stats,
         settingsRepository.autoSaveSkills,
-    ) { base, storageUsage, usageStats, autoSaveSkills ->
+        settingsRepository.keepExecutionScreenshots,
+    ) { base, storageUsage, usageStats, autoSaveSkills, keepScreenshots ->
         base.copy(
             storage = storageUsage,
             stats = usageStats,
             autoSaveSkills = autoSaveSkills,
+            keepExecutionScreenshots = keepScreenshots,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -163,6 +166,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoSaveSkills(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoSaveSkills(enabled) }
+    }
+
+    fun setKeepExecutionScreenshots(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setKeepExecutionScreenshots(enabled) }
     }
 
     fun setDefaultAgent(id: Long) {

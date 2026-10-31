@@ -110,30 +110,40 @@ class AndroidWirelessAdbBridge @Inject constructor(
                 runCatching { connect() }
             }
         }
-        context.contentResolver.registerContentObserver(
+        observeTransportChanges()
+    }
+
+    /**
+     * Reconnect when the system setting changes or a Wi-Fi network appears.
+     * Keeping both callbacks in one helper makes the retry policy explicit.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun observeTransportChanges() {
+        val resolver = context.contentResolver
+        resolver.registerContentObserver(
             Settings.Global.getUriFor(ADB_WIFI_ENABLED),
             false,
             object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) {
-                    if (!shouldReconnect()) return
-                    scope.launch { runCatching { connect() } }
-                }
+                override fun onChange(self: Boolean) = reconnectIfWanted()
             },
         )
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val wifi = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
         runCatching {
-            val cm = context.getSystemService(ConnectivityManager::class.java)
-            cm.registerNetworkCallback(
-                NetworkRequest.Builder()
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .build(),
+            connectivity.registerNetworkCallback(
+                wifi,
                 object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) {
-                        if (!shouldReconnect()) return
-                        scope.launch { runCatching { connect() } }
-                    }
+                    override fun onAvailable(wifiNetwork: Network) = reconnectIfWanted()
                 },
             )
         }
+    }
+
+    private fun reconnectIfWanted() {
+        if (!shouldReconnect()) return
+        scope.launch { runCatching { connect() } }
     }
 
     override fun setAutoEnable(enabled: Boolean) {
@@ -524,27 +534,39 @@ class AndroidWirelessAdbBridge @Inject constructor(
         return result.toList()
     }
 
-    private fun readTlsPort(): Int? = runCatching {
-        Class.forName("android.os.SystemProperties")
-            .getMethod("get", String::class.java)
-            .invoke(null, TLS_PORT_PROPERTY) as? String
-    }.getOrNull()?.trim()?.toIntOrNull()?.takeIf { it in 1..65535 }
+    private fun readTlsPort(): Int? {
+        val raw = runCatching {
+            val process = ProcessBuilder("getprop", TLS_PORT_PROPERTY)
+                .redirectErrorStream(true)
+                .start()
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.destroy()
+                return null
+            }
+            process.inputStream.bufferedReader().use { it.readText() }
+        }.getOrNull()
+        return raw?.trim()?.toIntOrNull()?.takeIf { it in 1..65535 }
+    }
 
     @SuppressLint("MissingPermission")
-    private fun localHosts(): List<String> = buildList {
-        add(LOCALHOST)
-        runCatching {
-            val cm = context.getSystemService(ConnectivityManager::class.java)
-            @Suppress("DEPRECATION")
-            cm.allNetworks
-                .filter {
-                    cm.getNetworkCapabilities(it)
-                        ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-                }
-                .flatMap { cm.getLinkProperties(it)?.linkAddresses.orEmpty() }
-                .mapNotNull { (it.address as? Inet4Address)?.hostAddress }
-        }.getOrDefault(emptyList()).forEach { if (it != LOCALHOST) add(it) }
-    }.distinct()
+    private fun localHosts(): List<String> {
+        val hosts = linkedSetOf(LOCALHOST)
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+            ?: return hosts.toList()
+        @Suppress("DEPRECATION")
+        val networks = connectivity.allNetworks
+        for (network in networks) {
+            val capabilities = connectivity.getNetworkCapabilities(network) ?: continue
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+            val link = connectivity.getLinkProperties(network) ?: continue
+            for (linkAddress in link.linkAddresses) {
+                val address = linkAddress.address as? Inet4Address ?: continue
+                val host = address.hostAddress ?: continue
+                hosts += host
+            }
+        }
+        return hosts.toList()
+    }
 
     private data class Endpoint(val host: String, val port: Int)
 

@@ -485,6 +485,21 @@ fun StoragePage(
                 }
             }
         }
+        item(key = "keep-screenshots") {
+            SettingsRow(
+                title = stringResource(R.string.settings_storage_keep_screenshots),
+                summary = stringResource(R.string.settings_storage_keep_screenshots_desc),
+                onClick = {
+                    viewModel.setKeepExecutionScreenshots(!state.keepExecutionScreenshots)
+                },
+                trailing = {
+                    Switch(
+                        checked = state.keepExecutionScreenshots,
+                        onCheckedChange = null,
+                    )
+                },
+            )
+        }
         item(key = "actions") { SettingsSectionLabel(stringResource(R.string.settings_storage_cleanup)) }
         item(key = "clear-attachments") {
             SettingsRow(

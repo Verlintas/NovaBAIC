@@ -109,7 +109,7 @@ class AppResearchTool @Inject constructor(
                 "No launchable app matches '$appQuery'. Ask the user which app to use.",
             )
         val pm = context.appContext.packageManager
-        val launch = pm.getLaunchIntentForPackage(app.packageName)
+        val launch = AppResolver.launchIntent(context.appContext, app.packageName)
             ?: return ToolResult.Failure("'${app.label}' has no launchable activity.")
         val preferredViewId = knowledge.get(app.packageName)?.searchViewId
 
@@ -150,7 +150,7 @@ class AppResearchTool @Inject constructor(
         if (displays.available()) {
             val virtual = displays.ensure()
             if (virtual.isSuccess) {
-                return researchOnVirtualDisplay(
+                val virtualResult = researchOnVirtualDisplay(
                     appLabel = app.label,
                     packageName = app.packageName,
                     component = launch.component?.flattenToShortString()
@@ -169,6 +169,13 @@ class AppResearchTool @Inject constructor(
                     lexicon = lexicon,
                     preferredViewId = preferredViewId,
                 )
+                // Some OEM Settings builds expose a search page that is not
+                // visible to accessibility or OCR on a virtual display. Fall
+                // back to the foreground path instead of failing the task.
+                val searchUnavailable = virtualResult is ToolResult.Failure &&
+                    virtualResult.reason.contains("search field", ignoreCase = true)
+                if (!searchUnavailable) return virtualResult
+                displays.release()
             }
         }
 
@@ -822,25 +829,64 @@ class AppResearchTool @Inject constructor(
         displayId: Int,
         query: String,
     ): Boolean {
-        var set: Result<Unit> = Result.failure(IllegalStateException("not_attempted"))
-        for (attempt in 0 until 4) {
-            set = context.accessibility.setTextOnDisplay(displayId, query)
-            if (set.isSuccess) break
-            delay(250)
+        repeat(3) { attempt ->
+            // A tapped search entry often opens a transient page; wait for the
+            // real EditText and focus it before SET_TEXT.
+            if (focusEditableOnDisplay(context, displayId)) {
+                var set: Result<Unit> = Result.failure(IllegalStateException("not_attempted"))
+                repeat(3) {
+                    set = context.accessibility.setTextOnDisplay(displayId, query)
+                    if (set.isSuccess) return@repeat
+                    delay(200)
+                }
+                if (set.isSuccess) {
+                    val beforeSubmit = context.accessibility.screenTextOnDisplay(displayId).trim()
+                    val submitted = submitSearch(context, displayId)
+                    if (submitted) {
+                        context.accessibility.awaitContentChange(
+                            displayId,
+                            1_500,
+                            beforeSubmit.takeIf { it.isNotEmpty() },
+                        )
+                        if (awaitVirtualResults(context, displayId, query)) return true
+                    }
+                }
+            }
+            if (attempt < 2) delay(350)
         }
-        if (set.isFailure) return false
-        val beforeSubmit = context.accessibility.screenTextOnDisplay(displayId).trim()
-        val enter = context.accessibility.pressEnterOnDisplay(displayId)
-        if (enter.isFailure) {
-            displays.keyEvent(66).getOrNull() ?: return false
+        // Typing may have succeeded even when the app returns an empty result
+        // page; let the caller read that page rather than looping forever.
+        return context.accessibility.screenTextOnDisplay(displayId).isNotBlank()
+    }
+
+    private suspend fun focusEditableOnDisplay(
+        context: ToolContext,
+        displayId: Int,
+    ): Boolean {
+        repeat(8) {
+            val node = context.accessibility.editableNodeOnDisplay(displayId)
+            if (node != null) {
+                context.accessibility.tap(node.centerX, node.centerY)
+                delay(180)
+                if (context.accessibility.editableFocusedOnDisplay(displayId)) return true
+            }
+            delay(220)
         }
-        context.accessibility.awaitContentChange(
-            displayId,
-            1_500,
-            beforeSubmit.takeIf { it.isNotEmpty() },
-        )
-        awaitVirtualResults(context, displayId, query)
-        return true
+        return context.accessibility.editableFocusedOnDisplay(displayId)
+    }
+
+    private suspend fun submitSearch(
+        context: ToolContext,
+        displayId: Int,
+    ): Boolean {
+        if (context.accessibility.pressEnterOnDisplay(displayId).isSuccess) return true
+        if (displays.keyEvent(66).isSuccess) return true
+        // Some OEM search bars expose a clickable "Search" action but no IME
+        // action on the field.
+        for (label in listOf("搜索", "search")) {
+            if (context.accessibility.clickTextOnDisplay(displayId, label).isSuccess) return true
+        }
+        return false
     }
 
     private suspend fun findVirtualSearchTarget(
@@ -928,12 +974,17 @@ class AppResearchTool @Inject constructor(
         }
     }
 
-    private suspend fun awaitVirtualResults(context: ToolContext, displayId: Int, query: String) {
+    private suspend fun awaitVirtualResults(
+        context: ToolContext,
+        displayId: Int,
+        query: String,
+    ): Boolean {
         repeat(8) {
             val text = context.accessibility.screenTextOnDisplay(displayId)
-            if (hasQueryResult(text, query)) return
+            if (hasQueryResult(text, query)) return true
             delay(300)
         }
+        return hasQueryResult(context.accessibility.screenTextOnDisplay(displayId), query)
     }
 
     private suspend fun awaitEditable(context: ToolContext): Boolean {
