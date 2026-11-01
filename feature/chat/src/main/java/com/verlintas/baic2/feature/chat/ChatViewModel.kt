@@ -333,6 +333,7 @@ class ChatViewModel @Inject constructor(
     private fun languageTag(): String? = when (localeStore.language.value) {
         AppLanguage.CHINESE -> "zh-CN"
         AppLanguage.ENGLISH -> "en"
+        AppLanguage.RUSSIAN -> "ru"
         AppLanguage.SYSTEM -> null
     }
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_conversations_title">Диалоги</string>
+
+    <string name="conversations_subtitle">Диалогов: %1$d · %2$s</string>
+    <string name="conversations_subtitle_no_agent">Диалогов: %1$d · сервис не настроен</string>
+    <string name="conversations_empty_title">Диалогов пока нет</string>
+    <string name="conversations_empty_description">Настройте AI-сервис и начните первый диалог</string>
+    <string name="conversations_start">Начать новый диалог</string>
+    <string name="conversations_new">Новый диалог</string>
+    <string name="conversations_untitled">Без названия</string>
+    <string name="conversations_no_messages">Сообщений пока нет</string>
+    <string name="conversations_delete">Удалить диалог</string>
+
+    <string name="agent_banner_title">AI-сервис не настроен</string>
+    <string name="agent_banner_action">Настроить</string>
+    <string name="agent_setup_action">Настроить AI-сервис</string>
+
+</resources>

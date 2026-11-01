@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_label">BAIC2: автоматизация интерфейса</string>
+    <string name="a11y_description">Позволяет ИИ читать содержимое экрана и выполнять нажатия, свайпы и ввод — только после вашего разрешения и по вашей команде.</string>
+    <string name="notifications_label">BAIC2: чтение уведомлений</string>
+    <string name="run_stop">Стоп</string>
+    <string name="run_running">Агент работает…</string>
+    <string name="run_channel">Запуски агента</string>
+    <string name="run_channel_done">Результаты агента</string>
+    <string name="run_finished">Задача ИИ выполнена</string>
+    <string name="run_reply_ready">Ответ готов</string>
+    <string name="run_interrupted">Задача ИИ прервана</string>
+    <string name="projection_title">BAIC2: захват экрана</string>
+    <string name="projection_text">Используется для анализа экрана и OCR</string>
+    <string name="projection_channel">Захват экрана</string>
+    <string name="reminder_title">Напоминание</string>
+</resources>

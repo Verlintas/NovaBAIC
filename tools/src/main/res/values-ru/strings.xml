@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="automation_channel">Автоматизации</string>
+    <string name="automation_done">Автоматизация завершена: %1$s</string>
+    <string name="automation_partial">Автоматизация выполнена частично: %1$s</string>
+    <string name="scheduled_channel">Задачи по расписанию</string>
+    <string name="scheduled_running">Задача по расписанию выполняется: %1$s</string>
+    <string name="scheduled_done">Задача по расписанию завершена: %1$s</string>
+    <string name="scheduled_failed">Задача по расписанию не выполнена: %1$s</string>
+</resources>

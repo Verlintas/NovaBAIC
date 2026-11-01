@@ -46,6 +46,7 @@ class AppLocaleStore @Inject constructor(
         when (prefs.getString(KEY_LANGUAGE, null)) {
             AppLanguage.CHINESE.name -> AppLanguage.CHINESE
             AppLanguage.ENGLISH.name -> AppLanguage.ENGLISH
+            AppLanguage.RUSSIAN.name -> AppLanguage.RUSSIAN
             else -> AppLanguage.SYSTEM
         }
 
@@ -63,6 +64,7 @@ class AppLocaleStore @Inject constructor(
                 .getString(KEY_LANGUAGE, null)) {
                 AppLanguage.CHINESE.name -> AppLanguage.CHINESE
                 AppLanguage.ENGLISH.name -> AppLanguage.ENGLISH
+                AppLanguage.RUSSIAN.name -> AppLanguage.RUSSIAN
                 else -> AppLanguage.SYSTEM
             }
     }

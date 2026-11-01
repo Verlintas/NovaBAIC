@@ -329,6 +329,7 @@ private fun languageLabel(language: com.verlintas.baic2.core.model.AppLanguage):
             com.verlintas.baic2.core.model.AppLanguage.SYSTEM -> R.string.language_system
             com.verlintas.baic2.core.model.AppLanguage.CHINESE -> R.string.language_chinese
             com.verlintas.baic2.core.model.AppLanguage.ENGLISH -> R.string.language_english
+            com.verlintas.baic2.core.model.AppLanguage.RUSSIAN -> R.string.language_russian
         },
     )
 

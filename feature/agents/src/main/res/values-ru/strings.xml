@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="agent_setup_action">Настроить AI-сервис</string>
+
+    <string name="agent_setup_title">Настройка AI-сервиса</string>
+    <string name="agent_setup_subtitle">Совместимые с OpenAI эндпоинты (DeepSeek / Kimi / Qwen / Ollama / шлюзы…), Claude и Gemini</string>
+    <string name="agent_setup_base_url">Base URL</string>
+    <string name="agent_setup_api_key">API-ключ</string>
+    <string name="agent_setup_model">Модель</string>
+    <string name="agent_setup_fetch_models">Получить</string>
+    <string name="agent_setup_save">Сохранить</string>
+    <string name="agent_setup_hint">Ключ шифруется через Android Keystore и отправляется только выбранному вами сервису</string>
+    <string name="agent_setup_error_key">Укажите API-ключ</string>
+    <string name="agent_setup_error_url">Укажите Base URL</string>
+    <string name="agent_setup_error_model">Укажите название модели</string>
+    <string name="agent_setup_error_keystore">Не удалось зашифровать ключ — повторите попытку</string>
+    <string name="agent_setup_error_auth">Ошибка авторизации — проверьте API-ключ</string>
+    <string name="agent_setup_error_network">Сетевая ошибка — проверьте подключение и Base URL</string>
+    <string name="agent_setup_error_rate_limit">Слишком много запросов — повторите попозже</string>
+    <string name="agent_setup_error_generic">Ошибка запроса: %1$s</string>
+
+    <string name="preset_custom">Другой</string>
+    <string name="agent_setup_name">Название</string>
+    <string name="agent_setup_system_prompt_hint">например: ты лаконичный и надёжный ассистент</string>
+    <string name="wizard_close">Закрыть</string>
+    <string name="wizard_title_new">Подключение AI-сервиса</string>
+    <string name="wizard_title_edit">Изменение сервиса</string>
+    <string name="wizard_step_provider">Сервис</string>
+    <string name="wizard_step_connection">Подключение и модель</string>
+    <string name="wizard_step_tuning">Параметры</string>
+    <string name="wizard_step_prompt">Системный промпт</string>
+    <string name="wizard_key_hint">Вставьте API-ключ — сервис определится автоматически</string>
+    <string name="wizard_detected">Определено: %1$s</string>
+    <string name="wizard_or_pick">Или выберите сервис вручную</string>
+    <string name="wizard_model_pick">Выберите модель</string>
+    <string name="wizard_model_manual">Ввести название модели вручную</string>
+    <string name="wizard_models_loading">Получение списка моделей…</string>
+    <string name="wizard_models_error">Не удалось получить список: %1$s</string>
+    <string name="wizard_models_found">Подключено · моделей: %1$d</string>
+    <string name="wizard_models_idle">Нажмите «Повторить», чтобы получить список моделей</string>
+    <string name="wizard_retry">Повторить</string>
+    <string name="wizard_temperature">Температура · случайность %1$d%%</string>
+    <string name="wizard_max_tokens">Максимум токенов на ответ</string>
+    <string name="wizard_reasoning">Глубокое мышление (неявная цепочка рассуждений)</string>
+    <string name="wizard_reasoning_desc">Анализ идёт в скрытом канале рассуждений: токенов меньше, ответ точнее; наружу — только выводы</string>
+    <string name="wizard_prompt_hint">Системный промпт задаёт роль и стиль ассистента; можно оставить пустым</string>
+    <string name="wizard_prompt_tpl_general">Ты полезный ассистент: отвечай точно и по делу.</string>
+    <string name="wizard_prompt_tpl_translate">Ты профессиональный переводчик: сохраняй смысл и тон, выводи только перевод.</string>
+    <string name="wizard_prompt_tpl_code">Ты опытный инженер: давай рабочий код и краткие пояснения.</string>
+    <string name="wizard_prompt_tpl_concise">Отвечай максимально коротко и начинай с вывода.</string>
+    <string name="wizard_next">Далее</string>
+    <string name="wizard_back">Назад</string>
+    <string name="wizard_saved">Настройка завершена</string>
+    <string name="wizard_models_from_api">Из API · моделей: %1$d</string>
+    <string name="wizard_models_retry">Обновить список моделей</string>
+    <string name="wizard_models_search">Поиск модели</string>
+    <string name="wizard_models_more">…и ещё %1$d — введите текст для фильтра</string>
+    <string name="wizard_models_no_match">Подходящих моделей нет</string>
+    <string name="wizard_models_recommended">Рекомендуемые (встроенный каталог, используется, если API не вернул список)</string>
+    <string name="wizard_models_need_key">Сначала введите API-ключ (при изменении сервиса используется сохранённый ключ)</string>
+</resources>

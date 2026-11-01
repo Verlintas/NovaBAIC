@@ -84,6 +84,7 @@
     <string name="language_system_hint">自动匹配设备语言</string>
     <string name="language_chinese">简体中文</string>
     <string name="language_english">English</string>
+    <string name="language_russian">Русский</string>
     <string name="settings_language_hint">切换语言后界面会立即重启生效</string>
 
     <string name="settings_section_data">数据与存储</string>
