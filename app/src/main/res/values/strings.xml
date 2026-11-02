@@ -22,4 +22,7 @@
     <string name="display_keep_channel">后台虚拟屏保活</string>
     <string name="display_keep_active">运行中 · display %1$d</string>
     <string name="display_keep_waiting">等待可用的 shell；已有虚拟屏会话仍会保持</string>
+    <string name="browser_login_title">登录 / 验证</string>
+    <string name="browser_login_hint">完成登录或验证码后点“完成”，后台会继续读取同一会话。</string>
+    <string name="browser_login_done">完成</string>
 </resources>

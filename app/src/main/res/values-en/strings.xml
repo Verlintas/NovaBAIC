@@ -21,4 +21,7 @@
     <string name="display_keep_channel">Background display keepalive</string>
     <string name="display_keep_active">Active · display %1$d</string>
     <string name="display_keep_waiting">Waiting for a shell; an existing display session stays alive</string>
+    <string name="browser_login_title">Login / verification</string>
+    <string name="browser_login_hint">Complete the login or captcha, then tap Done. The background session will continue with the same cookies.</string>
+    <string name="browser_login_done">Done</string>
 </resources>

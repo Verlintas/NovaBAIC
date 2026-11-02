@@ -124,7 +124,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 
 **内容与网络**
 
-`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `web_research`（应用自有虚拟屏 + WebView 的后台网页研究：open / snapshot / click ref / type / read / scroll；不依赖无障碍、Shizuku 或 ADB）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `web_research`（应用自有虚拟屏 + WebView 的后台网页研究：open / snapshot / click ref / type / read / scroll，登录/验证码可交给前台 show_to_user；不依赖无障碍、Shizuku 或 ADB）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **个人助理**
 

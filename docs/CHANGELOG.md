@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 ### 新增 Added
 
+- **登录 / 验证码 handoff**：`show_to_user` 打开 `BrowserLoginActivity`（同一 WebView cookie profile），用户完成登录/验证码后点“完成”；后台重新加载登录页当前 URL，返回登录后的 DOM 快照。顶栏做了状态栏 inset，完成按钮有 48dp 触控高度。
 - **`web_research` 工具**：`open` / `snapshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll(up|down)` / `show_to_user` / `hide`。快照返回页面标题、URL、可见正文和 `w1…wN` 元素引用；点击/输入按 ref 执行。
 - **应用自有虚拟屏**：`BrowserHostActivity` + `BrowserSession` 用 `DisplayManager.createVirtualDisplay(..., VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)` 创建仅属于本 App 的虚拟屏，`Presentation + WebView` 渲染网页。不需要 shell 传输，不会把第三方 App 带到手机主屏。
 - **URL 策略**：`NetworkEndpointPolicy` 继续限制 Agent Base URL；`web_research` 只接受 HTTPS 或私有 LAN HTTP，WebView 拦截非 http/https scheme。
@@ -21,7 +22,8 @@ All notable changes to this project are documented in this file.
 
 ### 已知限制 Known limitations
 
-- 登录/验证码 handoff 仍是下一步：当前遇到登录墙会返回明确失败，不自动绕过。
+- X 的 WebView 登录被 X 拦截：Google OAuth 会白屏，Email/username 登录返回 “Sorry, you are not allowed to log in at this time”。X 网页搜索需要已登录会话，因此暂不作为 `web_research` 的承诺范围；需要 X API/token 或用户已有会话。
+- 登录/验证码 handoff 已用公开测试站验证（登录后后台读到 Secure Area）；真实站点的 OAuth/反爬限制由站点决定，不绕过。
 - MVP 先覆盖公开 GitHub 搜索；X / Reddit / 知乎需要各自验证登录与反爬行为。
 - WebView 后台节流、Cookie 隔离、会话回收和 `web_read`/MCP 的 HTTP 校验仍待补。
 - 微信聊天没有可用网页版，继续保留原生 `app_research`，不作为 web_research 的承诺范围。

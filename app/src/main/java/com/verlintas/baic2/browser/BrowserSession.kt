@@ -30,6 +30,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -62,6 +63,8 @@ class BrowserSession(private val host: ComponentActivity) {
     private var webView: WebView? = null
     private var frameThread: HandlerThread? = null
     private var pageLoad: CompletableDeferred<Result<Unit>>? = null
+    private var handoff: CompletableDeferred<Result<Unit>>? = null
+    private var lastUrl: String? = null
     private val ready = CompletableDeferred<Unit>()
     private val closed = AtomicBoolean(false)
 
@@ -98,6 +101,8 @@ class BrowserSession(private val host: ComponentActivity) {
             settings.databaseEnabled = true
             settings.loadsImagesAutomatically = true
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.saveFormData = false
+            settings.savePassword = false
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     Log.i(TAG, "page finished $url")
@@ -153,6 +158,7 @@ class BrowserSession(private val host: ComponentActivity) {
     suspend fun open(url: String): Result<WebSnapshot> {
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        lastUrl = url
         val load = CompletableDeferred<Result<Unit>>()
         pageLoad = load
         withContext(Dispatchers.Main) { view.loadUrl(url) }
@@ -212,11 +218,54 @@ class BrowserSession(private val host: ComponentActivity) {
         return snapshot()
     }
 
-    fun showToUser() {
-        runCatching {
+    suspend fun showToUser(): Result<Unit> {
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val url = withContext(Dispatchers.Main) { view.url } ?: lastUrl
+            ?: return Result.failure(IllegalStateException("no_page_to_show"))
+        val deferred = CompletableDeferred<Result<Unit>>()
+        handoff = deferred
+        val started = runCatching {
             host.startActivity(
-                Intent(host, BrowserHostActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                Intent(host, BrowserLoginActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(BrowserLoginActivity.EXTRA_URL, url),
+            )
+        }.isSuccess
+        if (!started) {
+            handoff = null
+            return Result.failure(IllegalStateException("handoff_activity_failed"))
+        }
+        return withTimeoutOrNull(HANDOFF_TIMEOUT_MS) { deferred.await() }
+            ?: Result.failure(IllegalStateException("handoff_timeout"))
+    }
+
+    fun completeHandoff(cancelled: Boolean, currentUrl: String? = null) {
+        val deferred = handoff ?: return
+        handoff = null
+        val reloadUrl = currentUrl?.takeIf { it.startsWith("http") }
+            ?: lastUrl
+            ?: webView?.url
+            ?: "about:blank"
+        val host = runCatching { java.net.URI(reloadUrl).host }.getOrNull()
+        val cookieNames = host?.let { hostName ->
+            CookieManager.getInstance().getCookie("https://$hostName")
+                ?.split(';')
+                ?.mapNotNull { it.substringBefore('=').trim().takeIf(String::isNotBlank) }
+                ?.take(20)
+        }.orEmpty()
+        Log.i(TAG, "handoff finish reload=$reloadUrl cookies=$cookieNames")
+        main.post {
+            CookieManager.getInstance().flush()
+            webView?.loadUrl(reloadUrl)
+        }
+        if (!deferred.isCompleted) {
+            deferred.complete(
+                if (cancelled) {
+                    Result.failure(IllegalStateException("handoff_cancelled"))
+                } else {
+                    Result.success(Unit)
+                },
             )
         }
     }
@@ -282,6 +331,7 @@ class BrowserSession(private val host: ComponentActivity) {
         const val READY_TIMEOUT_MS = 8_000L
         const val PAGE_TIMEOUT_MS = 20_000L
         const val NAV_TIMEOUT_MS = 8_000L
+        const val HANDOFF_TIMEOUT_MS = 5 * 60_000L
 
         const val SNAPSHOT_JS = """
             (function() {

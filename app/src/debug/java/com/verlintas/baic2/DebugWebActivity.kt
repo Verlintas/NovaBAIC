@@ -52,6 +52,8 @@ class DebugWebActivity : ComponentActivity() {
                 .ifEmpty { "https://github.com/search?q=openai&type=repositories" }
             val ref = intent.getStringExtra("click_ref")?.trim().orEmpty()
                 .ifEmpty { intent.getStringExtra("ref")?.trim().orEmpty() }
+            val handoff = intent.getBooleanExtra("handoff", false)
+            val reopen = intent.getBooleanExtra("reopen", false)
             val tool = registry.tool("web_research")
             if (tool == null) {
                 Log.e(TAG, "web_research is not registered")
@@ -63,7 +65,7 @@ class DebugWebActivity : ComponentActivity() {
                 if (action == "open") put("url", url)
                 if (ref.isNotEmpty()) put("ref", ref)
             }
-            Log.i(TAG, "action=$action url=$url ref=$ref extras=${intent.extras?.keySet()}")
+            Log.i(TAG, "action=$action url=$url ref=$ref handoff=$handoff reopen=$reopen extras=${intent.extras?.keySet()}")
             suspend fun execute(args: kotlinx.serialization.json.JsonObject): String {
                 val startedAt = System.currentTimeMillis()
                 val result = runCatching { tool.execute(args, toolContext) }
@@ -82,6 +84,19 @@ class DebugWebActivity : ComponentActivity() {
                     put("ref", ref)
                 }
                 text += "\n\n--- CLICK $ref ---\n" + execute(clickArguments)
+            }
+            if (action == "open" && handoff) {
+                val handoffArguments = buildJsonObject {
+                    put("action", "show_to_user")
+                }
+                text += "\n\n--- HANDOFF ---\n" + execute(handoffArguments)
+            }
+            if (action == "open" && handoff && reopen) {
+                val reopenArguments = buildJsonObject {
+                    put("action", "open")
+                    put("url", url)
+                }
+                text += "\n\n--- REOPEN ---\n" + execute(reopenArguments)
             }
             File(getExternalDir(), "debug-web.txt").writeText(text)
             finish()

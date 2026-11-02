@@ -75,7 +75,6 @@ class AndroidWebBrowser @Inject constructor(
         val current = session()
             ?: return@withLock Result.failure(IllegalStateException("no_browser_session"))
         current.showToUser()
-        Result.success(Unit)
     }
 
     override suspend fun hide(): Result<Unit> = mutex.withLock {

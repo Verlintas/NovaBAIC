@@ -21,4 +21,7 @@
     <string name="display_keep_channel">Поддержка фонового дисплея</string>
     <string name="display_keep_active">Активен · дисплей %1$d</string>
     <string name="display_keep_waiting">Ожидание оболочки (ADB); существующая сессия дисплея остаётся активной</string>
+    <string name="browser_login_title">Вход / проверка</string>
+    <string name="browser_login_hint">Завершите вход или проверку и нажмите «Готово». Фоновый сеанс продолжит работу с теми же cookie.</string>
+    <string name="browser_login_done">Готово</string>
 </resources>

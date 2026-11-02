@@ -46,8 +46,9 @@ class WebResearchTool @Inject constructor(
             "DOM snapshot with stable element refs (w1, w2…), click a ref, type into an input, " +
             "or scroll. Prefer this over app_research when the target platform has a usable web " +
             "version (GitHub, X, Reddit, Zhihu…). It never sends messages, posts, orders or pays. " +
-            "If a page needs login or a captcha, the tool returns a clear failure; ask the user " +
-            "to complete it. Use 'open' with an https URL, then 'snapshot', then 'click'/'read'.",
+            "If a page needs login or a captcha, call 'show_to_user': it opens the same cookie " +
+            "session in a foreground browser and waits for the user, then returns the post-login " +
+            "snapshot. Use 'open' with an https URL, then 'snapshot', then 'click'/'read'.",
         parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","show_to_user","hide"],"description":"browser action"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for the type action"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"}},"required":["action"]}""",
         readOnly = true,
         danger = DangerLevel.LOW,
@@ -106,7 +107,17 @@ class WebResearchTool @Inject constructor(
             }
 
             "show_to_user" -> browser.showToUser().fold(
-                onSuccess = { ToolResult.Success("Browser session is available to the user.") },
+                onSuccess = {
+                    browser.snapshot().fold(
+                        onSuccess = { snapshot ->
+                            ToolResult.Success(
+                                "User handoff finished. Current page:\n\n" +
+                                    format(snapshot, includeElements = true),
+                            )
+                        },
+                        onFailure = { failure("snapshot_after_handoff", it) },
+                    )
+                },
                 onFailure = { failure("show_to_user", it) },
             )
 

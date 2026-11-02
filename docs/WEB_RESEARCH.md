@@ -1,6 +1,6 @@
 # Web research / 内置浏览器
 
-> 状态：GitHub 搜索 MVP 已真机验证；扩展中
+> 状态：GitHub 搜索 MVP + 登录 handoff 已验证；X 登录被 X 拦截
 > 最后更新：2026-11-02
 > 目标版本：0.5.0
 
@@ -67,13 +67,18 @@ web_research hide()
 
 ### 登录 / 验证码 handoff
 
-1. 自动化检测到登录页、验证码、风控或空结果。
-2. `web_research` 返回 `NeedsUser` + 原因，不继续猜。
-3. `show_to_user` 把同一个 WebView 会话显示到前台（Activity 或悬浮窗）。
-4. 用户完成登录/验证码；工具轮询 DOM/URL 判断成功。
-5. `hide` 回到虚拟屏，继续原任务。
+已实现：
 
-Cookie / WebStorage 复用，不保存密码，不尝试绕过验证码。
+1. 自动化检测到登录页、验证码、风控或空结果。
+2. `web_research` 的 `show_to_user` 打开 `BrowserLoginActivity`；它与后台 WebView 共享同一 cookie/profile。
+3. 用户完成登录/验证码后点顶部“完成”（状态栏 inset + 48dp 触控高度）。
+4. 后台重新加载登录页当前 URL，返回登录后的 DOM 快照。
+5. 不保存密码，不尝试绕过验证码。
+
+验证：
+
+- 公开测试站 `the-internet.herokuapp.com`：登录后后台读取 `/secure`，显示 “Secure Area”，说明 Cookie 共享成功。
+- X：Google OAuth 在 WebView 白屏；Email/username 登录返回 “Sorry, you are not allowed to log in at this time”。这是 X 对 WebView 登录的限制，不是 handoff 机制问题。X 网页搜索需要已有会话/API token，暂不作为承诺范围。
 
 ## 4. 架构
 
@@ -111,7 +116,7 @@ web_research tool
 ## 6. 风险
 
 - **WebView 后台节流**：虚拟屏上的 WebView 可能被系统降频；需要前台服务/保持显示 active，实测再定。
-- **反爬 / 风控**：验证码、登录墙、WebView 指纹；只能人工接管，不绕过。
+- **反爬 / 风控**：验证码、登录墙、WebView 指纹；只能人工接管，不绕过。X 已明确拒绝 WebView 登录。
 - **账号风险**：自动化操作可能触发平台风控；默认低频、只读、可随时停止。
 - **安全**：浏览器里有登录态；独立 profile、可清除、不保存密码；不把 Cookie 写进模型上下文。
 - **WebView 兼容性**：部分站点要求 Chrome 内核/DRM；必要时只把前台 handoff 交给 Custom Tabs，后台自动化仍用 WebView。
@@ -129,5 +134,5 @@ web_research tool
 1. 把 `DebugBrowserActivity` 提取成 `BrowserHost` + `BrowserSession`。
 2. 实现 `snapshot` / `click(ref)` / `type(ref)` 的 DOM 桥。
 3. 做一个 `web_research` 只读工具，先接 GitHub 搜索。
-4. 验证前台 handoff（用 GitHub 登录页或 X 登录页）。
-5. 通过后再考虑 0.5.0 发布。
+4. 扩展 Reddit / 知乎等可公开读取或可密码登录的站点；X 需要 API/token 或已有会话。
+5. 做空闲会话回收、Cookie 清除入口，再考虑 0.5.0 发布。
