@@ -165,6 +165,8 @@ class BrowserSession(private val host: ComponentActivity) {
         val loaded = withTimeoutOrNull(PAGE_TIMEOUT_MS) { load.await() }
             ?: return Result.failure(IllegalStateException("page_load_timeout"))
         loaded.getOrElse { return Result.failure(it) }
+        // Give client-rendered search pages a beat to paint their results.
+        kotlinx.coroutines.delay(900)
         return snapshot()
     }
 
@@ -329,7 +331,7 @@ class BrowserSession(private val host: ComponentActivity) {
     private companion object {
         const val TAG = "BAIC2WEB"
         const val READY_TIMEOUT_MS = 8_000L
-        const val PAGE_TIMEOUT_MS = 20_000L
+        const val PAGE_TIMEOUT_MS = 35_000L
         const val NAV_TIMEOUT_MS = 8_000L
         const val HANDOFF_TIMEOUT_MS = 5 * 60_000L
 

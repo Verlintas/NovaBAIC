@@ -17,6 +17,7 @@ All notable changes to this project are documented in this file.
 ### 测试 Tests
 
 - 真机 Xiaomi 17 Pro Max：GitHub 搜索页 `open` + snapshot 约 0.9–3.4s，返回 80 个可交互元素；点击 `w7` 后导航到 `openai/openai-cookbook`，快照约 1.5s。
+- 其他平台：Wikipedia 10.4s、arXiv 23s 可读取；Reddit 旧版要求登录、新版 SPA 超时；Stack Overflow 跳转人机验证；X 拒绝 WebView 登录；HN Algolia 结果未进入 body DOM。`open` 超时提高到 35s，页面完成后等待 900ms 让 SPA 渲染。
 - 应用自有虚拟屏 `baic2-web` 为 `FLAG_PRIVATE | FLAG_OWN_CONTENT_ONLY`，owner 是 App UID；全程未使用 Shizuku/root/ADB。
 - 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过。
 
@@ -27,6 +28,7 @@ All notable changes to this project are documented in this file.
 - MVP 先覆盖公开 GitHub 搜索；X / Reddit / 知乎需要各自验证登录与反爬行为。
 - WebView 后台节流、Cookie 隔离、会话回收和 `web_read`/MCP 的 HTTP 校验仍待补。
 - 微信聊天没有可用网页版，继续保留原生 `app_research`，不作为 web_research 的承诺范围。
+- Reddit / Stack Overflow / HN Algolia 的登录、验证码或 SPA DOM 仍待单独验证；不把它们的失败算作工具通用失败。
 
 ## [0.4.1] - 2026-11-02
 

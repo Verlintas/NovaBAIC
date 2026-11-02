@@ -113,6 +113,20 @@ web_research tool
 - 登录页能交还前台并恢复
 - 页面导航后旧 ref 被拒绝，不盲点
 
+## 5.1 平台验证矩阵（真机）
+
+| 平台 | 入口 | 结果 |
+| --- | --- | --- |
+| GitHub | `github.com/search?q=...` | ✅ `open` + snapshot 0.9–3.4s；点击结果并读取详情 1.5s |
+| Wikipedia | `en.wikipedia.org/w/index.php?search=...` | ✅ 10.4s，返回 OpenAI 条目正文 |
+| arXiv | `arxiv.org/search/?query=...&searchtype=all` | ✅ 23s，返回论文标题/作者/摘要 |
+| Reddit | `old.reddit.com` / `www.reddit.com` | ⚠️ 旧版要求登录；新版 SPA 在 20s 内未完成加载 |
+| Stack Overflow | `stackoverflow.com/search?q=...` | ⚠️ 跳转 `/nocaptcha` 人机验证 |
+| X | `x.com/search?q=...` | ❌ WebView 登录被 X 拦截（Google OAuth 白屏；密码登录返回 not allowed） |
+| HN Algolia | `hn.algolia.com/?query=...` | ⚠️ SPA 结果未进入 body DOM（需要 shadow DOM/接口等待） |
+
+说明：`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
+
 ## 6. 风险
 
 - **WebView 后台节流**：虚拟屏上的 WebView 可能被系统降频；需要前台服务/保持显示 active，实测再定。
