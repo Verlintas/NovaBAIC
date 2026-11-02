@@ -2,7 +2,7 @@
 
 This document explains the internals of **BetterAIChat2** (BAIC2) in exhaustive detail: module architecture, the request pipeline, streaming protocols, the agent loop, the tool system, permission bridges, automation, storage, UI, security, the evaluation harness, and the engineering lessons learned from real bugs. It is written as a study guide for programmers who want to understand a real, working Android AI-agent application — and as the maintenance handbook for this repository.
 
-> Scope: 57 built-in device tools, Agents (provider + key + model + prompt + reasoning), three provider protocols (OpenAI-compatible / Anthropic / Gemini), Shizuku + Wireless debugging + Accessibility + MediaProjection integration, scheduled tasks, Skills, MCP, and subagents.
+> Scope: 58 built-in device tools, Agents (provider + key + model + prompt + reasoning), three provider protocols (OpenAI-compatible / Anthropic / Gemini), Shizuku + Wireless debugging + Accessibility + MediaProjection integration, scheduled tasks, Skills, MCP, and subagents.
 
 ---
 
@@ -93,7 +93,7 @@ Numbers that matter:
 
 | Thing | Count | Source of truth |
 | --- | --- | --- |
-| Built-in tools | 57 | `tools/check-tool-schemas.py` output; `ToolRegistry.toolNames` |
+| Built-in tools | 58 | `tools/check-tool-schemas.py` output; `ToolRegistry.toolNames` |
 | Room tables | 10 | `core/data/.../db/Entities.kt` |
 | DB version | 21 | `Baic2Database.kt` |
 | Modules | 17 | `settings.gradle.kts` |
@@ -713,12 +713,14 @@ val result = try { tool.execute(healed.arguments, context.copy(run = run)) }
 - Type coercion: `"3"` → `3`, `true` → `1`, `"yes"` → `true`, a scalar where an array is expected gets wrapped in a single-element array.
 - Every change is recorded as a note and appended to the result, so the model sees what was fixed and (hopefully) stops repeating the mistake.
 
-### 10.4 The 57 tools at a glance
+### 10.4 The 58 tools at a glance
 
 - **Perception / UI**: `take_screenshot`, `screen_ocr`, `screen_record`, `ui_control`, `get_screen_state`, `get_foreground_app`
 - **Apps / system**: `open_app`, `manage_app`, `open_settings`, `run_shell`, `list_installed_apps`, `device_info`, `network_status`, `compute`, `vibrate`, `media_control`, `set_volume`, `set_brightness`, `set_flashlight`, `send_notification`, `read_notifications`, `get_clipboard`, `set_clipboard`, `share_text`, `open_dialer`, `get_app_usage`, `get_location`, `open_map`
 - **Content**: `files`, `file_write`, `download_file`, `ocr_file`, `generate_qr`, `decode_qr`
-- **Web / app**: `web_search`, `web_read`, `app_research`, `fetch_rss`, `get_weather`
+- **Web / app**: `web_search`, `web_read`, `app_research`, `web_research`, `fetch_rss`, `get_weather`
+
+`web_research` is the web counterpart: an app-owned `VirtualDisplay` hosts a `Presentation` + `WebView` (no AccessibilityService, Shizuku, root or ADB), and the tool talks to the page DOM through `evaluateJavascript`. `open` loads an allowed URL, `snapshot` returns visible text plus stable `w1…wN` refs for links/inputs/buttons, `click`/`type` act on those refs, and `scroll`/`read` are read-only. It is the preferred path for platforms with a usable web UI (GitHub, X, Reddit, Zhihu); native-only apps still use `app_research`. Login and captcha handoff are the next step: the current MVP returns a clear failure instead of guessing.
 
 `app_research` is a closed read-only verb. Its output starts with `Search state: results / empty / not-found / not-submitted`, so the model can tell a real result page from a search page that never submitted. User-installed apps prefer OCR (their accessibility tree is often sparse or stale); system apps read the accessibility tree first. A search entry is only accepted when it is a search node, a search label, or an OCR search label, never an arbitrary first `EditText`, so the tool cannot type into a chat composer and press Enter. It launches an installed app, finds the search field by resource id first (for example a view id containing `search`), falls back to locale resources for readable labels, types only into that field, scrolls, and returns visible text; after a successful search it remembers the structural view id in an app-private knowledge file, so the next run does not depend on the button label at all; without `open` it never taps a result. With `open` it taps one explicitly named result row; with `open_top` it picks the first query-matching result. Both read the detail in the same call. The tool does not word-match “send/pay/like” labels; the agent is instructed to pass result rows, not action controls. A structural guard still refuses `Button`/`ImageButton`/`Switch`/`CheckBox`/`EditText`/toggle rows, and a login/captcha/risk page becomes a hand-off note instead of a hard failure. A virtual-display call returns a short `Session:` id; passing it back reads the current page or opens another result without relaunching the app and repeating the search, and returns only the screen delta against the previous observation. A different `query` on the same session first tries to retarget the open results page (search node → labelled search control → editable); if the session is on a detail page or no search control is reachable, it relaunches the app on the existing display instead of trusting a back press to restore the search page. It exposes no tap/type/swipe parameters. Launch, search submission and scrolling wait for the accessibility tree to change (event-woken, with a polling fallback) instead of fixed sleeps, so a ready screen proceeds immediately. With Shizuku, root, or the built-in Wireless debugging transport it runs on a resident `app_process` virtual display (`DisplayHelperMain`); otherwise it falls back to the foreground. The helper is a separate shell process, not a second app runtime, and the display is owned by shell (package `com.android.shell`). `Baic2Application` prewarms the helper on launch when a transport is available; the bridge refreshes a 10-minute idle timer on every ensure/capture/action and releases the helper when it expires, so the first request is fast without keeping the display forever. The helper itself is a local Binder process, not a remote connection: once a session is alive it remains usable after Wi-Fi/ADB drops. An optional foreground service (Settings → Permissions → Keep background display) disables the idle release while it runs and re-checks the session every four minutes; it shows an ongoing notification and uses a little more battery, and after a reboot it waits for a new shell transport.
 

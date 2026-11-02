@@ -62,6 +62,7 @@ object ImpactSummarizer {
             "web_search" -> "网络搜索：${queryText(args).take(40)}"
             "web_read" -> "阅读网页：${(str("url") ?: "").take(60)}"
             "app_research" -> "App 内检索：${str("app") ?: "?"} · ${str("query") ?: "?"}"
+            "web_research" -> "网页检索：${(str("url") ?: str("ref") ?: "?").take(60)}"
             "file_write" -> when (str("action")) {
                 "append" -> "追加文件：${str("name") ?: "?"}"
                 "delete" -> "删除文件：${str("name") ?: "?"}"

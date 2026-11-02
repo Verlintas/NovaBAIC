@@ -260,6 +260,12 @@ object ToolsModule {
 
     @Provides
     @IntoSet
+    fun webResearchTool(
+        browser: com.verlintas.baic2.device.api.WebBrowser,
+    ): DeviceTool = com.verlintas.baic2.tools.web.WebResearchTool(browser)
+
+    @Provides
+    @IntoSet
     fun openAppTool(): DeviceTool = OpenAppTool()
 
     @Provides

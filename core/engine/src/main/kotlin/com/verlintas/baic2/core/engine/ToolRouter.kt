@@ -37,6 +37,7 @@ object ToolRouter {
         "web_search",
         "web_read",
         "app_research",
+        "web_research",
         "spawn_agent",
         "screen_ocr",
         "plan_update",

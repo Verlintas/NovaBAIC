@@ -47,6 +47,7 @@ object ToolTrust {
         "set_clipboard",
         "share_text",
         "app_research",
+        "web_research",
     )
 
     const val UNTRUSTED_MARKER =

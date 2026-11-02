@@ -30,7 +30,7 @@ BetterAIChat2 是 [BetterAIChat](https://github.com/Verlintas/BetterAIChat) 的�
 
 它是**本地优先**的 AI 智能体 —— API Key 经 Android Keystore 加密留在设备上，没有云端、没有遥测、不需要账号；AI 通过**函数调用**真实操作你的手机：看屏、点击、输入、读写文件、设置提醒、跑自动化。
 
-- **真操作设备**：57 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理、内置无线调试与 Shizuku shell
+- **真操作设备**：58 个内置工具，覆盖无障碍操作、截屏 OCR、文件、网络、个人助理、内置无线调试与 Shizuku shell
 - **隐式执行提示**：Act/Max 不逐条罗列工具调用，运行中显示“Using WeChat…”，结束后折叠为动作摘要；成功使用后台虚拟屏的运行会在回复里附上最后一张截图
 - **后台屏预热与保活**：App 启动时若已有可用传输，会提前启动虚拟屏 helper；默认 10 分钟无活动自动回收。设置 → 权限可开启「后台虚拟屏保活」：开启后关闭空闲回收并每 4 分钟检查一次，Wi-Fi/ADB 断开后已启动的会话仍可截图/操作（常驻通知，耗电略增；重启后仍需先恢复 shell）
 - **跨语言界面**：App 内搜索优先按资源 id/控件结构识别，不依赖“搜索/搜寻/discover”这类按钮文案；本地化词表只是兜底
@@ -110,7 +110,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 | `Act` | 执行工具，逐项确认 |
 | `Max` | 自主运行：持久化 Run、预算约束（60 轮 / 160 次工具调用 / 60 分钟）、可后台 |
 
-### AI × 设备（57 个内置工具）
+### AI × 设备（58 个内置工具）
 
 **看屏与操作（无障碍 + 视觉）**
 
@@ -124,7 +124,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 
 **内容与网络**
 
-`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `web_research`（应用自有虚拟屏 + WebView 的后台网页研究：open / snapshot / click ref / type / read / scroll；不依赖无障碍、Shizuku 或 ADB）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **个人助理**
 
@@ -229,7 +229,7 @@ core:runtime       运行层预留（当前调度实现位于 device:impl / tool
 core:designsystem  设计系统 token 与组件
 feature:*          chat / conversations / tasks / settings / agents / library
 device:api|impl    截图 / OCR / 无障碍 / 语音 / 提醒 / 运行通知
-tools              57 个内置工具 + 自动化 + 技能 + 子代理
+tools              58 个内置工具 + 自动化 + 技能 + 子代理
 mcp                远程 MCP 客户端             eval          场景评测 harness
 ```
 
@@ -266,6 +266,7 @@ adb reverse tcp:8765 tcp:8765
 - **已完成 · v0.3.x Agent 效率**：计划一次执行（snapshot / ref / sequence / assert）、后台虚拟屏预热 / 复用 / 保活、内置无线 ADB、自动保存技能、CHAT+ 并行研究子代理
 - **已完成 · v0.4.0 稳定性**：虚拟屏与无线 ADB 独立实现、`app_research` 真机搜索/session 复用、附件生命周期与截图保留、自动保存技能参数化、开机/更新保活
 - **已完成 · v0.4.1 补丁**：修复 release 包 ML Kit OCR 组件注册导致的第三方 App 裸崩溃；`app_research` 增加语义化 `Search state`、OCR-first 第三方 App 路径和搜索入口上半屏过滤；新增俄语与局域网 HTTP（仅私有地址）
+- **进行中 · v0.5.0 Web research**：应用自有虚拟屏 + WebView 的 `web_research` GitHub 搜索 MVP 已真机验证；下一步登录/验证码 handoff 与 X/Reddit 覆盖
 - **进行中**：OEM 矩阵扩展与重启 / 断网恢复验证、Shizuku / 语音 / 录屏全量验收、UI 细节与评测场景扩充
 - **计划中**：更丰富的设备能力与技能生态、更多模型协议跟进
 

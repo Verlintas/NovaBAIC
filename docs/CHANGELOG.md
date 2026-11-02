@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0-alpha] - 2026-11-02
+
+> 0.5.0 的第一块：应用自有虚拟屏 + WebView 的只读网页研究。它不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB。GitHub 搜索 MVP 已在真机验证。
+
+### 新增 Added
+
+- **`web_research` 工具**：`open` / `snapshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll(up|down)` / `show_to_user` / `hide`。快照返回页面标题、URL、可见正文和 `w1…wN` 元素引用；点击/输入按 ref 执行。
+- **应用自有虚拟屏**：`BrowserHostActivity` + `BrowserSession` 用 `DisplayManager.createVirtualDisplay(..., VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)` 创建仅属于本 App 的虚拟屏，`Presentation + WebView` 渲染网页。不需要 shell 传输，不会把第三方 App 带到手机主屏。
+- **URL 策略**：`NetworkEndpointPolicy` 继续限制 Agent Base URL；`web_research` 只接受 HTTPS 或私有 LAN HTTP，WebView 拦截非 http/https scheme。
+- **调试入口**：`DebugBrowserActivity`（虚拟屏 + WebView 渲染/JS/点击/截图）和 `DebugWebActivity`（`web_research` open/click 冒烟）。
+
+### 测试 Tests
+
+- 真机 Xiaomi 17 Pro Max：GitHub 搜索页 `open` + snapshot 约 0.9–3.4s，返回 80 个可交互元素；点击 `w7` 后导航到 `openai/openai-cookbook`，快照约 1.5s。
+- 应用自有虚拟屏 `baic2-web` 为 `FLAG_PRIVATE | FLAG_OWN_CONTENT_ONLY`，owner 是 App UID；全程未使用 Shizuku/root/ADB。
+- 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过。
+
+### 已知限制 Known limitations
+
+- 登录/验证码 handoff 仍是下一步：当前遇到登录墙会返回明确失败，不自动绕过。
+- MVP 先覆盖公开 GitHub 搜索；X / Reddit / 知乎需要各自验证登录与反爬行为。
+- WebView 后台节流、Cookie 隔离、会话回收和 `web_read`/MCP 的 HTTP 校验仍待补。
+- 微信聊天没有可用网页版，继续保留原生 `app_research`，不作为 web_research 的承诺范围。
+
 ## [0.4.1] - 2026-11-02
 
 > 0.4.1 是 0.4.0 的稳定性补丁，修复 release 包中 ML Kit OCR 组件注册失败导致的第三方 App 裸崩溃。

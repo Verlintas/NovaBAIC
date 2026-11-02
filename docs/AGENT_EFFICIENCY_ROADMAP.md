@@ -1,7 +1,7 @@
 # Agent 效率与隐式交互路线图
 
 > 状态：进行中
-> 基线：v0.4.1
+> 基线：v0.5.0-alpha
 > 最后更新：2026-11-02
 > 原则：版本、CHANGELOG、官网与 release 说明统一在“发”之前处理。
 
@@ -486,6 +486,7 @@ data class AppKnowledge(
 - 2026-10-31：去掉 `app_research` 的搜索/UI 文案硬编码。搜索入口先按 view id（含 `search`）识别，失败才用 `tools` 资源数组里的本地化标签；动作词、开关前缀、登录/验证码/风控词也全部资源化（默认英文 + 中文）。模拟器英文 Settings 验证通过；中文 Settings 在英文 App 语言下也能靠 view id 找到入口。
 - 2026-10-31：`ui_control` 增加 `sequence`：一次调用不限步数（5 分钟安全预算），逐步校验，失败即停；用于把“搜索 → 点结果 → 读详情”等多步 UI 流程压成一轮模型调用。
 - 2026-11-02：合并社区 PR #2（俄语本地化）与 PR #3（局域网明文 HTTP）。PR #2 通过许可证头、字符串同步、占位符/数组校验、`:app:assembleDebug` 与 `lintDebug`；PR #3 合并后立即加 `NetworkEndpointPolicy`：HTTPS 任意，HTTP 仅限 loopback/RFC1918/link-local/私有 mDNS，公网 HTTP 在设置向导、自动拉模型和保存前拒绝，并有单测。
+- 2026-11-02：`web_research` GitHub MVP 落地。`BrowserHostActivity` + `BrowserSession` 用应用自有 `VirtualDisplay`（`OWN_CONTENT_ONLY`）+ `Presentation + WebView`，`web_research` 支持 open/snapshot/read/click/type/scroll；真机 GitHub 搜索 open+snapshot 0.9–3.4s，点击 w7 导航到 `openai/openai-cookbook` 约 1.5s；全程无 Shizuku/root/ADB。登录/验证码 handoff、会话回收、`web_read`/MCP HTTP 校验待补。
 - 2026-11-02：内置浏览器技术验证通过。`DebugBrowserActivity` 用应用自有 `DisplayManager.createVirtualDisplay()`（`OWN_CONTENT_ONLY`）创建虚拟屏，`Presentation + WebView` 成功加载 `example.com`，JS 读取 DOM/链接/输入框，点击链接导航到 `iana.org`，`ImageReader` 抓取 1200×2608 画面正常。全程不需要 Shizuku/root/无线 ADB。设计与 MVP 见 `docs/WEB_RESEARCH.md`；下一步抽 `BrowserHost`/`BrowserSession`，做只读 `web_research`。
 - 2026-11-02：v0.4.1 稳定性补丁（已发布）。修复 R8 删除 ML Kit `ComponentRegistrar` 无参构造导致 release 包首次 OCR 必然 NPE；`app_research` 增加 `Search state`（results/empty/not-found/not-submitted）、OCR-first 第三方 App 路径、移除任意 EditText 兜底、虚拟屏坐标改走 `displays.tap`；OCR 串行化/回调兜底/超时；release APK OCR 冒烟通过。真机微信回归暴露 OCR 选中底部“搜索”tab；已加上半屏搜索入口过滤。微信原生虚拟屏仍会回到主屏，因此 0.5.0 走应用自有虚拟屏 + WebView 的 `web_research`。
 - 2026-11-01：v0.4.0 收版。虚拟屏 helper / provider 交接 / 无线 ADB 本机枚举独立重写；`app_research` 增加 EditText 聚焦与提交重试，虚拟屏搜索失败回退前台；修复 Settings 误匹配数字健康包；附件删除/7 天截图清理/保留截图开关；自动保存技能把输入值参数化；开机和 App 更新后重挂保活。真机：`Settings` → `WLAN` 首次 8.7s、同 session 1.7–2.0s（3/3）；`电池` 首次 14.4s、复用 1.6–1.7s（5/5）；虚拟屏 capture 204KB。

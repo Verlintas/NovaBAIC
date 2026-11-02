@@ -1,6 +1,6 @@
 # Web research / 内置浏览器
 
-> 状态：技术验证通过，设计阶段
+> 状态：GitHub 搜索 MVP 已真机验证；扩展中
 > 最后更新：2026-11-02
 > 目标版本：0.5.0
 
@@ -15,7 +15,7 @@
 - 浏览器是我们自己的 Activity / WebView，不需要把别人的 App 塞进虚拟屏，也不需要 `am start --display`。
 - 登录 / 验证码可以自然交还前台：同一个会话、同一份 Cookie，用户完成后再回到后台。
 
-## 2. 已验证的原型
+## 2. 已验证的原型与 MVP
 
 Debug-only 的 `DebugBrowserActivity` 已经验证：
 
@@ -24,6 +24,13 @@ Debug-only 的 `DebugBrowserActivity` 已经验证：
 - 加载 `https://example.com`，通过 `evaluateJavascript` 读取标题、正文、链接、输入框。
 - 通过 JS 点击链接，页面成功从 `example.com` 导航到 `iana.org/help/example-domains`。
 - 用 `ImageReader` 抓取虚拟屏画面，PNG 1200×2608，页面渲染正常。
+
+`web_research` 已基于同一套架构落地：
+
+- `BrowserHostActivity` + `BrowserSession`（App 自有虚拟屏，`OWN_CONTENT_ONLY`）
+- `open` / `snapshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll`
+- 真机 GitHub 搜索：open + snapshot 约 0.9–3.4s，点击 `w7` 导航到 `openai/openai-cookbook` 约 1.5s
+- 全程不需要 Shizuku / root / 无线 ADB
 
 关键参数：
 

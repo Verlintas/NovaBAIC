@@ -21,6 +21,9 @@
             android:name=".DebugBrowserActivity"
             android:exported="true" />
         <activity
+            android:name=".DebugWebActivity"
+            android:exported="true" />
+        <activity
             android:name=".DebugUiActivity"
             android:exported="true" />
         <activity

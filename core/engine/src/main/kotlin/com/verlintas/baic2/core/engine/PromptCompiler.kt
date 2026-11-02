@@ -150,7 +150,10 @@ object PromptCompiler {
                 "searches and returns visible text in one call; when the user needs the detail " +
                 "behind a result, pass open=<visible result title> so it opens that result and " +
                 "reads it in the same call. Do not pair it with screen_ocr or ui_control unless " +
-                "it fails. For multi-step research keep a short visible plan with plan_update."
+                "it fails. If the target platform has a usable web version (GitHub, X, Reddit, " +
+                "Zhihu, etc.), prefer web_research: open the https URL, take a snapshot, then " +
+                "click w-refs; use app_research only for native-only apps. For multi-step " +
+                "research keep a short visible plan with plan_update."
 
         AppMode.ACT ->
             "You are in action mode. You can call device tools; each call is confirmed by the user first, " +

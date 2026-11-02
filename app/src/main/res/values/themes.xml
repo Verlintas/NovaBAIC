@@ -4,4 +4,11 @@
         <item name="android:windowBackground">@color/baic2_window_background</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <style name="Theme.BAIC2.Transparent" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

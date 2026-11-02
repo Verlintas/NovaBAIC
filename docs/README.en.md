@@ -30,7 +30,7 @@ BetterAIChat2 is the successor rewrite (codename Nova) of [BetterAIChat](https:/
 
 It is a **local-first** AI agent — API keys are encrypted with the Android Keystore and stay on the device. There is no cloud, no telemetry, and no account. Through **function calling**, the AI actually operates your phone: read the screen, tap, type, browse files, set reminders, and run automations.
 
-- **It really touches the device**: 57 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, built-in wireless debugging, and Shizuku shell
+- **It really touches the device**: 58 built-in tools covering accessibility automation, screen capture + OCR, files, web, personal-assistant tasks, built-in wireless debugging, and Shizuku shell
 - **Implicit activity**: Act/Max do not list tool calls; a live line says “Using WeChat…”, a collapsed summary follows the run, and a successful virtual-display run attaches its last frame to the reply
 - **Warm background display**: when a transport is available, the app starts the helper at launch and releases it after 10 minutes idle by default, so the first research request avoids the cold start. Settings → Permissions offers an opt-in "Keep background display" service that disables idle release and re-checks every four minutes, so an already-started session survives Wi-Fi/ADB loss (ongoing notification, slight battery cost; after a reboot it still waits for a shell).
 - **Locale-independent controls**: in-app search prefers resource ids and control structure over labels such as “Search”, “Discover” or their translations; localized word lists are only a fallback
@@ -110,7 +110,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 | `Act` | Executes tools, confirming each call |
 | `Max` | Autonomous runs: persistent Run records, budgets (60 rounds / 160 tool calls / 60 minutes), runs in background |
 
-### AI × device (57 built-in tools)
+### AI × device (58 built-in tools)
 
 **Perception & UI automation (accessibility + vision)**
 
@@ -124,7 +124,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 
 **Content & web**
 
-`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `app_research` (read-only in-app search that identifies the search control by resource id, remembers the learned structural id, supports `open` / `open_top` and `session` reuse (a new query retargets the open results page when possible, otherwise relaunches the app on the same display); returns `Search state: results / empty / not-found / not-submitted`, prefers OCR for user-installed apps and the accessibility tree for system apps; foreground accessibility without Shizuku/root, resident virtual display when available) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `app_research` (read-only in-app search that identifies the search control by resource id, remembers the learned structural id, supports `open` / `open_top` and `session` reuse (a new query retargets the open results page when possible, otherwise relaunches the app on the same display); returns `Search state: results / empty / not-found / not-submitted`, prefers OCR for user-installed apps and the accessibility tree for system apps; foreground accessibility without Shizuku/root, resident virtual display when available) · `web_research` (app-owned virtual display + WebView for background web research: open / snapshot / click ref / type / read / scroll; no accessibility, Shizuku or ADB) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **Personal assistant**
 
@@ -229,7 +229,7 @@ core:runtime       reserved runtime layer (scheduling currently lives in device:
 core:designsystem  design tokens and components
 feature:*          chat / conversations / tasks / settings / agents / library
 device:api|impl    capture / OCR / accessibility / speech / reminders / run notifications
-tools              57 built-in tools + automations + skills + subagents
+tools              58 built-in tools + automations + skills + subagents
 mcp                remote MCP client         eval          scenario evaluation harness
 ```
 
@@ -266,6 +266,7 @@ adb reverse tcp:8765 tcp:8765
 - **Done · v0.3.x agent efficiency**: plan-once UI (snapshot / refs / sequence / assert), virtual-display prewarm / reuse / keepalive, built-in wireless ADB, auto-save skills, parallel CHAT+ research subagents
 - **Done · v0.4.0 stability**: independent virtual-display / wireless ADB implementation, real-device `app_research` search and session reuse, attachment lifecycle and screenshot retention, parameterized auto-save skills, boot/update keepalive re-arm
 - **Done · v0.4.1 patch**: fix release-build ML Kit OCR component registration (third-party app NPE); semantic `Search state`, an OCR-first path and top-half search-entry filtering for user-installed apps; Russian localization and LAN HTTP for private addresses
+- **In progress · v0.5.0 Web research**: app-owned virtual display + WebView `web_research` GitHub search MVP validated on a real device; next: login/captcha handoff and X/Reddit coverage
 - **In progress**: OEM matrix expansion and reboot / network-recovery validation, Shizuku / voice / recording acceptance, continuous UI polish and more eval scenarios
 - **Planned**: richer device capabilities and skill ecosystem, more model protocols
 
