@@ -301,6 +301,14 @@ No. Stopping synthesizes "cancelled" tool results for interrupted calls and rewr
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md)
 - [CHANGELOG.md](CHANGELOG.md): detailed changes for every release
 
+## Contributors
+
+Thanks to everyone who contributed code, translations, or issue reports:
+
+- [@fzcfweasdferttgg-png](https://github.com/fzcfweasdferttgg-png) (alex) — Russian localization (#2), LAN HTTP support (#3)
+
+> Contributors are ordered by first contribution; see git history for the full record.
+
 ## References & acknowledgements
 
 > Only sources actually consulted or cited during design/implementation, or projects the code directly depends on. This is not an academic citation list, and it does not claim that the code implements any paper's method. Sources without a recorded lookup or dependency are not added. The memory entries come from a 2026-10-04 design review (arXiv, HN and vendor blogs).

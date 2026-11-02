@@ -301,6 +301,14 @@ Key 由 Android Keystore 加密（AES-GCM）后存在本机数据库；只有你
 
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) · [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) · [docs/SECURITY.md](docs/SECURITY.md)
 
+## 贡献者
+
+感谢为本项目提交代码、翻译与问题反馈的人：
+
+- [@fzcfweasdferttgg-png](https://github.com/fzcfweasdferttgg-png)（alex）— 俄语本地化（#2）、局域网 HTTP 支持（#3）
+
+> 贡献者按首次贡献时间排序；完整记录见 git history。
+
 ## 参考与致谢
 
 > 这里只列设计/实现阶段实际查阅或引用过、或代码直接依赖的公开资料；它不是学术引用，也不表示本项目实现了论文中的方法。没有留下查阅或依赖记录的来源不补列。记忆部分来自 2026-10-04 的一次设计检索（arXiv、HN 与官方博客）。
