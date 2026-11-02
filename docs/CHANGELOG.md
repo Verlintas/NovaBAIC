@@ -28,6 +28,10 @@ All notable changes to this project are documented in this file.
 - release APK 反编译确认 `TextRegistrar` 等三个 registrar 均保留 `<init>()`。
 - 新增 `SearchState` 单测；全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、工具 schema、许可证头、字符串同步通过。
 
+### 致谢 Thanks
+
+- [@fzcfweasdferttgg-png](https://github.com/fzcfweasdferttgg-png)（alex）— 俄语本地化（#2）与局域网 HTTP 支持（#3）。
+
 ### 已知限制 Known limitations
 
 - 微信/X 的原生虚拟屏回归仍未通过：`app_research` 会返回语义化失败，不再裸崩溃；浏览器 `web_research` 路线规划在 0.5.0。
