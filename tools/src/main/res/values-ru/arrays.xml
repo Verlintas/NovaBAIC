@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="app_research_search_terms">
+        <item>поиск</item>
+        <item>найти</item>
+        <item>открыть поиск</item>
+        <item>быстрый поиск</item>
+        <item>поиск по</item>
+        <item>найти в</item>
+        <item>искать</item>
+    </string-array>
+    <string-array name="app_research_chrome">
+        <item>назад</item>
+        <item>очистить текст</item>
+        <item>отмена</item>
+        <item>ок</item>
+        <item>поиск</item>
+        <item>x</item>
+        <item>приложения</item>
+        <item>вверх</item>
+        <item>недавние запросы</item>
+        <item>последние результаты поиска</item>
+    </string-array>
+    <string-array name="app_research_login_terms">
+        <item>вход</item>
+        <item>войти</item>
+        <item>авторизация</item>
+        <item>пожалуйста, войдите</item>
+        <item>требуется вход</item>
+    </string-array>
+    <string-array name="app_research_captcha_terms">
+        <item>капча</item>
+        <item>проверка безопасности</item>
+        <item>подтвердите, что вы человек</item>
+        <item>проверка на робота</item>
+    </string-array>
+    <string-array name="app_research_risk_terms">
+        <item>необычная активность</item>
+        <item>слишком много запросов</item>
+        <item>риск-контроль</item>
+        <item>попробуйте позже</item>
+    </string-array>
+</resources>

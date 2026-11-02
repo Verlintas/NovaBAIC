@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_chat_title">Чат</string>
+    <string name="chat_untitled">Без названия</string>
+    <string name="chat_back">Назад</string>
+    <string name="chat_send">Отправить</string>
+    <string name="chat_stop">Стоп</string>
+    <string name="chat_input_hint">Сообщение…</string>
+    <string name="chat_thinking">Рассуждение</string>
+    <string name="chat_retry">Повторить</string>
+    <string name="chat_dismiss">Скрыть</string>
+
+    <string name="chat_welcome_title">Начать диалог</string>
+    <string name="chat_welcome_subtitle">Локально · ключи не покидают устройство</string>
+    <string name="chat_suggestion_1">Найди сегодняшние новости из мира технологий и кратко перескажи</string>
+    <string name="chat_suggestion_2">Посмотри, что у меня на экране</string>
+    <string name="chat_suggestion_3">Объясни квантовую запутанность одной фразой</string>
+
+    <string name="chat_error_provider">Ошибка запроса: %1$s</string>
+    <string name="chat_error_budget">Бюджет запуска исчерпан</string>
+    <string name="chat_error_no_agent">AI-сервис не настроен — создайте его на экране диалогов</string>
+    <string name="chat_error_api_key">Ключ API недоступен — настройте сервис заново</string>
+    <string name="chat_error_unsupported">Этот сервис пока не поддерживается</string>
+    <string name="chat_error_internal">Внутренняя ошибка: %1$s</string>
+
+    <string name="chat_tool_pending">ожидает</string>
+    <string name="chat_tool_running">выполняется</string>
+    <string name="chat_tool_done">готово</string>
+    <string name="chat_tool_failed">ошибка</string>
+    <string name="chat_tool_denied">отклонено</string>
+    <string name="chat_tool_rejected">пропущено</string>
+
+    <string name="chat_mode_title">Режим</string>
+    <string name="chat_mode_chat_title">Диалог</string>
+    <string name="chat_mode_chat_description">Без инструментов</string>
+    <string name="chat_mode_chat_plus_title">Исследование</string>
+    <string name="chat_mode_chat_plus_description">Только чтение: сначала план, потом действие</string>
+    <string name="chat_mode_act_title">Действие</string>
+    <string name="chat_mode_act_description">Каждый вызов инструмента — с подтверждением</string>
+    <string name="chat_mode_max_title">Максимум</string>
+    <string name="chat_mode_max_description">Автономная работа в пределах бюджета</string>
+
+    <string name="chat_menu">Ещё</string>
+    <string name="chat_menu_search">Поиск в диалоге</string>
+    <string name="chat_menu_starred">Избранное</string>
+    <string name="chat_menu_export">Экспорт диалога</string>
+    <string name="chat_menu_compress">Сжать контекст</string>
+    <string name="chat_menu_distill">Упорядочить память</string>
+    <string name="chat_menu_screen_analysis">Анализ экрана</string>
+    <string name="chat_screen_prompt">Проанализируй этот скриншот: опиши, что на нём, и предложи конкретные дальнейшие шаги.</string>
+    <string name="chat_error_screen_capture">Не удалось захватить экран: запустите «Анализ экрана» ещё раз и подтвердите системный запрос</string>
+
+    <string name="chat_action_copy">Скопировать</string>
+    <string name="chat_action_star">В избранное</string>
+    <string name="chat_action_unstar">Убрать из избранного</string>
+    <string name="chat_action_edit">Изменить и отправить</string>
+    <string name="chat_action_speak">Озвучить</string>
+    <string name="chat_action_delete">Удалить</string>
+
+    <string name="chat_voice_input">Голосовой ввод</string>
+    <string name="chat_voice_denied">Для голосового ввода нужен доступ к микрофону</string>
+    <string name="chat_voice_unavailable">На этом устройстве распознавание речи недоступно</string>
+
+    <string name="chat_search_hint">Поиск по сообщениям…</string>
+    <string name="chat_search_close">Закрыть поиск</string>
+    <string name="chat_search_prev">Предыдущее совпадение</string>
+    <string name="chat_search_next">Следующее совпадение</string>
+
+    <string name="chat_edit_title">Изменить сообщение</string>
+    <string name="chat_edit_confirm">Отправить</string>
+
+    <string name="chat_attach">Прикрепить</string>
+    <string name="chat_attach_images">Изображения</string>
+    <string name="chat_attach_file">Файл</string>
+    <string name="chat_attachment_remove">Убрать</string>
+    <string name="chat_attachment_too_large">Файл слишком большой (не более 1 МБ)</string>
+    <string name="chat_attachment_unsupported">Этот тип файлов не поддерживается</string>
+    <string name="chat_attachment_failed">Не удалось прочитать вложение</string>
+
+    <string name="chat_export_you">Вы</string>
+    <string name="chat_export_assistant">Ассистент</string>
+    <string name="chat_export_tool">Вызов инструмента</string>
+    <string name="chat_export_thinking">Рассуждение</string>
+    <string name="chat_export_empty">Сообщений пока нет</string>
+    <string name="chat_export_chooser">Экспорт диалога</string>
+
+    <string name="starred_title">Избранное</string>
+    <string name="starred_empty_title">В избранном пока пусто</string>
+    <string name="starred_empty_description">Долгое нажатие на сообщение добавляет его в избранное</string>
+    <string name="starred_unstar">Убрать из избранного</string>
+    <string name="starred_back">Назад</string>
+    <string name="chat_plan_title">План задачи</string>
+    <string name="chat_confirm_title">Требуется подтверждение</string>
+    <string name="chat_confirm_body">Разрешить запуск инструмента %1$s?</string>
+    <string name="chat_confirm_allow">Разрешить</string>
+    <string name="chat_confirm_reject">Отклонить</string>
+    <string name="chat_menu_save_skill">Сохранить как навык</string>
+    <string name="chat_skill_name_title">Название навыка</string>
+    <string name="chat_skill_save">Сохранить</string>
+    <string name="chat_skill_saved">Навык сохранён: %1$s (Библиотека → Навыки)</string>
+    <string name="chat_skill_none">Записывать пока нечего: нет завершённых цепочек инструментов</string>
+    <string name="chat_memory_saved">Память упорядочена: новых %1$d, обновлено %2$d, в архив %3$d (Библиотека → Бионическая память)</string>
+    <string name="chat_memory_none">Пока нет ничего, что стоило бы запомнить</string>
+    <string name="chat_question_title">Нужно ваше решение</string>
+    <string name="chat_question_send">Ответить</string>
+    <string name="chat_question_skip">Пропустить</string>
+    <string name="chat_memory_failed">Не удалось упорядочить память (Библиотека → Бионическая память → журнал куратора)</string>
+    <string name="chat_run_done_title">Запуск MAX завершён</string>
+    <string name="chat_run_stopped_title">Запуск MAX прерван</string>
+    <string name="chat_run_done_body">«%1$s» завершён · раундов: %2$d · вызовов инструментов: %3$d · %4$s</string>
+    <string name="chat_run_stopped_body">«%1$s» прерван: %2$s</string>
+    <string name="chat_run_dismiss">Понятно</string>
+    <string name="chat_jump_latest">К последнему сообщению</string>
+    <string name="chat_voice_listening">Слушаю…</string>
+    <string name="chat_voice_cancel">Отмена</string>
+    <string name="chat_voice_no_match">Не расслышал — повторите, пожалуйста</string>
+    <string name="chat_voice_busy">Служба распознавания занята — повторите чуть позже</string>
+    <string name="chat_voice_network">Для распознавания речи нужно подключение к сети</string>
+    <string name="chat_menu_restore_compression">Вернуть историю до сжатия</string>
+    <string name="chat_menu_discard_compression">Удалить резервную копию сжатия</string>
+    <string name="chat_compress_too_short">Диалог ещё слишком короткий — сжимать нечего</string>
+    <string name="chat_menu_hands_free">Разговор без рук</string>
+    <string name="chat_action_copied">Скопировано</string>
+    <string name="chat_thinking_streaming">Рассуждает · %1$d с</string>
+    <string name="chat_thought_for">Рассуждал %1$d с</string>
+    <string name="chat_error_agent_busy">Уже выполняется другая автономная задача. Остановите её во вкладке «Задачи» или дождитесь завершения</string>
+    <string name="chat_activity_using">Использует %1$s…</string>
+    <string name="chat_activity_opening">Открывает %1$s…</string>
+    <string name="chat_activity_managing">Управляет %1$s…</string>
+    <string name="chat_activity_screen">Смотрит на экран…</string>
+    <string name="chat_activity_web_search">Ищет…</string>
+    <string name="chat_activity_web_read">Читает страницу…</string>
+    <string name="chat_activity_files">Читает файлы…</string>
+    <string name="chat_activity_working">Работает…</string>
+    <string name="chat_activity_used_app">Использовал %1$s</string>
+    <string name="chat_activity_used_apps">Использовал %1$s</string>
+    <string name="chat_activity_used_screen">Использовал экран</string>
+    <string name="chat_activity_used_web">Использовал интернет</string>
+    <string name="chat_activity_used_files">Использовал файлы</string>
+    <string name="chat_activity_actions">Действий: %1$d</string>
+    <string name="chat_activity_action">Действие: %1$d</string>
+    <string name="chat_activity_failed">Сбоев: %1$d</string>
+    <string name="chat_activity_details">Подробнее</string>
+    <string name="chat_activity_hide_details">Скрыть подробности</string>
+    <string name="chat_result_screenshot">Снимок фонового дисплея</string>
+</resources>

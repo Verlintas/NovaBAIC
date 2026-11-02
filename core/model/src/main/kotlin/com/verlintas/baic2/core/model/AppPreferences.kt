@@ -41,11 +41,13 @@ enum class AppLanguage {
     SYSTEM,
     CHINESE,
     ENGLISH,
+    RUSSIAN,
     ;
 
     val languageTag: String? get() = when (this) {
         SYSTEM -> null
         CHINESE -> "zh-CN"
         ENGLISH -> "en"
+        RUSSIAN -> "ru"
     }
 }

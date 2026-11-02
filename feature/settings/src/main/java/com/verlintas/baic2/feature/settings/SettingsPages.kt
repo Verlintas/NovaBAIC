@@ -397,6 +397,7 @@ fun LanguagePage(
                     AppLanguage.SYSTEM -> stringResource(R.string.language_system)
                     AppLanguage.CHINESE -> stringResource(R.string.language_chinese)
                     AppLanguage.ENGLISH -> stringResource(R.string.language_english)
+                    AppLanguage.RUSSIAN -> stringResource(R.string.language_russian)
                 },
                 summary = language.languageTag ?: stringResource(R.string.language_system_hint),
                 onClick = {

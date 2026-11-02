@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BetterAIChat2</string>
+
+    <string name="nav_chats">Диалоги</string>
+    <string name="nav_tasks">Задачи</string>
+    <string name="nav_library">Библиотека</string>
+    <string name="nav_settings">Настройки</string>
+
+    <string name="dock_content_description">Открыть навигацию</string>
+    <string name="dock_footer">Локально · без телеметрии</string>
+
+    <string name="wireless_pair_channel">Беспроводное сопряжение</string>
+    <string name="wireless_pair_notification_title">Сопряжение беспроводной отладки</string>
+    <string name="wireless_pair_notification_waiting">Откройте «Для разработчиков» → «Беспроводная отладка» → «Сопряжение устройства с кодом»; BAIC2 считает код автоматически</string>
+    <string name="wireless_pair_notification_pairing">Сопряжение…</string>
+    <string name="wireless_pair_notification_connected">Подключено — фоновый виртуальный дисплей готов</string>
+    <string name="wireless_pair_notification_failed">Время сопряжения истекло или не удалось подключиться; вернитесь в BAIC2, чтобы повторить</string>
+    <string name="wireless_pair_notification_no_a11y">Сначала включите автоматизацию интерфейса (специальные возможности), чтобы BAIC2 мог считать системный код сопряжения</string>
+    <string name="display_keep_title">Фоновый дисплей</string>
+    <string name="display_keep_channel">Поддержка фонового дисплея</string>
+    <string name="display_keep_active">Активен · дисплей %1$d</string>
+    <string name="display_keep_waiting">Ожидание оболочки (ADB); существующая сессия дисплея остаётся активной</string>
+</resources>

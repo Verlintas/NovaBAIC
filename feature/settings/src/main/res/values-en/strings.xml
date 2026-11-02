@@ -84,6 +84,7 @@
     <string name="language_system_hint">Match the device language</string>
     <string name="language_chinese">简体中文</string>
     <string name="language_english">English</string>
+    <string name="language_russian">Русский</string>
     <string name="settings_language_hint">The UI restarts immediately after switching</string>
 
     <string name="settings_section_data">Data &amp; storage</string>
