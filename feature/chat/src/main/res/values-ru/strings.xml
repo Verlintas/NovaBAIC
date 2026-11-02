@@ -39,6 +39,11 @@
     <string name="chat_mode_act_description">Каждый вызов инструмента — с подтверждением</string>
     <string name="chat_mode_max_title">Максимум</string>
     <string name="chat_mode_max_description">Автономная работа в пределах бюджета</string>
+    <string name="chat_mode_rights_none">Без инструментов</string>
+    <string name="chat_mode_rights_read_only">Только чтение</string>
+    <string name="chat_mode_rights_full">Полный доступ</string>
+    <string name="chat_mode_confirm_on">Подтверждать каждый вызов</string>
+    <string name="chat_mode_confirm_off">Без подтверждения</string>
 
     <string name="chat_menu">Ещё</string>
     <string name="chat_menu_search">Поиск в диалоге</string>

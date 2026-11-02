@@ -32,6 +32,7 @@ import com.verlintas.baic2.core.data.repository.MemoryRepository
 import com.verlintas.baic2.core.data.repository.PlanRepository
 import com.verlintas.baic2.core.data.repository.RunControlBus
 import com.verlintas.baic2.core.data.repository.RunRepository
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.engine.AgentEvent
 import com.verlintas.baic2.core.engine.AgentFailure
 import com.verlintas.baic2.core.engine.AgentLoop
@@ -56,6 +57,8 @@ import com.verlintas.baic2.core.model.DocumentTextCodec
 import com.verlintas.baic2.core.model.MemoryPrompt
 import com.verlintas.baic2.core.model.MemoryText
 import com.verlintas.baic2.core.model.MessageSnapshot
+import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.ModelCatalog
 import com.verlintas.baic2.core.model.ModelContextWindows
 import com.verlintas.baic2.core.model.Note
@@ -65,6 +68,7 @@ import com.verlintas.baic2.core.model.Plan
 import com.verlintas.baic2.core.model.ProviderConfig
 import com.verlintas.baic2.core.model.ProviderId
 import com.verlintas.baic2.core.model.RunState
+import com.verlintas.baic2.core.model.resolve
 import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.model.TokenEstimator
 import com.verlintas.baic2.core.model.ToolCall
@@ -133,7 +137,8 @@ data class ActivityHint(
 
 data class ChatUiState(
     val title: String = "",
-    val mode: AppMode = AppMode.CHAT,
+    val mode: ModeProfile = ModeProfiles.CHAT,
+    val modeProfiles: List<ModeProfile> = emptyList(),
     val messages: List<ChatMessage> = emptyList(),
     val streamingText: String = "",
     val streamingThinking: String = "",
@@ -186,6 +191,7 @@ class ChatViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val agentRepository: AgentRepository,
     private val runRepository: RunRepository,
+    private val modeStore: ModeProfileStore,
     private val runControlBus: RunControlBus,
     private val agentRunGate: AgentRunGate,
     private val memoryRepository: MemoryRepository,
@@ -362,6 +368,7 @@ class ChatViewModel @Inject constructor(
         val plan: Plan?,
         val snapshot: MessageSnapshot?,
         val core: CoreMemory,
+        val modes: List<ModeProfile>,
     )
 
     val attachmentErrors: StateFlow<AttachmentError?> = attachmentError.asStateFlow()
@@ -387,24 +394,29 @@ class ChatViewModel @Inject constructor(
                 conversationRepository.observeSnapshots(conversationId),
                 memoryRepository.observeCore(),
             ) { plan, snapshots, core -> Triple(plan, snapshots, core) },
-        ) { busy, attachments, confirmRequest, planSnapshotsCore ->
+            modeStore.profiles,
+        ) { busy, attachments, confirmRequest, planSnapshotsCore, modes ->
             val (plan, snapshots, core) = planSnapshotsCore
-            ViewExtras(busy, attachments, confirmRequest, plan, snapshots.firstOrNull(), core)
+            ViewExtras(busy, attachments, confirmRequest, plan, snapshots.firstOrNull(), core, modes)
         },
     ) { conversation, messages, stream, session, extras ->
-        val mode = conversation?.mode ?: AppMode.CHAT
+        val mode = extras.modes.resolve(conversation?.mode ?: ModeProfiles.CHAT.id)
         val agent = session.agents.firstOrNull { it.id == conversation?.agentId }
             ?: session.agents.firstOrNull { it.isDefault }
         val lastUser = messages.lastOrNull { it.role == ChatRole.USER }?.content
         val estimated = TokenEstimator.estimate(
             messages = messages,
             systemPrompt = renderSystemPrompt(
-                mode,
+                mode.engineMode,
                 agent?.systemPrompt.orEmpty(),
                 extras.plan?.render(),
                 MemoryPrompt.context(extras.core, emptyList(), System.currentTimeMillis()),
             ),
-            toolSpecs = ToolRouter.route(mode, toolCatalog.specs(mode), lastUser),
+            toolSpecs = ToolRouter.route(
+                mode.engineMode,
+                toolCatalog.specs(mode.engineMode),
+                lastUser,
+            ),
             streamingText = stream.text,
         )
         val reported = messages.asReversed()
@@ -414,6 +426,7 @@ class ChatViewModel @Inject constructor(
         ChatUiState(
             title = conversation?.title.orEmpty(),
             mode = mode,
+            modeProfiles = extras.modes,
             messages = messages,
             streamingText = stream.text,
             streamingThinking = stream.thinking,
@@ -451,8 +464,7 @@ class ChatViewModel @Inject constructor(
      */
     private fun admitTurn(): Boolean {
         if (!turnGate.compareAndSet(false, true)) return false
-        val mode = uiState.value.mode
-        val agentic = mode.requiresConfirmation || mode == AppMode.MAX
+        val agentic = uiState.value.mode.agentic
         if (agentic && !agentRunGate.tryAcquire(conversationId)) {
             turnGate.set(false)
             error.value = ChatError(ChatError.Kind.BUSY)
@@ -756,10 +768,10 @@ class ChatViewModel @Inject constructor(
         error.value = null
     }
 
-    fun setMode(mode: AppMode) {
+    fun setMode(mode: ModeProfile) {
         viewModelScope.launch {
             val conversation = conversationRepository.get(conversationId) ?: return@launch
-            conversationRepository.updateMeta(conversationId, conversation.agentId, mode)
+            conversationRepository.updateMeta(conversationId, conversation.agentId, mode.id)
         }
     }
 
@@ -950,7 +962,8 @@ class ChatViewModel @Inject constructor(
             null
         }
         // Tasks record agentic work only: plain Chat / Chat+ turns are not runs.
-        val agentic = conversation.mode.requiresConfirmation || conversation.mode == AppMode.MAX
+        val modeProfile = modeStore.resolve(conversation.mode)
+        val agentic = modeProfile.agentic
         val runId: Long? = if (agentic) {
             runRepository.start(conversationId, conversation.mode)
         } else {
@@ -980,7 +993,8 @@ class ChatViewModel @Inject constructor(
         try {
             agentLoop.run(
                 config = config,
-                mode = conversation.mode,
+                mode = modeProfile.engineMode,
+                budgetOverride = modeProfile.budget,
                 customSystemPrompt = agent?.systemPrompt.orEmpty(),
                 history = history,
                 conversationId = conversationId,
@@ -1089,7 +1103,7 @@ class ChatViewModel @Inject constructor(
                                     toolCalls = toolCallsUsed,
                                     durationMs = System.currentTimeMillis() - runStartedAt,
                                     runId = id,
-                                    showDialog = conversation.mode == AppMode.MAX,
+                                    showDialog = modeProfile.autonomous,
                                 )
                             }
                         } ?: run {
@@ -1137,7 +1151,7 @@ class ChatViewModel @Inject constructor(
                                     toolCalls = toolCallsUsed,
                                     durationMs = System.currentTimeMillis() - runStartedAt,
                                     runId = id,
-                                    showDialog = conversation.mode == AppMode.MAX,
+                                    showDialog = modeProfile.autonomous,
                                 )
                             }
                         }
@@ -1612,17 +1626,19 @@ class ChatViewModel @Inject constructor(
             ?: ModelContextWindows.forModel(config.model)
             ?: return
         val messages = conversationRepository.getMessages(conversationId)
-        val mode = conversationRepository.get(conversationId)?.mode ?: AppMode.CHAT
+        val mode = modeStore.resolve(
+            conversationRepository.get(conversationId)?.mode ?: ModeProfiles.CHAT.id,
+        )
         val estimated = TokenEstimator.estimate(
             messages = messages,
             systemPrompt = renderSystemPrompt(
-                mode,
+                mode.engineMode,
                 "",
                 planRepository.getPlan(conversationId)?.render(),
             ),
             toolSpecs = ToolRouter.route(
-                mode,
-                toolCatalog.specs(mode),
+                mode.engineMode,
+                toolCatalog.specs(mode.engineMode),
                 messages.lastOrNull { it.role == ChatRole.USER }?.content,
             ),
         )

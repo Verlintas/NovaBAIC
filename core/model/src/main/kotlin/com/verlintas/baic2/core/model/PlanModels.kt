@@ -62,7 +62,7 @@ data class RunSummary(
     val id: Long,
     val conversationId: Long,
     val conversationTitle: String,
-    val mode: AppMode,
+    val mode: String,
     val state: RunState,
     val startedAt: Long,
     val updatedAt: Long,

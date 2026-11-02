@@ -21,11 +21,13 @@ package com.verlintas.baic2.feature.conversations
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.data.repository.AgentRepository
 import com.verlintas.baic2.core.data.repository.ConversationRepository
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.Conversation
 import com.verlintas.baic2.core.model.ConversationPreview
+import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
 data class ConversationsUiState(
     val loading: Boolean = true,
     val conversations: List<ConversationPreview> = emptyList(),
+    val modes: List<ModeProfile> = emptyList(),
     val agentName: String? = null,
     val hasAgent: Boolean = false,
 )
@@ -47,15 +50,18 @@ data class ConversationsUiState(
 class ConversationsViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val agentRepository: AgentRepository,
+    private val modeStore: ModeProfileStore,
 ) : ViewModel() {
 
     val uiState: StateFlow<ConversationsUiState> = combine(
         conversationRepository.observeConversations(),
         agentRepository.observeDefaultAgent(),
-    ) { conversations, agent ->
+        modeStore.profiles,
+    ) { conversations, agent, modes ->
         ConversationsUiState(
             loading = false,
             conversations = conversations,
+            modes = modes,
             agentName = agent?.name,
             hasAgent = agent != null,
         )
@@ -72,7 +78,7 @@ class ConversationsViewModel @Inject constructor(
         viewModelScope.launch {
             val id = conversationRepository.create(
                 agentId = null,
-                mode = AppMode.CHAT,
+                mode = ModeProfiles.CHAT.id,
                 title = "",
             )
             _openConversation.emit(id)

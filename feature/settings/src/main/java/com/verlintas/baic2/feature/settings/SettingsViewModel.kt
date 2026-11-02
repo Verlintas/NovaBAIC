@@ -22,6 +22,7 @@ package com.verlintas.baic2.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verlintas.baic2.core.data.prefs.AppLocaleStore
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.data.repository.AgentRepository
 import com.verlintas.baic2.core.data.repository.ConversationRepository
@@ -31,6 +32,7 @@ import com.verlintas.baic2.core.data.storage.StorageUsage
 import com.verlintas.baic2.core.model.AccentColor
 import com.verlintas.baic2.core.model.Agent
 import com.verlintas.baic2.core.model.AppLanguage
+import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ThemeMode
 import com.verlintas.baic2.core.model.isVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -79,7 +81,10 @@ class SettingsViewModel @Inject constructor(
     private val appStorage: AppStorage,
     private val conversationRepository: ConversationRepository,
     private val runRepository: RunRepository,
+    private val modeStore: ModeProfileStore,
 ) : ViewModel() {
+
+    val modes: StateFlow<List<ModeProfile>> = modeStore.profiles
 
     private val storage = MutableStateFlow<StorageUsage?>(null)
     private val stats = MutableStateFlow<UsageStats?>(null)
@@ -178,6 +183,18 @@ class SettingsViewModel @Inject constructor(
 
     fun deleteAgent(id: Long) {
         viewModelScope.launch { agentRepository.delete(id) }
+    }
+
+    fun saveMode(profile: ModeProfile) {
+        modeStore.upsert(profile)
+    }
+
+    fun deleteMode(id: String) {
+        modeStore.delete(id)
+    }
+
+    fun restoreModes() {
+        modeStore.restoreStocks()
     }
 
     fun refreshStorage() {

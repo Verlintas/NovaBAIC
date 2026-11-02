@@ -19,13 +19,13 @@
 
 package com.verlintas.baic2.tools.scheduling
 
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.data.repository.AgentRepository
 import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.PlanRepository
 import com.verlintas.baic2.core.data.repository.RunRepository
 import com.verlintas.baic2.core.engine.AgentEvent
 import com.verlintas.baic2.core.engine.AgentLoop
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.RunState
@@ -49,6 +49,7 @@ class ScheduledTaskRunner @Inject constructor(
     private val runRepository: RunRepository,
     private val planRepository: PlanRepository,
     private val agentLoop: AgentLoop,
+    private val modeStore: ModeProfileStore,
 ) {
 
     data class Outcome(
@@ -61,11 +62,14 @@ class ScheduledTaskRunner @Inject constructor(
         val config = runCatching { agentRepository.resolveConfig(task.agentId) }.getOrNull()
             ?: return Outcome(task.conversationId ?: 0L, false, "未配置可用的 AI 服务")
         val agent = task.agentId?.let { agentRepository.getAgent(it) } ?: agentRepository.getDefaultAgent()
-        val mode = if (task.mode == AppMode.ACT) AppMode.MAX else task.mode
+        // Unattended runs cannot answer confirmation dialogs, so the gate is
+        // dropped (the old ACT -> MAX coercion) while the profile budget stays.
+        val profile = modeStore.resolve(task.mode)
+        val engineMode = profile.copy(requiresConfirmation = false).engineMode
 
         val conversationId = task.conversationId ?: conversationRepository.create(
             agentId = task.agentId,
-            mode = mode,
+            mode = task.mode,
             title = "定时 · ${task.name}".take(24),
         )
         val triggerMessageId = conversationRepository.append(
@@ -80,7 +84,7 @@ class ScheduledTaskRunner @Inject constructor(
             conversationRepository.updateTitle(conversationId, task.prompt.take(24))
         }
 
-        val runId = runRepository.start(conversationId, mode)
+        val runId = runRepository.start(conversationId, task.mode)
         var rounds = 0
         var toolCalls = 0
         var assistantMessageId: Long? = null
@@ -91,7 +95,8 @@ class ScheduledTaskRunner @Inject constructor(
         try {
             agentLoop.run(
                 config = config,
-                mode = mode,
+                mode = engineMode,
+                budgetOverride = profile.budget,
                 customSystemPrompt = agent?.systemPrompt.orEmpty(),
                 history = conversationRepository.getMessages(conversationId),
                 conversationId = conversationId,

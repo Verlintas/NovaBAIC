@@ -50,7 +50,7 @@ enum class RunState {
 data class Run(
     val id: Long = 0L,
     val conversationId: Long,
-    val mode: AppMode,
+    val mode: String,
     val state: RunState = RunState.RUNNING,
     val startedAt: Long,
     val updatedAt: Long,

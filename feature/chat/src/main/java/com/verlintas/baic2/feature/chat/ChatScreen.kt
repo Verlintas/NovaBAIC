@@ -133,7 +133,9 @@ import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.ContextCompat
-import com.verlintas.baic2.core.model.AppMode
+import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
+import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.core.model.Attachment
 import com.verlintas.baic2.core.model.AttachmentKind
 import com.verlintas.baic2.core.model.ChatMessage
@@ -161,7 +163,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val compactTools = state.mode == AppMode.ACT || state.mode == AppMode.MAX
+    val compactTools = state.mode.agentic
     val runCalls = remember(state.messages, state.isRunning, compactTools) {
         if (!state.isRunning && compactTools) runToolCalls(state.messages) else emptyList()
     }
@@ -834,6 +836,7 @@ fun ChatScreen(
     if (modePickerOpen) {
         ModePickerSheet(
             current = state.mode,
+            modes = state.modeProfiles,
             onSelect = { mode ->
                 viewModel.setMode(mode)
                 modePickerOpen = false
@@ -1060,7 +1063,7 @@ private fun formatTokens(tokens: Long): String = when {
 @Composable
 private fun ChatTopBar(
     title: String,
-    mode: AppMode,
+    mode: ModeProfile,
     running: Boolean,
     usageLabel: String?,
     usageLevel: Int?,
@@ -1799,8 +1802,9 @@ private fun SendButton(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModePickerSheet(
-    current: AppMode,
-    onSelect: (AppMode) -> Unit,
+    current: ModeProfile,
+    modes: List<ModeProfile>,
+    onSelect: (ModeProfile) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(
@@ -1821,8 +1825,8 @@ private fun ModePickerSheet(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(Baic2Spacing.lg))
-            AppMode.entries.forEach { mode ->
-                val selected = mode == current
+            modes.forEach { mode ->
+                val selected = mode.id == current.id
                 val shape = RoundedCornerShape(14.dp)
                 Row(
                     modifier = Modifier
@@ -1871,21 +1875,47 @@ private fun ModePickerSheet(
 }
 
 @Composable
-private fun modeTitle(mode: AppMode): String = stringResource(
-    when (mode) {
-        AppMode.CHAT -> R.string.chat_mode_chat_title
-        AppMode.CHAT_PLUS -> R.string.chat_mode_chat_plus_title
-        AppMode.ACT -> R.string.chat_mode_act_title
-        AppMode.MAX -> R.string.chat_mode_max_title
+private fun modeTitle(mode: ModeProfile): String = mode.name ?: stringResource(
+    when (mode.id) {
+        "CHAT" -> R.string.chat_mode_chat_title
+        "CHAT_PLUS" -> R.string.chat_mode_chat_plus_title
+        "ACT" -> R.string.chat_mode_act_title
+        "MAX" -> R.string.chat_mode_max_title
+        else -> R.string.chat_mode_chat_title
     },
 )
 
 @Composable
-private fun modeDescription(mode: AppMode): String = stringResource(
-    when (mode) {
-        AppMode.CHAT -> R.string.chat_mode_chat_description
-        AppMode.CHAT_PLUS -> R.string.chat_mode_chat_plus_description
-        AppMode.ACT -> R.string.chat_mode_act_description
-        AppMode.MAX -> R.string.chat_mode_max_description
-    },
-)
+private fun modeDescription(mode: ModeProfile): String {
+    // Stock descriptions stay for untouched stock modes; edited or custom
+    // modes describe their actual permissions.
+    val stock = ModeProfiles.stocks.firstOrNull { it.id == mode.id }
+    if (stock != null &&
+        mode.toolAccess == stock.toolAccess &&
+        mode.requiresConfirmation == stock.requiresConfirmation
+    ) {
+        return stringResource(
+            when (mode.id) {
+                "CHAT" -> R.string.chat_mode_chat_description
+                "CHAT_PLUS" -> R.string.chat_mode_chat_plus_description
+                "ACT" -> R.string.chat_mode_act_description
+                else -> R.string.chat_mode_max_description
+            },
+        )
+    }
+    val rights = stringResource(
+        when (mode.toolAccess) {
+            ToolAccess.NONE -> R.string.chat_mode_rights_none
+            ToolAccess.READ_ONLY -> R.string.chat_mode_rights_read_only
+            ToolAccess.FULL -> R.string.chat_mode_rights_full
+        },
+    )
+    val confirm = stringResource(
+        if (mode.requiresConfirmation) {
+            R.string.chat_mode_confirm_on
+        } else {
+            R.string.chat_mode_confirm_off
+        },
+    )
+    return "$rights В· $confirm"
+}

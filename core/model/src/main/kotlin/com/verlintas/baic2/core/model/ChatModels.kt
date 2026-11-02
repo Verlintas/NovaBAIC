@@ -26,7 +26,8 @@ data class Conversation(
     val id: Long = 0L,
     val title: String = "",
     val agentId: Long? = null,
-    val mode: AppMode = AppMode.CHAT,
+    /** Mode profile id (ModeProfile.id); stock ids match legacy rows. */
+    val mode: String = "CHAT",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )

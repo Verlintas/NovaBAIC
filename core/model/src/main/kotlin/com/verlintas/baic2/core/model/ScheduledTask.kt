@@ -30,7 +30,8 @@ data class ScheduledTask(
     val id: Long = 0L,
     val name: String,
     val prompt: String,
-    val mode: AppMode = AppMode.MAX,
+    /** Mode profile id (ModeProfile.id); stock ids match legacy rows. */
+    val mode: String = "MAX",
     val agentId: Long? = null,
     val timeOfDay: String = "08:00",
     /** ISO weekdays 1..7; empty means every day. */

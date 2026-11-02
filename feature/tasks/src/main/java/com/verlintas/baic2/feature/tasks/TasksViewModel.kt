@@ -22,11 +22,13 @@ package com.verlintas.baic2.feature.tasks
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.PlanRepository
 import com.verlintas.baic2.core.data.repository.RunControlBus
 import com.verlintas.baic2.core.data.repository.RunRepository
 import com.verlintas.baic2.core.model.ChatMessage
+import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.ImpactSummarizer
 import com.verlintas.baic2.core.model.Plan
@@ -48,6 +50,7 @@ enum class TaskFilter { ALL, RUNNING, COMPLETED, FAILED }
 
 data class TasksUiState(
     val runs: List<RunSummary> = emptyList(),
+    val modes: List<ModeProfile> = emptyList(),
     val filter: TaskFilter = TaskFilter.ALL,
     val totalCount: Int = 0,
     val runningCount: Int = 0,
@@ -55,6 +58,7 @@ data class TasksUiState(
 
 data class RunDetailState(
     val run: Run,
+    val mode: ModeProfile,
     val conversationTitle: String,
     val plan: Plan?,
     val messages: List<ChatMessage>,
@@ -64,6 +68,7 @@ data class RunDetailState(
 @HiltViewModel
 class TasksViewModel @Inject constructor(
     private val runRepository: RunRepository,
+    private val modeStore: ModeProfileStore,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(TaskFilter.ALL)
@@ -71,7 +76,8 @@ class TasksViewModel @Inject constructor(
     val uiState: StateFlow<TasksUiState> = combine(
         runRepository.observeSummaries(),
         filter,
-    ) { runs, selected ->
+        modeStore.profiles,
+    ) { runs, selected, modes ->
         TasksUiState(
             runs = runs.filter { run ->
                 when (selected) {
@@ -81,6 +87,7 @@ class TasksViewModel @Inject constructor(
                     TaskFilter.FAILED -> run.state == RunState.FAILED || run.state == RunState.CANCELLED
                 }
             },
+            modes = modes,
             filter = selected,
             totalCount = runs.size,
             runningCount = runs.count { it.state == RunState.RUNNING },
@@ -108,6 +115,7 @@ class RunDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val runRepository: RunRepository,
     private val runControlBus: RunControlBus,
+    private val modeStore: ModeProfileStore,
     planRepository: PlanRepository,
     conversationRepository: ConversationRepository,
 ) : ViewModel() {
@@ -127,6 +135,7 @@ class RunDetailViewModel @Inject constructor(
                     val runMessages = messagesForRun(run, messages)
                     RunDetailState(
                         run = run,
+                        mode = modeStore.resolve(run.mode),
                         conversationTitle = conversation?.title.orEmpty(),
                         plan = plan,
                         messages = runMessages,

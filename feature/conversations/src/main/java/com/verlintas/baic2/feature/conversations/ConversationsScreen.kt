@@ -81,8 +81,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.ConversationPreview
+import com.verlintas.baic2.core.model.ModeProfiles
+import com.verlintas.baic2.core.model.resolve
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Motion
 import com.verlintas.baic2.designsystem.Baic2Spacing
@@ -159,6 +160,7 @@ fun ConversationsScreen(
                 else -> items(state.conversations, key = { it.conversation.id }) { preview ->
                     ConversationRow(
                         preview = preview,
+                        mode = state.modes.resolve(preview.conversation.mode),
                         onClick = { onOpenConversation(preview.conversation.id) },
                         onDelete = { viewModel.deleteConversation(preview.conversation.id) },
                         modifier = Modifier.animateItem(),
@@ -264,6 +266,7 @@ private fun ConversationSkeleton() {
 @Composable
 private fun ConversationRow(
     preview: ConversationPreview,
+    mode: com.verlintas.baic2.core.model.ModeProfile,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -309,9 +312,9 @@ private fun ConversationRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (conversation.mode != AppMode.CHAT) {
+                if (conversation.mode != ModeProfiles.CHAT.id) {
                     Spacer(Modifier.width(Baic2Spacing.sm))
-                    Baic2ModeChip(mode = conversation.mode)
+                    Baic2ModeChip(mode = mode)
                 }
             }
             Spacer(Modifier.height(6.dp))

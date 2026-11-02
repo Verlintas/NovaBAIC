@@ -78,6 +78,7 @@ private object SettingsRoute {
     const val AGENT_WIZARD = "settings_agent_wizard?agentId={agentId}"
     const val PERMISSIONS = "settings_permissions"
     const val SKILLS = "settings_skills"
+    const val MODES = "settings_modes"
     const val APPEARANCE = "settings_appearance"
     const val LANGUAGE = "settings_language"
     const val STORAGE = "settings_storage"
@@ -122,6 +123,7 @@ fun SettingsScreen(
                 onOpenAgents = { navController.navigate(SettingsRoute.AGENTS) },
                 onOpenPermissions = { navController.navigate(SettingsRoute.PERMISSIONS) },
                 onOpenSkills = { navController.navigate(SettingsRoute.SKILLS) },
+                onOpenModes = { navController.navigate(SettingsRoute.MODES) },
                 onOpenAppearance = { navController.navigate(SettingsRoute.APPEARANCE) },
                 onOpenLanguage = { navController.navigate(SettingsRoute.LANGUAGE) },
                 onOpenStorage = { navController.navigate(SettingsRoute.STORAGE) },
@@ -151,6 +153,9 @@ fun SettingsScreen(
         composable(SettingsRoute.SKILLS) {
             SkillsPage(onBack = { navController.popBackStack() })
         }
+        composable(SettingsRoute.MODES) {
+            ModeProfilesPage(onBack = { navController.popBackStack() })
+        }
         composable(SettingsRoute.APPEARANCE) {
             AppearancePage(onBack = { navController.popBackStack() })
         }
@@ -179,6 +184,7 @@ private fun SettingsRoot(
     onOpenAgents: () -> Unit,
     onOpenPermissions: () -> Unit,
     onOpenSkills: () -> Unit,
+    onOpenModes: () -> Unit,
     onOpenAppearance: () -> Unit,
     onOpenLanguage: () -> Unit,
     onOpenStorage: () -> Unit,
@@ -248,6 +254,15 @@ private fun SettingsRoot(
                 icon = Icons.Outlined.Build,
                 showChevron = true,
                 onClick = onOpenSkills,
+            )
+        }
+        item(key = "modes") {
+            SettingsRow(
+                title = stringResource(R.string.settings_modes_title),
+                summary = stringResource(R.string.settings_modes_summary),
+                icon = Icons.Outlined.Settings,
+                showChevron = true,
+                onClick = onOpenModes,
             )
         }
 

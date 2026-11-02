@@ -23,7 +23,6 @@ import androidx.room.withTransaction
 import com.verlintas.baic2.core.data.db.Baic2Database
 import com.verlintas.baic2.core.data.db.RunEntity
 import com.verlintas.baic2.core.data.mapper.ChatMapper
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
@@ -56,12 +55,12 @@ class RunRepository @Inject constructor(
      */
     suspend fun cancelStaleRuns() = db.runDao().cancelStale(System.currentTimeMillis())
 
-    suspend fun start(conversationId: Long, mode: AppMode): Long {
+    suspend fun start(conversationId: Long, mode: String): Long {
         val now = System.currentTimeMillis()
         return db.runDao().insert(
             RunEntity(
                 conversationId = conversationId,
-                mode = mode.name,
+                mode = mode,
                 state = RunState.RUNNING.name,
                 startedAt = now,
                 updatedAt = now,
