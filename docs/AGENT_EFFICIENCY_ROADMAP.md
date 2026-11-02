@@ -59,7 +59,7 @@
 - 内置无线调试已在真实 Xiaomi 17 Pro Max 完成配对、后台虚拟屏与 Wi-Fi 关闭后的会话复用；重启恢复、OEM 拒绝写设置仍需更多真机验证。
 - 无线端口扫描已实现，但只在 JVM 单测和模拟器上验证；真机上的扫描耗时、OEM 网络限制仍待测。
 - 前台输入已增加焦点重试与提交后内容等待；MIUI 无障碍仍可能被 SmartPower 反复解绑，失败会回退前台。
-- v0.4.1 候选已构建，待微信/X 真机回归后发布；剩余项见下方发布门禁与后续优化。
+- v0.4.1 已发布；微信/X 原生路径仍是已知限制，浏览器 `web_research` 作为 0.5.0 主线。剩余项见下方发布门禁与后续优化。
 
 ## 2. 设计原则
 
@@ -487,7 +487,7 @@ data class AppKnowledge(
 - 2026-10-31：`ui_control` 增加 `sequence`：一次调用不限步数（5 分钟安全预算），逐步校验，失败即停；用于把“搜索 → 点结果 → 读详情”等多步 UI 流程压成一轮模型调用。
 - 2026-11-02：合并社区 PR #2（俄语本地化）与 PR #3（局域网明文 HTTP）。PR #2 通过许可证头、字符串同步、占位符/数组校验、`:app:assembleDebug` 与 `lintDebug`；PR #3 合并后立即加 `NetworkEndpointPolicy`：HTTPS 任意，HTTP 仅限 loopback/RFC1918/link-local/私有 mDNS，公网 HTTP 在设置向导、自动拉模型和保存前拒绝，并有单测。
 - 2026-11-02：内置浏览器技术验证通过。`DebugBrowserActivity` 用应用自有 `DisplayManager.createVirtualDisplay()`（`OWN_CONTENT_ONLY`）创建虚拟屏，`Presentation + WebView` 成功加载 `example.com`，JS 读取 DOM/链接/输入框，点击链接导航到 `iana.org`，`ImageReader` 抓取 1200×2608 画面正常。全程不需要 Shizuku/root/无线 ADB。设计与 MVP 见 `docs/WEB_RESEARCH.md`；下一步抽 `BrowserHost`/`BrowserSession`，做只读 `web_research`。
-- 2026-11-01：v0.4.1 稳定性补丁（候选，未发布）。修复 R8 删除 ML Kit `ComponentRegistrar` 无参构造导致 release 包首次 OCR 必然 NPE；`app_research` 增加 `Search state`（results/empty/not-found/not-submitted）、OCR-first 第三方 App 路径、移除任意 EditText 兜底、虚拟屏坐标改走 `displays.tap`；OCR 串行化/回调兜底/超时；release APK OCR 冒烟通过。真机微信回归暴露 OCR 选中底部“搜索”tab；已加上半屏搜索入口过滤，待复测。
+- 2026-11-02：v0.4.1 稳定性补丁（已发布）。修复 R8 删除 ML Kit `ComponentRegistrar` 无参构造导致 release 包首次 OCR 必然 NPE；`app_research` 增加 `Search state`（results/empty/not-found/not-submitted）、OCR-first 第三方 App 路径、移除任意 EditText 兜底、虚拟屏坐标改走 `displays.tap`；OCR 串行化/回调兜底/超时；release APK OCR 冒烟通过。真机微信回归暴露 OCR 选中底部“搜索”tab；已加上半屏搜索入口过滤。微信原生虚拟屏仍会回到主屏，因此 0.5.0 走应用自有虚拟屏 + WebView 的 `web_research`。
 - 2026-11-01：v0.4.0 收版。虚拟屏 helper / provider 交接 / 无线 ADB 本机枚举独立重写；`app_research` 增加 EditText 聚焦与提交重试，虚拟屏搜索失败回退前台；修复 Settings 误匹配数字健康包；附件删除/7 天截图清理/保留截图开关；自动保存技能把输入值参数化；开机和 App 更新后重挂保活。真机：`Settings` → `WLAN` 首次 8.7s、同 session 1.7–2.0s（3/3）；`电池` 首次 14.4s、复用 1.6–1.7s（5/5）；虚拟屏 capture 204KB。
 - 2026-11-01：虚拟屏本地会话复用与保活。`ensure()` 先检查已有 helper Binder，再检查 shell 传输；实测 Wi-Fi 关闭后 `adb_wifi_enabled=0`、无 TLS 端口，helper 仍存活，`ensure/capture` 继续成功。新增设置 → 权限 → 「后台虚拟屏保活」前台服务；开启时关闭空闲回收，并每 4 分钟 ensure 一次；常驻通知、耗电略增，重启后等待新的 shell。真实设备验证（旧测试构建，未含保活服务）：Wi-Fi 关闭后 `adb_wifi_enabled=0`，helper 仍存活，displayId=8 复用成功，capture 约 215KB；保活服务在 API 35 模拟器验证：开关开启后前台服务运行，关闭 Wi-Fi 后 helper 仍在，`ensure/capture` 成功。测试包已卸载。
 - 2026-10-31：虚拟屏预热落地。App 启动时若已有可用 shell 传输（Shizuku/root/无线），后台调用 `ensure()` 预热 helper；每次 ensure/capture/动作刷新 10 分钟 idle 计时，空闲自动释放。API 35 实测：冷启动首调约 12.2s，预热后首调约 4.2s。

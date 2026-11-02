@@ -265,7 +265,7 @@ adb reverse tcp:8765 tcp:8765
 - **Done · v0.1.x rapid iteration**: implicit CoT, task center + scheduled tasks, persistent screen capture, Shizuku, recording / transcription / hands-free, full model catalog
 - **Done · v0.3.x agent efficiency**: plan-once UI (snapshot / refs / sequence / assert), virtual-display prewarm / reuse / keepalive, built-in wireless ADB, auto-save skills, parallel CHAT+ research subagents
 - **Done · v0.4.0 stability**: independent virtual-display / wireless ADB implementation, real-device `app_research` search and session reuse, attachment lifecycle and screenshot retention, parameterized auto-save skills, boot/update keepalive re-arm
-- **Candidate · v0.4.1 patch**: fix release-build ML Kit OCR component registration (third-party app NPE); semantic `Search state`, an OCR-first path and top-half search-entry filtering for user-installed apps (release held for WeChat/X device validation)
+- **Done · v0.4.1 patch**: fix release-build ML Kit OCR component registration (third-party app NPE); semantic `Search state`, an OCR-first path and top-half search-entry filtering for user-installed apps; Russian localization and LAN HTTP for private addresses
 - **In progress**: OEM matrix expansion and reboot / network-recovery validation, Shizuku / voice / recording acceptance, continuous UI polish and more eval scenarios
 - **Planned**: richer device capabilities and skill ecosystem, more model protocols
 

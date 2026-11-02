@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.4.1] - 2026-11-01
+## [0.4.1] - 2026-11-02
 
 > 0.4.1 是 0.4.0 的稳定性补丁，修复 release 包中 ML Kit OCR 组件注册失败导致的第三方 App 裸崩溃。
 
@@ -30,8 +30,10 @@ All notable changes to this project are documented in this file.
 
 ### 已知限制 Known limitations
 
-- 0.4.1 尚未发布；微信/X 的虚拟屏真机回归仍需在用户设备解锁并允许 USB 安装后执行。
+- 微信/X 的原生虚拟屏回归仍未通过：`app_research` 会返回语义化失败，不再裸崩溃；浏览器 `web_research` 路线规划在 0.5.0。
 - OEM 矩阵仍只覆盖 Xiaomi 17 Pro Max + API 30/35 模拟器。
+- 俄语本地化为社区贡献，建议母语者继续校对术语。
+- 全局 `cleartextTrafficPermitted` 仍保留；Agent Base URL 已由 `NetworkEndpointPolicy` 限制为 HTTPS 或私有 HTTP，`web_read` / MCP 的 HTTP 校验待补。
 
 ## [0.4.0] - 2026-11-01
 
