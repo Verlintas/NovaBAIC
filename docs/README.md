@@ -12,6 +12,7 @@
 ## Agent 与实现
 
 - [Agent 效率与隐式交互路线图](AGENT_EFFICIENCY_ROADMAP.md) — 当前 Agent 能力迭代的工作流、验收标准与进度
+- [Web research / 内置浏览器](WEB_RESEARCH.md) — 应用自有虚拟屏 + WebView + DOM 自动化的可行性、设计与 MVP
 - [Architecture Decision Records](adr/) — 关键架构决策及其背景
 
 ## 项目治理

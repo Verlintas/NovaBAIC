@@ -46,8 +46,8 @@ android {
         applicationId = "com.verlintas.baic2"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "0.4.0"
+        versionCode = 28
+        versionName = "0.4.1"
     }
 
     signingConfigs {
@@ -68,6 +68,15 @@ android {
 
     buildTypes {
         debug {
+            // Opt-in minified debug build for reproducing release-only R8 bugs.
+            val minifyDebug = providers.gradleProperty("baic2.minifyDebug").orNull == "true"
+            isMinifyEnabled = minifyDebug
+            if (minifyDebug) {
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro",
+                )
+            }
             if (!testApplicationIdSuffix.isNullOrEmpty()) {
                 applicationIdSuffix = testApplicationIdSuffix
                 versionNameSuffix = "-test"

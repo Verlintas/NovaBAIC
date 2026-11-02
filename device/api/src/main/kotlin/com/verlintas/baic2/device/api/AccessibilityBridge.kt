@@ -138,6 +138,13 @@ interface AccessibilityBridge {
     /** Package name of the app currently in the foreground, when known. */
     fun foregroundPackage(): String?
 
+    /**
+     * Package of the top application window on [displayId]. This is the
+     * per-display counterpart used to verify that a virtual-display launch
+     * really landed on that display instead of the phone.
+     */
+    fun foregroundPackageOnDisplay(displayId: Int): String?
+
     /** Active window title, when the service can read one. */
     fun windowTitle(): String?
 

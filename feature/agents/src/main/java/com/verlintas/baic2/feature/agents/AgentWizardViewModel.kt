@@ -19,6 +19,7 @@
 
 package com.verlintas.baic2.feature.agents
 
+import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.verlintas.baic2.core.data.repository.AgentRepository
@@ -126,6 +127,8 @@ sealed interface SetupError {
     data object MissingKey : SetupError
 
     data object MissingUrl : SetupError
+
+    data object InsecureUrl : SetupError
 
     data object MissingModel : SetupError
 
@@ -238,7 +241,13 @@ class AgentWizardViewModel @Inject constructor(
         autoFetchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(900)
             val state = _uiState.value
-            if (hasUsableKey(state) && state.baseUrl.isNotBlank()) fetchModels()
+            if (hasUsableKey(state) && state.baseUrl.isNotBlank()) {
+                if (NetworkEndpointPolicy.validateBaseUrl(state.baseUrl)) {
+                    fetchModels()
+                } else {
+                    _uiState.update { it.copy(error = SetupError.InsecureUrl) }
+                }
+            }
         }
     }
 
@@ -250,6 +259,10 @@ class AgentWizardViewModel @Inject constructor(
             WizardStep.PROVIDER -> {
                 if (current.baseUrl.isBlank()) {
                     _uiState.update { it.copy(error = SetupError.MissingUrl) }
+                    return
+                }
+                if (!NetworkEndpointPolicy.validateBaseUrl(current.baseUrl)) {
+                    _uiState.update { it.copy(error = SetupError.InsecureUrl) }
                     return
                 }
                 if (current.apiKey.isBlank() && !current.keyPrefilled) {
@@ -292,7 +305,13 @@ class AgentWizardViewModel @Inject constructor(
         autoFetchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(delayMs)
             val state = _uiState.value
-            if (hasUsableKey(state) && state.baseUrl.isNotBlank()) fetchModels()
+            if (hasUsableKey(state) && state.baseUrl.isNotBlank()) {
+                if (NetworkEndpointPolicy.validateBaseUrl(state.baseUrl)) {
+                    fetchModels()
+                } else {
+                    _uiState.update { it.copy(error = SetupError.InsecureUrl) }
+                }
+            }
         }
     }
 
@@ -301,6 +320,10 @@ class AgentWizardViewModel @Inject constructor(
         if (current.modelsLoading) return
         if (current.baseUrl.isBlank() || !hasUsableKey(current)) {
             _uiState.update { it.copy(modelsError = "missing_credentials") }
+            return
+        }
+        if (!NetworkEndpointPolicy.validateBaseUrl(current.baseUrl)) {
+            _uiState.update { it.copy(error = SetupError.InsecureUrl, modelsError = null) }
             return
         }
         _uiState.update { it.copy(modelsLoading = true, modelsError = null) }
@@ -399,6 +422,10 @@ class AgentWizardViewModel @Inject constructor(
         val current = _uiState.value
         if (current.model.isBlank()) {
             _uiState.update { it.copy(error = SetupError.MissingModel) }
+            return
+        }
+        if (!NetworkEndpointPolicy.validateBaseUrl(current.baseUrl)) {
+            _uiState.update { it.copy(error = SetupError.InsecureUrl) }
             return
         }
         _uiState.update { it.copy(saving = true, error = null) }

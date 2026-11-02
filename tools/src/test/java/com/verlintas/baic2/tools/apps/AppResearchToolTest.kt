@@ -65,6 +65,7 @@ class AppResearchToolTest {
         loginTerms = listOf("sign in", "log in", "登录后", "请登录"),
         captchaTerms = listOf("captcha", "验证码"),
         riskTerms = listOf("unusual traffic", "操作频繁"),
+        noResultsTerms = listOf("no results", "没有找到"),
     )
 
     private val knowledge = object : AppKnowledgeRepository {
@@ -185,6 +186,74 @@ class AppResearchToolTest {
         assertTrue(output.contains("Opened: Battery Saver"))
         assertTrue(output.contains("Detail:"))
         assertTrue(output.contains("Use adaptive battery"))
+    }
+
+    @Test
+    fun classifySearchDistinguishesResultsEmptyAndNotSubmitted() {
+        val tool = newTool()
+
+        assertEquals(
+            AppResearchTool.SearchState.RESULTS,
+            tool.classifySearch(
+                text = "Battery\nBattery Saver\nUse Battery Saver",
+                query = "battery",
+                before = "Search",
+                lexicon = lexicon,
+            ),
+        )
+        assertEquals(
+            AppResearchTool.SearchState.EMPTY,
+            tool.classifySearch(
+                text = "Search\nNo results found for battery",
+                query = "battery",
+                before = "Search",
+                lexicon = lexicon,
+            ),
+        )
+        assertEquals(
+            AppResearchTool.SearchState.NOT_SUBMITTED,
+            tool.classifySearch(
+                text = "Search\nRecent searches",
+                query = "battery",
+                before = "Search\nRecent searches",
+                lexicon = lexicon,
+            ),
+        )
+        assertEquals(
+            AppResearchTool.SearchState.NOT_SUBMITTED,
+            tool.classifySearch(
+                text = "Search\nbattery",
+                query = "battery",
+                before = "Search\nbattery",
+                lexicon = lexicon,
+            ),
+        )
+    }
+
+    @Test
+    fun buildOutputShowsSearchState() {
+        val output = newTool().buildOutput(
+            label = "WeChat",
+            packageName = "com.tencent.mm",
+            query = "文件传输助手",
+            screens = 1,
+            lines = listOf("文件传输助手", "聊天记录"),
+            searchState = AppResearchTool.SearchState.RESULTS,
+        )
+
+        assertTrue(output.contains("Search state: results"))
+        assertTrue(output.contains("Query: 文件传输助手"))
+    }
+
+    @Test
+    fun searchTargetsIgnoreBottomNavigationAndHistory() {
+        val tool = newTool()
+
+        assertTrue(tool.isPlausibleSearchTarget("搜索", centerY = 160, screenHeight = 2608))
+        assertTrue(tool.isPlausibleSearchTarget("Search", centerY = 900, screenHeight = 2608))
+        assertTrue(!tool.isPlausibleSearchTarget("搜索", centerY = 2560, screenHeight = 2608))
+        assertTrue(!tool.isPlausibleSearchTarget("搜索记录", centerY = 160, screenHeight = 2608))
+        assertTrue(!tool.isPlausibleSearchTarget("Search history", centerY = 160, screenHeight = 2608))
     }
 
     @Test

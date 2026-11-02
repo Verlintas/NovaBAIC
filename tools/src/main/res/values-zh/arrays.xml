@@ -38,4 +38,11 @@
         <item>系统繁忙</item>
         <item>请稍后再试</item>
     </string-array>
+    <string-array name="app_research_no_results">
+        <item>没有找到</item>
+        <item>无搜索结果</item>
+        <item>暂无结果</item>
+        <item>未找到</item>
+        <item>没有相关结果</item>
+    </string-array>
 </resources>

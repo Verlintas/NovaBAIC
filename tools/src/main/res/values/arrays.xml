@@ -37,4 +37,11 @@
         <item>risk control</item>
         <item>try again later</item>
     </string-array>
+    <string-array name="app_research_no_results">
+        <item>no results</item>
+        <item>no matches</item>
+        <item>nothing found</item>
+        <item>couldn\'t find</item>
+        <item>did not match any</item>
+    </string-array>
 </resources>

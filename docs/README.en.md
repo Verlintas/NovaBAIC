@@ -124,7 +124,7 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 
 **Content & web**
 
-`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `app_research` (read-only in-app search that identifies the search control by resource id, remembers the learned structural id, supports `open` / `open_top` and `session` reuse (a new query retargets the open results page when possible, otherwise relaunches the app on the same display); foreground accessibility without Shizuku/root, resident virtual display when available) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files` (browse / search / read, incl. `grep` text search) · `file_write` · `download_file` · `web_search` (six engines in parallel, with `freshness` / `engines`) · `web_read` (article extraction + paging) · `app_research` (read-only in-app search that identifies the search control by resource id, remembers the learned structural id, supports `open` / `open_top` and `session` reuse (a new query retargets the open results page when possible, otherwise relaunches the app on the same display); returns `Search state: results / empty / not-found / not-submitted`, prefers OCR for user-installed apps and the accessibility tree for system apps; foreground accessibility without Shizuku/root, resident virtual display when available) · `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **Personal assistant**
 
@@ -265,6 +265,7 @@ adb reverse tcp:8765 tcp:8765
 - **Done · v0.1.x rapid iteration**: implicit CoT, task center + scheduled tasks, persistent screen capture, Shizuku, recording / transcription / hands-free, full model catalog
 - **Done · v0.3.x agent efficiency**: plan-once UI (snapshot / refs / sequence / assert), virtual-display prewarm / reuse / keepalive, built-in wireless ADB, auto-save skills, parallel CHAT+ research subagents
 - **Done · v0.4.0 stability**: independent virtual-display / wireless ADB implementation, real-device `app_research` search and session reuse, attachment lifecycle and screenshot retention, parameterized auto-save skills, boot/update keepalive re-arm
+- **Candidate · v0.4.1 patch**: fix release-build ML Kit OCR component registration (third-party app NPE); semantic `Search state`, an OCR-first path and top-half search-entry filtering for user-installed apps (release held for WeChat/X device validation)
 - **In progress**: OEM matrix expansion and reboot / network-recovery validation, Shizuku / voice / recording acceptance, continuous UI polish and more eval scenarios
 - **Planned**: richer device capabilities and skill ecosystem, more model protocols
 

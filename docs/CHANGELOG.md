@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.1] - 2026-11-01
+
+> 0.4.1 是 0.4.0 的稳定性补丁，修复 release 包中 ML Kit OCR 组件注册失败导致的第三方 App 裸崩溃。
+
+### 新增 Added
+
+- **俄语本地化**（PR #2）：新增 `values-ru`，覆盖设置、聊天、Agents、Library、Tasks、Tools 与设备服务文案；语言页可选择 Русский。占位符/数组数量校验与 `lintDebug` 通过。
+- **局域网 HTTP**（PR #3）：允许连接自建 LAN 模型服务；新增应用层 `NetworkEndpointPolicy`，HTTPS 任意放行，HTTP 只允许 localhost、RFC1918、link-local、IPv6 ULA/link-local 和私有 mDNS 后缀，公网 HTTP 在设置向导与自动获取模型前都会被拒绝。
+
+### 修复 Fixed
+
+- **ML Kit / R8**：`ComponentRegistrar` 由 manifest metadata 反射实例化，但 R8 会删除无参构造。0.4.0 release 包的 `TextRegistrar`、`VisionCommonRegistrar`、`CommonComponentRegistrar` 均缺少 `<init>()`，导致 ML Kit 初始化后找不到 OCR 组件，首次 OCR 在 `sl5.a` 处 NPE。新增 keep 规则保留所有 `ComponentRegistrar` 的无参构造，并在 release APK 上验证 OCR 成功。
+- **`app_research` 崩溃兜底**：`execute` 在锁内捕获所有异常，返回带类名和下一步建议的 `Failure`；`ToolRegistry` 的通用兜底也补充异常类型和“部分 UI 动作可能已发生”的提示，不再只给一条混淆后的裸消息。
+- **OCR 并发与回调异常**：`MlKitOcrProvider` 串行化所有识别请求；`Task` 回调内的 `result`/`exception` 访问全部包在 `runCatching` 中；15s 超时后不 mid-flight 关闭 recognizer，等任务完成再重建；取消时不再回收 ML Kit 仍可能持有的 bitmap。
+- **`app_research` 搜索状态**：输出新增 `Search state: results | empty | not-found | not-submitted`；失败信息带状态和恢复建议。查询提交后不再把“页面没变”当成成功。
+- **第三方 App 路径**：用户安装的 App 优先 OCR（系统 App 仍先走无障碍树）；搜索入口只接受 search 节点、搜索词或 OCR 搜索标签，移除了“任意第一个 EditText”兜底，避免把查询打进聊天输入框或按 Enter 发送。
+- **虚拟屏坐标**：聚焦搜索框改用 `displays.tap`，不再把点击派发到手机主屏；提交后增加 OCR/无障碍结果状态判定。
+- **搜索入口安全过滤**：只接受屏幕上半部分的 search 节点、搜索词或 OCR 标签；排除底部导航的“搜索”tab 和搜索历史；提交时不再点击任意“搜索”文本。避免把第三方 App 的底部 tab 当成搜索框。
+- **前台回退**：搜索页打开后先等待 editable 出现，再重试 `SET_TEXT`，避免 Settings 搜索 Activity 转场竞态。
+
+### 测试 Tests
+
+- API 35 模拟器：minified debug + release APK 的 ML Kit OCR 冒烟均通过（`电池 WLAN 设置`）。
+- release APK 反编译确认 `TextRegistrar` 等三个 registrar 均保留 `<init>()`。
+- 新增 `SearchState` 单测；全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、工具 schema、许可证头、字符串同步通过。
+
+### 已知限制 Known limitations
+
+- 0.4.1 尚未发布；微信/X 的虚拟屏真机回归仍需在用户设备解锁并允许 USB 安装后执行。
+- OEM 矩阵仍只覆盖 Xiaomi 17 Pro Max + API 30/35 模拟器。
+
 ## [0.4.0] - 2026-11-01
 
 > 0.4.0 的主题是“把 Agent 的执行链做稳”：虚拟屏与无线 ADB 独立重写、`app_research` 真机可靠性、附件生命周期、自动保存技能参数化。DB 仍为 v21，工具仍为 57。

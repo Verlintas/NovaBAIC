@@ -108,7 +108,7 @@ class ShellDisplayService(private val context: Context) : IVirtualDisplayService
     private fun amStart(displayId: Int, component: String): Boolean = runCatching {
         val argv = listOf(
             "am", "start", "--display", displayId.toString(),
-            "-f", "0x10008000", "-n", component,
+            "-f", "0x18008000", "-n", component,
         )
         val process = ProcessBuilder(argv).redirectErrorStream(true).start()
         val finished = process.waitFor(5, TimeUnit.SECONDS)

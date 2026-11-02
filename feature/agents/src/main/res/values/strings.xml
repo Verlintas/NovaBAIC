@@ -12,6 +12,7 @@
     <string name="agent_setup_hint">Key 使用 Android Keystore 加密存储，只会发送给你配置的服务商</string>
     <string name="agent_setup_error_key">请填写 API Key</string>
     <string name="agent_setup_error_url">请填写 Base URL</string>
+    <string name="agent_setup_error_insecure_url">公网地址必须使用 HTTPS；HTTP 仅允许 localhost 或局域网地址</string>
     <string name="agent_setup_error_model">请填写模型名</string>
     <string name="agent_setup_error_keystore">Key 加密失败，请重试</string>
     <string name="agent_setup_error_auth">认证失败：请检查 API Key</string>

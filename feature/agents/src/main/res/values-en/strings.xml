@@ -12,6 +12,7 @@
     <string name="agent_setup_hint">The key is encrypted with the Android Keystore and only sent to the provider you configure</string>
     <string name="agent_setup_error_key">API key is required</string>
     <string name="agent_setup_error_url">Base URL is required</string>
+    <string name="agent_setup_error_insecure_url">Public endpoints must use HTTPS; HTTP is only allowed for localhost or LAN addresses</string>
     <string name="agent_setup_error_model">Model is required</string>
     <string name="agent_setup_error_keystore">Key encryption failed, please retry</string>
     <string name="agent_setup_error_auth">Authentication failed: check the API key</string>

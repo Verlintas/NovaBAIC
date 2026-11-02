@@ -9,6 +9,18 @@
             android:name=".DebugResearchActivity"
             android:exported="true" />
         <activity
+            android:name=".DebugOcrActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugShizukuActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugDisplayOnlyActivity"
+            android:exported="true" />
+        <activity
+            android:name=".DebugBrowserActivity"
+            android:exported="true" />
+        <activity
             android:name=".DebugUiActivity"
             android:exported="true" />
         <activity

@@ -954,6 +954,7 @@ internal fun presetLabel(preset: AgentPreset): String = stringResource(
 internal fun setupErrorText(error: SetupError): String = when (error) {
     SetupError.MissingKey -> stringResource(R.string.agent_setup_error_key)
     SetupError.MissingUrl -> stringResource(R.string.agent_setup_error_url)
+    SetupError.InsecureUrl -> stringResource(R.string.agent_setup_error_insecure_url)
     SetupError.MissingModel -> stringResource(R.string.agent_setup_error_model)
     SetupError.KeyStore -> stringResource(R.string.agent_setup_error_keystore)
     is SetupError.Request -> when (error.kind) {

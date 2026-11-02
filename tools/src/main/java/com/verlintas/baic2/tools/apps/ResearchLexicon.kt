@@ -34,8 +34,14 @@ data class ResearchLexicon(
     val loginTerms: List<String>,
     val captchaTerms: List<String>,
     val riskTerms: List<String>,
+    val noResultsTerms: List<String> = emptyList(),
 ) {
     fun isChrome(label: String): Boolean = label.trim().lowercase() in chrome
+
+    fun hasNoResults(text: String): Boolean {
+        val lower = text.lowercase()
+        return noResultsTerms.any { it in lower }
+    }
 
     fun blockedReason(text: String): String? {
         val lower = text.lowercase()
@@ -71,6 +77,7 @@ data class ResearchLexicon(
                 loginTerms = array(R.array.app_research_login_terms),
                 captchaTerms = array(R.array.app_research_captcha_terms),
                 riskTerms = array(R.array.app_research_risk_terms),
+                noResultsTerms = array(R.array.app_research_no_results),
             )
         }
     }

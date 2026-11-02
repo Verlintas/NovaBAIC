@@ -17,6 +17,14 @@
 # Loaded by name via app_process as the resident virtual-display helper.
 -keep class com.verlintas.baic2.device.impl.display.DisplayHelperMain { *; }
 
+# Firebase Components (used by ML Kit) instantiates registrars by class name
+# from manifest metadata. Keeping only the class lets R8 remove the no-arg
+# constructor; component discovery then logs "Invalid component registrar"
+# and ML Kit starts with no text-recognition components.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    <init>();
+}
+
 # Wireless debugging: Conscrypt is selected by reflection in libadb, and the
 # ADB/Spake2/BouncyCastle stacks are used through reflection or JCA lookups.
 -keep class org.conscrypt.** { *; }

@@ -98,7 +98,18 @@ class DeviceToolRunner @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            ToolResult.Failure("${call.name} crashed: ${e.message ?: e.javaClass.simpleName}")
+            ToolResult.Failure(
+                "${call.name} crashed: ${e.javaClass.simpleName}: " +
+                    "${e.message ?: "no detail"}. The call did not finish; earlier UI actions " +
+                    "may already have happened. Retry once, then use a lower-level tool or " +
+                    "ask the user.",
+            )
+        } catch (e: LinkageError) {
+            ToolResult.Failure(
+                "${call.name} could not load a required class (${e.javaClass.simpleName}: " +
+                    "${e.message ?: "no detail"}). This is an app packaging problem, not a UI " +
+                    "state; do not retry the same call.",
+            )
         }
         if (cacheKey != null && result is ToolResult.Success) {
             run.cache[cacheKey] = result

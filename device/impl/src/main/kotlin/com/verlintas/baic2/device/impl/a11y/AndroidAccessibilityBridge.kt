@@ -216,6 +216,9 @@ class AndroidAccessibilityBridge @Inject constructor() : AccessibilityBridge {
                 if (!node.isVisibleToUser || node.isPassword) return@walk
                 val bounds = Rect().also { node.getBoundsInScreen(it) }
                 if (bounds.isEmpty) return@walk
+                // A bottom "Search" tab is navigation, not a text field. Do
+                // not return it as the app's search entry.
+                if (screenHeight > 0 && bounds.top > screenHeight * 3 / 4) return@walk
                 val viewId = node.viewIdResourceName.orEmpty()
                 val lowerViewId = viewId.lowercase()
                 val className = node.className?.toString().orEmpty()
@@ -693,6 +696,10 @@ class AndroidAccessibilityBridge @Inject constructor() : AccessibilityBridge {
         }
         return lines.joinToString("\n")
     }
+
+    override fun foregroundPackageOnDisplay(displayId: Int): String? = runCatching {
+        rootOnDisplay(displayId)?.packageName?.toString()?.takeIf { it.isNotBlank() }
+    }.getOrNull()
 
     override fun foregroundPackage(): String? =
         runCatching { service?.rootInActiveWindow?.packageName?.toString() }.getOrNull()

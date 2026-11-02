@@ -12,6 +12,7 @@
     <string name="agent_setup_hint">Ключ шифруется через Android Keystore и отправляется только выбранному вами сервису</string>
     <string name="agent_setup_error_key">Укажите API-ключ</string>
     <string name="agent_setup_error_url">Укажите Base URL</string>
+    <string name="agent_setup_error_insecure_url">Публичные адреса должны использовать HTTPS; HTTP разрешён только для localhost или локальной сети</string>
     <string name="agent_setup_error_model">Укажите название модели</string>
     <string name="agent_setup_error_keystore">Не удалось зашифровать ключ — повторите попытку</string>
     <string name="agent_setup_error_auth">Ошибка авторизации — проверьте API-ключ</string>
