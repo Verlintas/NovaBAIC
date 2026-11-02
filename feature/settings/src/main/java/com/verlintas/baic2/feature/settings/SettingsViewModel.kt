@@ -33,6 +33,7 @@ import com.verlintas.baic2.core.model.AccentColor
 import com.verlintas.baic2.core.model.Agent
 import com.verlintas.baic2.core.model.AppLanguage
 import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.ThemeMode
 import com.verlintas.baic2.core.model.isVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -195,6 +196,10 @@ class SettingsViewModel @Inject constructor(
 
     fun restoreModes() {
         modeStore.restoreStocks()
+    }
+
+    fun resetMode(id: String) {
+        ModeProfiles.stocks.firstOrNull { it.id == id }?.let { modeStore.upsert(it) }
     }
 
     fun refreshStorage() {

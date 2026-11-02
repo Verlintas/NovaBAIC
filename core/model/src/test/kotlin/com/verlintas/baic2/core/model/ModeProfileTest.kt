@@ -99,4 +99,45 @@ class ModeProfileTest {
         val resolved = ModeProfiles.stocks.resolve(ModeProfiles.MAX.id)
         assertEquals(ModeProfiles.MAX, resolved)
     }
+
+    @Test
+    fun taskModeDefaultsFollowTheOldBannerRule() {
+        // Legacy rows (taskMode == null) keep the old behavior: only the
+        // stock MAX class announced every run.
+        assertTrue(ModeProfiles.MAX.isTask)
+        assertFalse(ModeProfiles.CHAT.isTask)
+        assertFalse(ModeProfiles.CHAT_PLUS.isTask)
+        assertFalse(ModeProfiles.ACT.isTask)
+        val customFull = ModeProfile(
+            id = "custom-5",
+            name = "All allowed",
+            toolAccess = ToolAccess.FULL,
+            requiresConfirmation = false,
+            budget = RunBudget(maxRounds = 60, maxToolCalls = 160, maxWallClockMs = 3_600_000),
+        )
+        assertFalse(customFull.isTask)
+    }
+
+    @Test
+    fun explicitTaskModeOverridesTheDefault() {
+        val chatTask = ModeProfiles.CHAT.copy(taskMode = true)
+        assertTrue(chatTask.isTask)
+        val maxCasual = ModeProfiles.MAX.copy(taskMode = false)
+        assertFalse(maxCasual.isTask)
+    }
+
+    @Test
+    fun customPromptAppendsAfterAgentPersona() {
+        val mode = ModeProfile(
+            id = "custom-6",
+            name = "Terse",
+            toolAccess = ToolAccess.FULL,
+            requiresConfirmation = false,
+            budget = RunBudget(maxRounds = 12, maxToolCalls = 32, maxWallClockMs = 600_000),
+            prompt = "Be brief.",
+        )
+        assertEquals("Be brief.", mode.composeCustomPrompt(""))
+        assertEquals("Persona.\n\nBe brief.", mode.composeCustomPrompt("Persona."))
+        assertEquals("Persona.", ModeProfiles.CHAT.composeCustomPrompt("Persona."))
+    }
 }

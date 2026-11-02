@@ -1917,5 +1917,10 @@ private fun modeDescription(mode: ModeProfile): String {
             R.string.chat_mode_confirm_off
         },
     )
-    return "$rights В· $confirm"
+    val task = if (mode.isTask) {
+        " В· " + stringResource(R.string.chat_mode_task_on)
+    } else {
+        ""
+    }
+    return "$rights В· $confirm$task"
 }

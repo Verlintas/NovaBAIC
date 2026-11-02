@@ -79,6 +79,9 @@ private object SettingsRoute {
     const val PERMISSIONS = "settings_permissions"
     const val SKILLS = "settings_skills"
     const val MODES = "settings_modes"
+    const val MODE_EDITOR = "settings_mode_editor?modeId={modeId}"
+
+    fun modeEditor(modeId: String?) = "settings_mode_editor?modeId=${modeId ?: ""}"
     const val APPEARANCE = "settings_appearance"
     const val LANGUAGE = "settings_language"
     const val STORAGE = "settings_storage"
@@ -154,7 +157,25 @@ fun SettingsScreen(
             SkillsPage(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoute.MODES) {
-            ModeProfilesPage(onBack = { navController.popBackStack() })
+            ModeProfilesPage(
+                onBack = { navController.popBackStack() },
+                onEdit = { id -> navController.navigate(SettingsRoute.modeEditor(id)) },
+            )
+        }
+        composable(
+            route = SettingsRoute.MODE_EDITOR,
+            arguments = listOf(
+                navArgument("modeId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("modeId").takeUnless { it.isNullOrBlank() }
+            ModeEditorPage(
+                modeId = id,
+                onBack = { navController.popBackStack() },
+            )
         }
         composable(SettingsRoute.APPEARANCE) {
             AppearancePage(onBack = { navController.popBackStack() })

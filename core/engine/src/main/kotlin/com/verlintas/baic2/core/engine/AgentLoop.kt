@@ -119,6 +119,7 @@ class AgentLoop(
         unattended: Boolean = false,
         initialTaint: Boolean = false,
         budgetOverride: RunBudget? = null,
+        taskProtocol: Boolean = mode == AppMode.MAX,
         triggerMessageId: Long? = null,
         primedNoteIds: Set<Long> = emptySet(),
         /** Opt-in scene facts, already fetched/cached by the host. */
@@ -142,6 +143,7 @@ class AgentLoop(
             custom = customSystemPrompt,
             planContext = planContext,
             memoryContext = memoryContext,
+            taskProtocol = taskProtocol,
             now = startedAt,
         )
         val lastUser = history.lastOrNull { it.role == ChatRole.USER }
@@ -612,6 +614,7 @@ fun renderSystemPrompt(
     custom: String,
     planContext: String?,
     memoryContext: String? = null,
+    taskProtocol: Boolean = mode == AppMode.MAX,
     now: Long = System.currentTimeMillis(),
     zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
 ): String = PromptCompiler.compile(
@@ -619,6 +622,7 @@ fun renderSystemPrompt(
     custom = custom,
     planContext = planContext,
     memoryContext = memoryContext,
+    taskProtocol = taskProtocol,
     now = now,
     zone = zone,
 ).full

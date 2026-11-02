@@ -42,6 +42,14 @@ data class ModeProfile(
     val requiresConfirmation: Boolean,
     val budget: RunBudget,
     val stock: Boolean = false,
+    /**
+     * Long-task behavior: planning protocol, completion report and the
+     * finish banner. Null on rows saved before this existed; those fall
+     * back to the old rule (only the stock MAX class behaved that way).
+     */
+    val taskMode: Boolean? = null,
+    /** Extra instructions appended to the system prompt of this mode. */
+    val prompt: String? = null,
 ) {
     /** No tools at all besides memory (old CHAT semantics). */
     val toolsVisible: Boolean get() = toolAccess != ToolAccess.NONE
@@ -55,8 +63,18 @@ data class ModeProfile(
     /** Work worth recording in Tasks: the mode can act on the device. */
     val agentic: Boolean get() = toolAccess == ToolAccess.FULL
 
+    /** Plan protocol, completion report and the finish banner are on. */
+    val isTask: Boolean get() = taskMode ?: (stock && autonomous)
+
+    /** Agent persona plus this mode's own extra instructions. */
+    fun composeCustomPrompt(agentPrompt: String): String = when {
+        prompt.isNullOrBlank() -> agentPrompt
+        agentPrompt.isBlank() -> prompt.orEmpty()
+        else -> agentPrompt + "\n\n" + prompt
+    }
+
     /** Long-horizon work keeps a visible plan (old MAX / Research). */
-    val planEnabled: Boolean get() = readOnlyOnly || autonomous
+    val planEnabled: Boolean get() = readOnlyOnly || isTask
 
     /**
      * The engine behavior class. The engine gate, tool registry and prompt
@@ -107,6 +125,7 @@ object ModeProfiles {
         requiresConfirmation = false,
         budget = RunBudget(maxRounds = 60, maxToolCalls = 160, maxWallClockMs = 3_600_000),
         stock = true,
+        taskMode = true,
     )
 
     val stocks: List<ModeProfile> = listOf(CHAT, CHAT_PLUS, ACT, MAX)

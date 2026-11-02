@@ -25,15 +25,20 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -57,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,22 +71,23 @@ import com.verlintas.baic2.core.model.RunBudget
 import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Spacing
+import com.verlintas.baic2.designsystem.component.Baic2ModeChip
 import com.verlintas.baic2.designsystem.component.modeProfileLabel
 
 // ---------------------------------------------------------------- modes
 
 /**
  * Mode manager: every mode, stock or custom, can be edited or removed here.
- * A mode defines tool access, per-call confirmation and the run budget.
+ * A mode defines tool access, per-call confirmation, the run budget, the
+ * long-task protocol and its own extra instructions.
  */
 @Composable
 fun ModeProfilesPage(
     onBack: () -> Unit,
+    onEdit: (String?) -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val modes by viewModel.modes.collectAsStateWithLifecycle()
-    var editorOpen by rememberSaveable { mutableStateOf(false) }
-    var editorMode by remember { mutableStateOf<ModeProfile?>(null) }
     var deleteTarget by remember { mutableStateOf<ModeProfile?>(null) }
 
     SettingsPage(
@@ -89,10 +96,7 @@ fun ModeProfilesPage(
     ) {
         item(key = "add") {
             OutlinedButton(
-                onClick = {
-                    editorMode = null
-                    editorOpen = true
-                },
+                onClick = { onEdit(null) },
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -106,10 +110,7 @@ fun ModeProfilesPage(
             ModeRow(
                 mode = mode,
                 deletable = modes.size > 1,
-                onEdit = {
-                    editorMode = mode
-                    editorOpen = true
-                },
+                onEdit = { onEdit(mode.id) },
                 onDelete = { deleteTarget = mode },
             )
         }
@@ -133,17 +134,6 @@ fun ModeProfilesPage(
                 ),
             )
         }
-    }
-
-    if (editorOpen) {
-        ModeEditorDialog(
-            initial = editorMode,
-            onDismiss = { editorOpen = false },
-            onSave = { profile ->
-                viewModel.saveMode(profile)
-                editorOpen = false
-            },
-        )
     }
 
     deleteTarget?.let { mode ->
@@ -181,6 +171,7 @@ private fun ModeRow(
         title = modeProfileLabel(mode),
         summary = modeSummary(mode),
         onClick = onEdit,
+        showChevron = true,
         trailing = {
             IconButton(onClick = onDelete, enabled = deletable) {
                 Icon(
@@ -216,6 +207,12 @@ private fun modeSummary(mode: ModeProfile): String {
             },
         )
     }
+    if (mode.isTask) {
+        parts += stringResource(R.string.settings_mode_task_short)
+    }
+    if (!mode.prompt.isNullOrBlank()) {
+        parts += stringResource(R.string.settings_mode_prompt_short)
+    }
     parts += stringResource(
         R.string.settings_mode_budget_summary,
         mode.budget.maxRounds,
@@ -225,62 +222,143 @@ private fun modeSummary(mode: ModeProfile): String {
     return parts.joinToString(" · ")
 }
 
+// ---------------------------------------------------------------- editor
+
+/**
+ * Full-screen mode editor. Covers every mode knob the engine supports:
+ * tool access, per-call confirmation, the long-task protocol, per-mode
+ * instructions and the run budget. Stock modes can be reset or deleted.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ModeEditorDialog(
-    initial: ModeProfile?,
-    onDismiss: () -> Unit,
-    onSave: (ModeProfile) -> Unit,
+fun ModeEditorPage(
+    modeId: String?,
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    var name by rememberSaveable { mutableStateOf(initial?.name.orEmpty()) }
-    var toolAccess by rememberSaveable { mutableStateOf((initial?.toolAccess ?: ToolAccess.FULL).name) }
-    var confirm by rememberSaveable { mutableStateOf(initial?.requiresConfirmation ?: true) }
-    var rounds by rememberSaveable { mutableIntStateOf(initial?.budget?.maxRounds ?: 12) }
-    var calls by rememberSaveable { mutableIntStateOf(initial?.budget?.maxToolCalls ?: 32) }
-    var minutes by rememberSaveable {
-        mutableIntStateOf(((initial?.budget?.maxWallClockMs ?: 600_000L) / 60_000L).toInt())
+    val modes by viewModel.modes.collectAsStateWithLifecycle()
+    val existing = modes.firstOrNull { it.id == modeId }
+    val isCustom = existing?.stock != true
+    val stateKey = modeId ?: "new"
+
+    var name by rememberSaveable(stateKey) { mutableStateOf(existing?.name.orEmpty()) }
+    var toolAccess by rememberSaveable(stateKey) {
+        mutableStateOf((existing?.toolAccess ?: ToolAccess.FULL).name)
     }
+    var confirm by rememberSaveable(stateKey) {
+        mutableStateOf(existing?.requiresConfirmation ?: true)
+    }
+    var taskMode by rememberSaveable(stateKey) {
+        mutableStateOf(existing?.isTask ?: false)
+    }
+    var prompt by rememberSaveable(stateKey) { mutableStateOf(existing?.prompt.orEmpty()) }
+    var rounds by rememberSaveable(stateKey) {
+        mutableIntStateOf(existing?.budget?.maxRounds ?: 12)
+    }
+    var calls by rememberSaveable(stateKey) {
+        mutableIntStateOf(existing?.budget?.maxToolCalls ?: 32)
+    }
+    var minutes by rememberSaveable(stateKey) {
+        mutableIntStateOf(((existing?.budget?.maxWallClockMs ?: 600_000L) / 60_000L).toInt())
+    }
+    var deleteAsk by rememberSaveable(stateKey) { mutableStateOf(false) }
+    var resetAsk by rememberSaveable(stateKey) { mutableStateOf(false) }
 
     val access = ToolAccess.valueOf(toolAccess)
-    val currentBudget = RunBudget(
+    val nameError = isCustom && name.isBlank()
+    val budget = RunBudget(
         maxRounds = rounds,
         maxToolCalls = calls,
         maxWallClockMs = minutes * 60_000L,
     )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
+    fun save() {
+        if (nameError) return
+        viewModel.saveMode(
+            ModeProfile(
+                id = existing?.id ?: ModeProfile.newId(),
+                name = name.trim().ifBlank { null },
+                toolAccess = access,
+                // Confirmation only makes sense with full tool access.
+                requiresConfirmation = confirm && access == ToolAccess.FULL,
+                budget = budget,
+                stock = existing?.stock ?: false,
+                taskMode = taskMode,
+                prompt = prompt.trim().ifBlank { null },
+            ),
+        )
+        onBack()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(56.dp)
+                .padding(horizontal = Baic2Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.settings_back),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+            }
             Text(
-                stringResource(
-                    if (initial == null) {
+                text = stringResource(
+                    if (existing == null) {
                         R.string.settings_mode_new_title
                     } else {
                         R.string.settings_mode_edit_title
                     },
                 ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
             )
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(Baic2Spacing.sm),
-            ) {
+            TextButton(onClick = ::save, enabled = !nameError) {
+                Text(stringResource(R.string.settings_mode_save))
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = Baic2Spacing.lg,
+                end = Baic2Spacing.lg,
+                top = Baic2Spacing.sm,
+                bottom = Baic2Spacing.xxl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(Baic2Spacing.sm),
+        ) {
+            item(key = "name") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_name))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     singleLine = true,
+                    isError = nameError,
                     shape = RoundedCornerShape(12.dp),
                     label = { Text(stringResource(R.string.settings_mode_name)) },
-                    supportingText = { Text(stringResource(R.string.settings_mode_name_hint)) },
+                    supportingText = {
+                        Text(
+                            if (nameError) {
+                                stringResource(R.string.settings_mode_name_error)
+                            } else {
+                                stringResource(R.string.settings_mode_name_hint)
+                            },
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
 
-                Text(
-                    text = stringResource(R.string.settings_mode_rights),
-                    style = Baic2Mono.label,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            item(key = "rights") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_rights))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
                     verticalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
@@ -298,37 +376,74 @@ private fun ModeEditorDialog(
                         )
                     }
                 }
+            }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.settings_mode_confirm),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (access == ToolAccess.FULL) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = confirm && access == ToolAccess.FULL,
-                        enabled = access == ToolAccess.FULL,
-                        onCheckedChange = { confirm = it },
-                    )
+            item(key = "behavior") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_behavior))
+                SettingsCard {
+                    Column(modifier = Modifier.padding(Baic2Spacing.lg)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.settings_mode_confirm),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (access == ToolAccess.FULL) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    },
+                                )
+                                if (access != ToolAccess.FULL) {
+                                    Text(
+                                        text = stringResource(R.string.settings_mode_confirm_hint),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = confirm && access == ToolAccess.FULL,
+                                enabled = access == ToolAccess.FULL,
+                                onCheckedChange = { confirm = it },
+                            )
+                        }
+                        Spacer(Modifier.height(Baic2Spacing.md))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.settings_mode_task_title),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_mode_task_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(checked = taskMode, onCheckedChange = { taskMode = it })
+                        }
+                    }
                 }
-                if (access != ToolAccess.FULL) {
-                    Text(
-                        text = stringResource(R.string.settings_mode_confirm_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            }
 
-                Text(
-                    text = stringResource(R.string.settings_mode_budget),
-                    style = Baic2Mono.label,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            item(key = "prompt") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_prompt_title))
+                OutlinedTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    minLines = 3,
+                    maxLines = 6,
+                    shape = RoundedCornerShape(12.dp),
+                    label = { Text(stringResource(R.string.settings_mode_prompt_title)) },
+                    supportingText = { Text(stringResource(R.string.settings_mode_prompt_hint)) },
+                    placeholder = { Text(stringResource(R.string.settings_mode_prompt_placeholder)) },
+                    modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            item(key = "budget") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_budget))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
                     verticalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
@@ -354,20 +469,20 @@ private fun ModeEditorDialog(
                             maxToolCalls = 160,
                             maxWallClockMs = 3_600_000L,
                         ),
-                    ).forEach { (labelRes, budget) ->
+                    ).forEach { (labelRes, preset) ->
                         FilterChip(
-                            selected = currentBudget == budget,
+                            selected = budget == preset,
                             onClick = {
-                                rounds = budget.maxRounds
-                                calls = budget.maxToolCalls
-                                minutes = (budget.maxWallClockMs / 60_000L).toInt()
+                                rounds = preset.maxRounds
+                                calls = preset.maxToolCalls
+                                minutes = (preset.maxWallClockMs / 60_000L).toInt()
                             },
                             shape = RoundedCornerShape(10.dp),
                             label = { Text(stringResource(labelRes)) },
                         )
                     }
                 }
-
+                Spacer(Modifier.height(Baic2Spacing.sm))
                 BudgetSliderRow(
                     label = stringResource(R.string.settings_mode_rounds),
                     value = rounds,
@@ -387,32 +502,95 @@ private fun ModeEditorDialog(
                     onChange = { minutes = it },
                 )
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        ModeProfile(
-                            id = initial?.id ?: ModeProfile.newId(),
-                            name = name.trim().ifBlank { null },
-                            toolAccess = access,
-                            // Confirmation is only meaningful with full tool access.
-                            requiresConfirmation = confirm && access == ToolAccess.FULL,
-                            budget = currentBudget,
-                            stock = initial?.stock ?: false,
-                        ),
+
+            item(key = "actions") {
+                SettingsSectionLabel(stringResource(R.string.settings_mode_actions))
+                OutlinedButton(
+                    onClick = { resetAsk = true },
+                    enabled = existing?.stock == true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.settings_mode_reset))
+                }
+                Spacer(Modifier.height(Baic2Spacing.sm))
+                OutlinedButton(
+                    onClick = { deleteAsk = true },
+                    enabled = existing != null && modes.size > 1,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp),
                     )
-                },
-            ) {
-                Text(stringResource(R.string.settings_mode_save))
+                    Spacer(Modifier.width(Baic2Spacing.sm))
+                    Text(
+                        text = stringResource(R.string.settings_mode_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (existing != null && modes.size <= 1) {
+                    Text(
+                        text = stringResource(R.string.settings_mode_delete_last),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = Baic2Spacing.xs),
+                    )
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cancel))
-            }
-        },
-    )
+        }
+    }
+
+    if (deleteAsk && existing != null) {
+        AlertDialog(
+            onDismissRequest = { deleteAsk = false },
+            title = { Text(stringResource(R.string.settings_mode_delete)) },
+            text = { Text(stringResource(R.string.settings_mode_delete_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleteAsk = false
+                        viewModel.deleteMode(existing.id)
+                        onBack()
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_mode_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteAsk = false }) {
+                    Text(stringResource(R.string.settings_cancel))
+                }
+            },
+        )
+    }
+
+    if (resetAsk && existing?.stock == true) {
+        AlertDialog(
+            onDismissRequest = { resetAsk = false },
+            title = { Text(stringResource(R.string.settings_mode_reset)) },
+            text = { Text(stringResource(R.string.settings_mode_reset_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        resetAsk = false
+                        viewModel.resetMode(existing.id)
+                        onBack()
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_mode_reset))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetAsk = false }) {
+                    Text(stringResource(R.string.settings_cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -434,6 +612,8 @@ private fun BudgetSliderRow(
                 text = value.toString(),
                 style = Baic2Mono.body,
                 color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(64.dp),
             )
         }
         Slider(

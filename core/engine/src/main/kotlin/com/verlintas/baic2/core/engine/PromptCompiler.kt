@@ -58,6 +58,7 @@ object PromptCompiler {
         custom: String,
         planContext: String?,
         memoryContext: String? = null,
+        taskProtocol: Boolean = mode == AppMode.MAX,
         now: Long = System.currentTimeMillis(),
         zone: ZoneId = ZoneId.systemDefault(),
         messageAt: Long? = null,
@@ -70,7 +71,7 @@ object PromptCompiler {
             append(reasoningPolicy).append("\n\n")
             append(memoryProtocol).append("\n\n")
             append(runtimeNote).append('\n')
-            append(modeText(mode))
+            append(modeText(mode, taskProtocol))
         }
         return PromptPlan(
             stable.trimEnd(),
@@ -78,6 +79,7 @@ object PromptCompiler {
                 mode = mode,
                 planContext = planContext,
                 memoryContext = memoryContext,
+                taskProtocol = taskProtocol,
                 now = now,
                 zone = zone,
                 messageAt = messageAt,
@@ -96,6 +98,7 @@ object PromptCompiler {
         mode: AppMode,
         planContext: String?,
         memoryContext: String?,
+        taskProtocol: Boolean = mode == AppMode.MAX,
         now: Long = System.currentTimeMillis(),
         zone: ZoneId = ZoneId.systemDefault(),
         messageAt: Long? = null,
@@ -113,7 +116,7 @@ object PromptCompiler {
             append("\nWeather (cached): ").append(it)
         }
         if (!planContext.isNullOrBlank() &&
-            (mode == AppMode.MAX || mode == AppMode.CHAT_PLUS)
+            (taskProtocol || mode == AppMode.CHAT_PLUS)
         ) {
             append("\n\nCurrent plan (keep it updated via plan_update):\n").append(planContext)
         }
@@ -131,12 +134,12 @@ object PromptCompiler {
         "Current date and time: ${timestamp(now, zone)} (${zone.id}). " +
             "Resolve relative phrases like 'yesterday' or 'last week' against this."
 
-    private fun modeText(mode: AppMode): String = when (mode) {
-        AppMode.CHAT ->
+    private fun modeText(mode: AppMode, taskProtocol: Boolean): String = when {
+        mode == AppMode.CHAT ->
             "You are in conversation mode. Apart from your memory tools, no tools are available; " +
                 "just talk with the user - clearly, concisely, and in your own voice."
 
-        AppMode.CHAT_PLUS ->
+        mode == AppMode.CHAT_PLUS ->
             "You are in research mode: your own quiet study. You may read (read-only tools) and " +
                 "remember, never change the device. How you work: think silently first about what " +
                 "you actually need to check; fire independent lookups together in one round " +
@@ -155,12 +158,7 @@ object PromptCompiler {
                 "click w-refs; use app_research only for native-only apps. For multi-step " +
                 "research keep a short visible plan with plan_update."
 
-        AppMode.ACT ->
-            "You are in action mode. You can call device tools; each call is confirmed by the user first, " +
-                "so explain what you are about to do and why. Prefer the smallest safe step. For a short, " +
-                "deterministic UI flow, propose one ui_control sequence so the user confirms the whole flow once."
-
-        AppMode.MAX ->
+        taskProtocol && mode == AppMode.MAX ->
             "You are in autonomous mode and are expected to finish the whole task. Protocol: " +
                 "(1) create a short plan with plan_update before the first action, exactly one step DOING; " +
                 "(2) observe before acting on the UI (ui_control snapshot or find); for a deterministic " +
@@ -171,6 +169,25 @@ object PromptCompiler {
                 "(5) if a step cannot be completed, mark it FAILED with the reason and continue with the rest; " +
                 "(6) before finishing, re-read the plan and verify every step, then answer with: what was " +
                 "completed, what changed on the device, and anything left undone or risky."
+
+        taskProtocol ->
+            "You are in action mode. You can call device tools; each call is confirmed by the user first, " +
+                "so explain what you are about to do and why. Prefer the smallest safe step. For a short, " +
+                "deterministic UI flow, propose one ui_control sequence so the user confirms the whole flow once. " +
+                "This is a long task: create a short plan with plan_update before the first action, keep it " +
+                "updated as you go, and before finishing briefly report what was completed and what is left."
+
+        mode == AppMode.ACT ->
+            "You are in action mode. You can call device tools; each call is confirmed by the user first, " +
+                "so explain what you are about to do and why. Prefer the smallest safe step. For a short, " +
+                "deterministic UI flow, propose one ui_control sequence so the user confirms the whole flow once."
+
+        else ->
+            "You have full tool access and act without per-call confirmation. Behave like a normal " +
+                "assistant: answer the user directly and in your own voice. Use tools when they help, " +
+                "prefer the smallest safe step, and never repeat a failed call with identical arguments. " +
+                "This is a conversation, not a task: no plans, progress narration or completion reports " +
+                "unless the user asks."
     }
 
     private val runtimeNote =

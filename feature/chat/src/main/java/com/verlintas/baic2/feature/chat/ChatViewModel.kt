@@ -408,9 +408,10 @@ class ChatViewModel @Inject constructor(
             messages = messages,
             systemPrompt = renderSystemPrompt(
                 mode.engineMode,
-                agent?.systemPrompt.orEmpty(),
+                mode.composeCustomPrompt(agent?.systemPrompt.orEmpty()),
                 extras.plan?.render(),
                 MemoryPrompt.context(extras.core, emptyList(), System.currentTimeMillis()),
+                taskProtocol = mode.isTask,
             ),
             toolSpecs = ToolRouter.route(
                 mode.engineMode,
@@ -995,7 +996,8 @@ class ChatViewModel @Inject constructor(
                 config = config,
                 mode = modeProfile.engineMode,
                 budgetOverride = modeProfile.budget,
-                customSystemPrompt = agent?.systemPrompt.orEmpty(),
+                taskProtocol = modeProfile.isTask,
+                customSystemPrompt = modeProfile.composeCustomPrompt(agent?.systemPrompt.orEmpty()),
                 history = history,
                 conversationId = conversationId,
                 planContext = planRepository.getPlan(conversationId)?.render(),
@@ -1103,7 +1105,7 @@ class ChatViewModel @Inject constructor(
                                     toolCalls = toolCallsUsed,
                                     durationMs = System.currentTimeMillis() - runStartedAt,
                                     runId = id,
-                                    showDialog = modeProfile.autonomous,
+                                    showDialog = modeProfile.isTask,
                                 )
                             }
                         } ?: run {
@@ -1151,7 +1153,7 @@ class ChatViewModel @Inject constructor(
                                     toolCalls = toolCallsUsed,
                                     durationMs = System.currentTimeMillis() - runStartedAt,
                                     runId = id,
-                                    showDialog = modeProfile.autonomous,
+                                    showDialog = modeProfile.isTask,
                                 )
                             }
                         }
@@ -1633,8 +1635,9 @@ class ChatViewModel @Inject constructor(
             messages = messages,
             systemPrompt = renderSystemPrompt(
                 mode.engineMode,
-                "",
+                mode.composeCustomPrompt(""),
                 planRepository.getPlan(conversationId)?.render(),
+                taskProtocol = mode.isTask,
             ),
             toolSpecs = ToolRouter.route(
                 mode.engineMode,
