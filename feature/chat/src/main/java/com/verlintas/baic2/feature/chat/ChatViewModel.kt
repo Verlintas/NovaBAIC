@@ -997,6 +997,7 @@ class ChatViewModel @Inject constructor(
                 mode = modeProfile.engineMode,
                 budgetOverride = modeProfile.budget,
                 taskProtocol = modeProfile.isTask,
+                fullConsent = modeProfile.fullConsent,
                 customSystemPrompt = modeProfile.composeCustomPrompt(agent?.systemPrompt.orEmpty()),
                 history = history,
                 conversationId = conversationId,

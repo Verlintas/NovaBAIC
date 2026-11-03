@@ -54,6 +54,9 @@
     <string name="settings_mode_reset_confirm">Name, permissions, instructions and budget return to their default values.</string>
     <string name="settings_mode_name_error">Enter a mode name</string>
     <string name="settings_mode_delete_last">Keep at least one mode</string>
+    <string name="settings_mode_full_consent">Full consent</string>
+    <string name="settings_mode_full_consent_hint">High-risk calls (shell, app management) run right after external content without asking; interactive runs only</string>
+    <string name="settings_mode_full_consent_short">full consent</string>
     <string name="settings_a11y_title">UI automation</string>
     <string name="settings_a11y_description">Let the AI read the screen and tap, swipe and type</string>
     <string name="settings_a11y_on">On</string>

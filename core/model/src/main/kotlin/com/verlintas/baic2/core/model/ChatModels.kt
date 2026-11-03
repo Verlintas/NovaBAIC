@@ -74,6 +74,8 @@ data class ToolCall(
     val status: ToolCallStatus = ToolCallStatus.PENDING,
     /** Gemini thought signature that must be echoed with the function call. */
     val signature: String? = null,
+    /** Executed without asking under a full-consent mode (tainted HIGH call). */
+    val autoConsent: Boolean = false,
 )
 
 @Serializable

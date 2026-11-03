@@ -50,6 +50,12 @@ data class ModeProfile(
     val taskMode: Boolean? = null,
     /** Extra instructions appended to the system prompt of this mode. */
     val prompt: String? = null,
+    /**
+     * Full consent: tainted HIGH-danger calls run without asking instead of
+     * being downgraded to confirmation. The mode's own per-call confirmation
+     * still applies; unattended runs still refuse them outright.
+     */
+    val fullConsent: Boolean = false,
 ) {
     /** No tools at all besides memory (old CHAT semantics). */
     val toolsVisible: Boolean get() = toolAccess != ToolAccess.NONE

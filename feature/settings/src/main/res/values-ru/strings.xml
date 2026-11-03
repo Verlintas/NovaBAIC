@@ -197,6 +197,9 @@
     <string name="settings_mode_reset_confirm">Название, права, инструкции и бюджет вернутся к стандартным значениям.</string>
     <string name="settings_mode_name_error">Введите название режима</string>
     <string name="settings_mode_delete_last">Оставьте хотя бы один режим</string>
+    <string name="settings_mode_full_consent">Полное согласие</string>
+    <string name="settings_mode_full_consent_hint">Опасные вызовы (оболочка, управление приложениями) выполняются сразу после внешнего контента без вопросов; только интерактивные запуски</string>
+    <string name="settings_mode_full_consent_short">полное согласие</string>
     <string name="settings_skills_summary">Автосохранение и повторение многошаговых сценариев</string>
     <string name="settings_skills_auto_title">Автосохранение навыков</string>
     <string name="settings_skills_auto_desc">После успешного завершения многошагового сценария в режиме Act / Max он сохраняется как навык для повторного запуска. Одинаковые сценарии пропускаются; хранится не более 20 автосохранённых навыков. Сценарии, похожие на ввод пароля, одноразового кода или API-ключа, пропускаются. По умолчанию выключено.</string>

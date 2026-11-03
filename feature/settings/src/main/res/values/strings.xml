@@ -54,6 +54,9 @@
     <string name="settings_mode_reset_confirm">名称、权限、指令和预算将恢复为默认值。</string>
     <string name="settings_mode_name_error">请输入模式名称</string>
     <string name="settings_mode_delete_last">至少保留一个模式</string>
+    <string name="settings_mode_full_consent">完全同意</string>
+    <string name="settings_mode_full_consent_hint">高危调用（shell、应用管理）在外部内容后立即执行，不询问；仅限交互运行</string>
+    <string name="settings_mode_full_consent_short">完全同意</string>
     <string name="settings_a11y_title">界面自动化</string>
     <string name="settings_a11y_description">允许 AI 看屏并执行点击、滑动与输入</string>
     <string name="settings_a11y_on">已开启</string>

@@ -653,6 +653,14 @@ fun ToolCard(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
+            if (call.autoConsent) {
+                Text(
+                    text = stringResource(R.string.chat_tool_auto),
+                    style = Baic2Mono.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(Baic2Spacing.xs))
+            }
             AnimatedContent(
                 targetState = call.status,
                 transitionSpec = {

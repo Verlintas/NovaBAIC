@@ -46,6 +46,7 @@
     <string name="chat_mode_confirm_on">Confirm every tool call</string>
     <string name="chat_mode_confirm_off">No confirmation</string>
     <string name="chat_mode_task_on">long task</string>
+    <string name="chat_tool_auto">auto</string>
 
     <string name="chat_menu">More</string>
     <string name="chat_menu_search">Search in chat</string>

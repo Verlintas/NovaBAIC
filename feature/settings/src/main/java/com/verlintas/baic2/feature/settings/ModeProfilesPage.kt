@@ -210,6 +210,9 @@ private fun modeSummary(mode: ModeProfile): String {
     if (mode.isTask) {
         parts += stringResource(R.string.settings_mode_task_short)
     }
+    if (mode.fullConsent) {
+        parts += stringResource(R.string.settings_mode_full_consent_short)
+    }
     if (!mode.prompt.isNullOrBlank()) {
         parts += stringResource(R.string.settings_mode_prompt_short)
     }
@@ -251,6 +254,9 @@ fun ModeEditorPage(
     var taskMode by rememberSaveable(stateKey) {
         mutableStateOf(existing?.isTask ?: false)
     }
+    var fullConsent by rememberSaveable(stateKey) {
+        mutableStateOf(existing?.fullConsent ?: false)
+    }
     var prompt by rememberSaveable(stateKey) { mutableStateOf(existing?.prompt.orEmpty()) }
     var rounds by rememberSaveable(stateKey) {
         mutableIntStateOf(existing?.budget?.maxRounds ?: 12)
@@ -285,6 +291,7 @@ fun ModeEditorPage(
                 stock = existing?.stock ?: false,
                 taskMode = taskMode,
                 prompt = prompt.trim().ifBlank { null },
+                fullConsent = fullConsent,
             ),
         )
         onBack()
@@ -422,6 +429,30 @@ fun ModeEditorPage(
                                 )
                             }
                             Switch(checked = taskMode, onCheckedChange = { taskMode = it })
+                        }
+                        Spacer(Modifier.height(Baic2Spacing.md))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.settings_mode_full_consent),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (access == ToolAccess.FULL) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    },
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_mode_full_consent_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = fullConsent && access == ToolAccess.FULL,
+                                enabled = access == ToolAccess.FULL,
+                                onCheckedChange = { fullConsent = it },
+                            )
                         }
                     }
                 }
