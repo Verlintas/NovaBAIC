@@ -20,6 +20,7 @@
 package com.verlintas.baic2.core.data.prefs
 
 import android.content.Context
+import android.util.Log
 import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.RunBudget
@@ -53,7 +54,20 @@ class ModeProfileStore @Inject constructor(
         val raw = prefs.getString(KEY_MODES, null) ?: return ModeProfiles.stocks
         return runCatching {
             json.decodeFromString(ListSerializer(ModeProfile.serializer()), raw)
-        }.getOrDefault(ModeProfiles.stocks)
+        }.getOrElse {
+            // Losing custom modes silently would be worse than losing them
+            // loudly: at least the log says where they went.
+            Log.w("ModeProfileStore", "stored modes are corrupt, falling back to stock", it)
+            ModeProfiles.stocks
+        }.map { profile ->
+            // A legacy profile may carry both switches; full consent wins, so
+            // per-call confirmation is normalized off at load time.
+            if (profile.fullConsent && profile.requiresConfirmation) {
+                profile.copy(requiresConfirmation = false)
+            } else {
+                profile
+            }
+        }
     }
 
     private fun write(profiles: List<ModeProfile>) {

@@ -54,6 +54,7 @@ import com.verlintas.baic2.core.model.ProviderId
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
+import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.core.model.ToolCall
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -251,6 +252,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = entity.id,
         conversationId = entity.conversationId,
         mode = entity.mode,
+        toolAccess = enumOf(entity.toolAccess, ToolAccess.NONE),
         state = enumOf(entity.state, RunState.RUNNING),
         startedAt = entity.startedAt,
         updatedAt = entity.updatedAt,
@@ -263,6 +265,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         conversationId = row.conversationId,
         conversationTitle = row.conversationTitle,
         mode = row.mode,
+        toolAccess = enumOf(row.toolAccess, ToolAccess.NONE),
         state = enumOf(row.state, RunState.RUNNING),
         startedAt = row.startedAt,
         updatedAt = row.updatedAt,

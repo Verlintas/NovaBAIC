@@ -84,7 +84,7 @@ class ScheduledTaskRunner @Inject constructor(
             conversationRepository.updateTitle(conversationId, task.prompt.take(24))
         }
 
-        val runId = runRepository.start(conversationId, task.mode)
+        val runId = runRepository.start(conversationId, task.mode, profile.toolAccess)
         var rounds = 0
         var toolCalls = 0
         var assistantMessageId: Long? = null

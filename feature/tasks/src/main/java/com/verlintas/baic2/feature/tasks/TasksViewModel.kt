@@ -31,11 +31,11 @@ import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.ImpactSummarizer
 import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.Plan
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
-import com.verlintas.baic2.core.model.resolve
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +48,19 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class TaskFilter { ALL, RUNNING, COMPLETED, FAILED }
+
+/** Run states behind each tab; the filtering itself runs in SQL. */
+private fun TaskFilter.toStates(): List<String> = when (this) {
+    TaskFilter.ALL -> listOf(
+        RunState.RUNNING.name,
+        RunState.COMPLETED.name,
+        RunState.FAILED.name,
+        RunState.CANCELLED.name,
+    )
+    TaskFilter.RUNNING -> listOf(RunState.RUNNING.name)
+    TaskFilter.COMPLETED -> listOf(RunState.COMPLETED.name)
+    TaskFilter.FAILED -> listOf(RunState.FAILED.name, RunState.CANCELLED.name)
+}
 
 data class TasksUiState(
     val runs: List<RunSummary> = emptyList(),
@@ -75,25 +88,20 @@ class TasksViewModel @Inject constructor(
     private val filter = MutableStateFlow(TaskFilter.ALL)
 
     val uiState: StateFlow<TasksUiState> = combine(
-        runRepository.observeSummaries(),
+        filter.flatMapLatest { selected -> runRepository.observeSummaries(selected.toStates()) },
         filter,
         modeStore.profiles,
-    ) { runs, selected, modes ->
-        // Runs list agentic work only: the resolved mode class decides, not the id.
-        val agentRuns = runs.filter { run -> modes.resolve(run.mode).agentic }
+        runRepository.observeTotalCount(),
+        runRepository.observeRunningCount(),
+    ) { runs, selected, modes, totalCount, runningCount ->
+        // The run journal keeps every execution: agent work plus scheduled
+        // task runs in any mode. Ordinary chat sends are not runs at all.
         TasksUiState(
-            runs = agentRuns.filter { run ->
-                when (selected) {
-                    TaskFilter.ALL -> true
-                    TaskFilter.RUNNING -> run.state == RunState.RUNNING
-                    TaskFilter.COMPLETED -> run.state == RunState.COMPLETED
-                    TaskFilter.FAILED -> run.state == RunState.FAILED || run.state == RunState.CANCELLED
-                }
-            },
+            runs = runs,
             modes = modes,
             filter = selected,
-            totalCount = agentRuns.size,
-            runningCount = agentRuns.count { it.state == RunState.RUNNING },
+            totalCount = totalCount,
+            runningCount = runningCount,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -139,7 +147,10 @@ class RunDetailViewModel @Inject constructor(
                     val runMessages = messagesForRun(run, messages)
                     RunDetailState(
                         run = run,
-                        mode = modes.resolve(run.mode),
+                        // Deleted modes keep the tool class the run was made
+                        // under, so its history is still labeled truthfully.
+                        mode = modes.firstOrNull { it.id == run.mode }
+                            ?: ModeProfiles.fallback(run.mode, run.toolAccess),
                         conversationTitle = conversation?.title.orEmpty(),
                         plan = plan,
                         messages = runMessages,

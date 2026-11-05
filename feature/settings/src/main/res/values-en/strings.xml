@@ -40,7 +40,7 @@
     <string name="settings_mode_minutes">Minutes</string>
     <string name="settings_mode_save">Save</string>
     <string name="settings_mode_delete">Delete mode</string>
-    <string name="settings_mode_delete_confirm">Conversations using this mode will open as plain chat.</string>
+    <string name="settings_mode_delete_confirm">Conversations using this mode will open as plain chat; its run history stays in the task list.</string>
     <string name="settings_mode_delete_confirm_tasks">Scheduled tasks using this mode will keep running, but as plain chat - without tools.</string>
     <string name="settings_mode_behavior">Behavior</string>
     <string name="settings_mode_task_title">Long task</string>
@@ -56,7 +56,7 @@
     <string name="settings_mode_name_error">Enter a mode name</string>
     <string name="settings_mode_delete_last">Keep at least one mode</string>
     <string name="settings_mode_full_consent">Full consent</string>
-    <string name="settings_mode_full_consent_hint">High-risk calls (shell, app management) run right after external content without asking; interactive runs only</string>
+    <string name="settings_mode_full_consent_hint">High-risk calls (shell, app management), including sub-agent calls, run right after external content without asking; turns off per-call confirmation; interactive runs only</string>
     <string name="settings_mode_full_consent_short">full consent</string>
     <string name="settings_a11y_title">UI automation</string>
     <string name="settings_a11y_description">Let the AI read the screen and tap, swipe and type</string>

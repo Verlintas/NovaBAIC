@@ -3,7 +3,10 @@
     <string name="feature_tasks_title">Задачи</string>
     <string name="tasks_subtitle">Запусков: %1$d</string>
     <string name="tasks_empty_title">Запусков пока нет</string>
-    <string name="tasks_empty_description">Отправьте сообщение в режиме «Действие» или «Максимум» — запуск появится здесь</string>
+    <string name="tasks_group_agent">Агентские прогоны</string>
+    <string name="tasks_group_research">Исследовательские прогоны</string>
+    <string name="tasks_group_chat">Диалоговые прогоны</string>
+    <string name="tasks_empty_description">Запустите агентскую беседу или запланированную задачу — прогон появится здесь</string>
     <string name="tasks_untitled">Без названия</string>
     <string name="tasks_state_running">выполняется</string>
     <string name="tasks_state_completed">завершено</string>

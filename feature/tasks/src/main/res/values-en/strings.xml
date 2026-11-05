@@ -3,7 +3,10 @@
     <string name="feature_tasks_title">Tasks</string>
     <string name="tasks_subtitle">%1$d runs</string>
     <string name="tasks_empty_title">No runs yet</string>
-    <string name="tasks_empty_description">Send a message in Act or Max mode and the run will show up here</string>
+    <string name="tasks_group_agent">Agent runs</string>
+    <string name="tasks_group_research">Research runs</string>
+    <string name="tasks_group_chat">Chat runs</string>
+    <string name="tasks_empty_description">Run an agent-mode conversation or a scheduled task and the run will show up here</string>
     <string name="tasks_untitled">Untitled</string>
     <string name="tasks_state_running">running</string>
     <string name="tasks_state_completed">completed</string>

@@ -105,7 +105,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ModeProfiles
-import com.verlintas.baic2.core.model.resolve
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.PlanStepStatus
@@ -113,6 +112,7 @@ import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
 import com.verlintas.baic2.core.model.ScheduledTask
+import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.core.model.nextScheduledTrigger
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Spacing
@@ -396,14 +396,37 @@ private fun TasksListPage(
                     )
                 }
             } else {
-                items(state.runs, key = { it.id }) { run ->
-                    RunRow(
-                        run = run,
-                        mode = state.modes.resolve(run.mode),
-                        onClick = { onOpenRun(run.id) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
+                listOf(ToolAccess.FULL, ToolAccess.READ_ONLY, ToolAccess.NONE)
+                    .forEach { access ->
+                        val grouped = state.runs.filter { it.toolAccess == access }
+                        if (grouped.isEmpty()) return@forEach
+                        item(key = "group-$access") {
+                            Text(
+                                text = stringResource(
+                                    when (access) {
+                                        ToolAccess.FULL -> R.string.tasks_group_agent
+                                        ToolAccess.READ_ONLY -> R.string.tasks_group_research
+                                        ToolAccess.NONE -> R.string.tasks_group_chat
+                                    },
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(
+                                    top = Baic2Spacing.md,
+                                    bottom = Baic2Spacing.xs,
+                                ),
+                            )
+                        }
+                        items(grouped, key = { it.id }) { run ->
+                            RunRow(
+                                run = run,
+                                mode = state.modes.firstOrNull { it.id == run.mode }
+                                    ?: ModeProfiles.fallback(run.mode, run.toolAccess),
+                                onClick = { onOpenRun(run.id) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
             }
         }
     }

@@ -256,7 +256,9 @@ fun ModeEditorPage(
         mutableStateOf((existing?.toolAccess ?: ToolAccess.FULL).name)
     }
     var confirm by rememberSaveable(stateKey) {
-        mutableStateOf(existing?.requiresConfirmation ?: true)
+        // A legacy profile may carry both switches; full consent wins, so the
+        // editor opens it with per-call confirmation already off.
+        mutableStateOf((existing?.requiresConfirmation ?: true) && existing?.fullConsent != true)
     }
     var taskMode by rememberSaveable(stateKey) {
         mutableStateOf(existing?.isTask ?: false)
@@ -287,8 +289,9 @@ fun ModeEditorPage(
                 id = existing?.id ?: ModeProfile.newId(),
                 name = name.trim().ifBlank { null },
                 toolAccess = access,
-                // Confirmation only makes sense with full tool access.
-                requiresConfirmation = confirm && access == ToolAccess.FULL,
+                // Confirmation only makes sense with full tool access, and
+                // full consent is meaningless while every call is confirmed.
+                requiresConfirmation = confirm && !fullConsent && access == ToolAccess.FULL,
                 budget = RunBudget(
                     maxRounds = rounds,
                     maxToolCalls = calls,
@@ -467,7 +470,12 @@ fun ModeEditorPage(
                             Switch(
                                 checked = fullConsent && access == ToolAccess.FULL,
                                 enabled = access == ToolAccess.FULL,
-                                onCheckedChange = { fullConsent = it },
+                                onCheckedChange = {
+                                    fullConsent = it
+                                    // Per-call confirmation would ask anyway,
+                                    // so full consent switches it off.
+                                    if (it) confirm = false
+                                },
                             )
                         }
                     }

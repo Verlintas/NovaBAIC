@@ -26,6 +26,7 @@ import com.verlintas.baic2.core.data.mapper.ChatMapper
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
+import com.verlintas.baic2.core.model.ToolAccess
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -37,8 +38,12 @@ class RunRepository @Inject constructor(
     private val mapper: ChatMapper,
 ) {
 
-    fun observeSummaries(): Flow<List<RunSummary>> =
-        db.runDao().observeSummaries().map { rows -> rows.map(mapper::runSummaryToModel) }
+    fun observeSummaries(states: List<String>): Flow<List<RunSummary>> =
+        db.runDao().observeSummaries(states).map { rows -> rows.map(mapper::runSummaryToModel) }
+
+    fun observeTotalCount(): Flow<Int> = db.runDao().observeTotalCount()
+
+    fun observeRunningCount(): Flow<Int> = db.runDao().observeRunningCount()
 
     fun observeRun(runId: Long): Flow<Run?> =
         db.runDao().observeById(runId).map { entity -> entity?.let(mapper::runToModel) }
@@ -55,12 +60,13 @@ class RunRepository @Inject constructor(
      */
     suspend fun cancelStaleRuns() = db.runDao().cancelStale(System.currentTimeMillis())
 
-    suspend fun start(conversationId: Long, mode: String): Long {
+    suspend fun start(conversationId: Long, mode: String, toolAccess: ToolAccess): Long {
         val now = System.currentTimeMillis()
         return db.runDao().insert(
             RunEntity(
                 conversationId = conversationId,
                 mode = mode,
+                toolAccess = toolAccess.name,
                 state = RunState.RUNNING.name,
                 startedAt = now,
                 updatedAt = now,

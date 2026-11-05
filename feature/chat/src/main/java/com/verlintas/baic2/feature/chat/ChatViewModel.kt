@@ -966,7 +966,7 @@ class ChatViewModel @Inject constructor(
         val modeProfile = modeStore.resolve(conversation.mode)
         val agentic = modeProfile.agentic
         val runId: Long? = if (agentic) {
-            runRepository.start(conversationId, conversation.mode)
+            runRepository.start(conversationId, conversation.mode, modeProfile.toolAccess)
         } else {
             null
         }

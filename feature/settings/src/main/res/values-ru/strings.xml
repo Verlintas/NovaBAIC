@@ -183,7 +183,7 @@
     <string name="settings_mode_minutes">Минуты</string>
     <string name="settings_mode_save">Сохранить</string>
     <string name="settings_mode_delete">Удалить режим</string>
-    <string name="settings_mode_delete_confirm">Беседы с этим режимом откроются как обычный чат.</string>
+    <string name="settings_mode_delete_confirm">Беседы с этим режимом откроются как обычный чат; история запусков сохранится в списке задач.</string>
     <string name="settings_mode_delete_confirm_tasks">Запланированные задачи с этим режимом продолжат запускаться, но как обычный чат — без инструментов.</string>
     <string name="settings_mode_behavior">Поведение</string>
     <string name="settings_mode_task_title">Длинная задача</string>
@@ -199,7 +199,7 @@
     <string name="settings_mode_name_error">Введите название режима</string>
     <string name="settings_mode_delete_last">Оставьте хотя бы один режим</string>
     <string name="settings_mode_full_consent">Полное согласие</string>
-    <string name="settings_mode_full_consent_hint">Опасные вызовы (оболочка, управление приложениями) выполняются сразу после внешнего контента без вопросов; только интерактивные запуски</string>
+    <string name="settings_mode_full_consent_hint">Опасные вызовы (оболочка, управление приложениями), включая вызовы субагентов, выполняются сразу после внешнего контента без вопросов; отключает подтверждение каждого вызова; только интерактивные запуски</string>
     <string name="settings_mode_full_consent_short">полное согласие</string>
     <string name="settings_skills_summary">Автосохранение и повторение многошаговых сценариев</string>
     <string name="settings_skills_auto_title">Автосохранение навыков</string>

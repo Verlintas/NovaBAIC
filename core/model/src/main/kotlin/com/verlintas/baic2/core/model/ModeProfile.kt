@@ -52,8 +52,8 @@ data class ModeProfile(
     val prompt: String? = null,
     /**
      * Full consent: tainted HIGH-danger calls run without asking instead of
-     * being downgraded to confirmation. The mode's own per-call confirmation
-     * still applies; unattended runs still refuse them outright.
+     * being downgraded to confirmation. It turns per-call confirmation off;
+     * unattended runs still refuse high-risk calls outright.
      */
     val fullConsent: Boolean = false,
 ) {
@@ -138,6 +138,10 @@ object ModeProfiles {
 
     /** Shape for an id that is no longer in the mode list. */
     fun fallback(id: String): ModeProfile = CHAT.copy(id = id, name = null, stock = false)
+
+    /** Shape for a deleted id that keeps the tool class the run was made under. */
+    fun fallback(id: String, toolAccess: ToolAccess): ModeProfile =
+        CHAT.copy(id = id, name = null, stock = false, toolAccess = toolAccess)
 }
 
 /** Stored profile for an id; unknown ids degrade to plain conversation. */

@@ -1892,7 +1892,9 @@ private fun modeDescription(mode: ModeProfile): String {
     val stock = ModeProfiles.stocks.firstOrNull { it.id == mode.id }
     if (stock != null &&
         mode.toolAccess == stock.toolAccess &&
-        mode.requiresConfirmation == stock.requiresConfirmation
+        mode.requiresConfirmation == stock.requiresConfirmation &&
+        mode.isTask == stock.isTask &&
+        mode.fullConsent == stock.fullConsent
     ) {
         return stringResource(
             when (mode.id) {
@@ -1918,9 +1920,14 @@ private fun modeDescription(mode: ModeProfile): String {
         },
     )
     val task = if (mode.isTask) {
-        " В· " + stringResource(R.string.chat_mode_task_on)
+        " · " + stringResource(R.string.chat_mode_task_on)
     } else {
         ""
     }
-    return "$rights В· $confirm$task"
+    val consent = if (mode.fullConsent) {
+        " · " + stringResource(R.string.chat_mode_full_consent_on)
+    } else {
+        ""
+    }
+    return "$rights · $confirm$task$consent"
 }

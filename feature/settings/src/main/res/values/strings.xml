@@ -40,7 +40,7 @@
     <string name="settings_mode_minutes">分钟</string>
     <string name="settings_mode_save">保存</string>
     <string name="settings_mode_delete">删除模式</string>
-    <string name="settings_mode_delete_confirm">删除后，使用该模式的对话将以纯对话模式打开。</string>
+    <string name="settings_mode_delete_confirm">删除后，使用该模式的对话将以纯对话模式打开；历史运行记录会保留在任务列表中。</string>
     <string name="settings_mode_delete_confirm_tasks">使用该模式的定时任务会继续运行，但只能作为纯对话运行（无工具）。</string>
     <string name="settings_mode_behavior">行为</string>
     <string name="settings_mode_task_title">长任务</string>
@@ -56,7 +56,7 @@
     <string name="settings_mode_name_error">请输入模式名称</string>
     <string name="settings_mode_delete_last">至少保留一个模式</string>
     <string name="settings_mode_full_consent">完全同意</string>
-    <string name="settings_mode_full_consent_hint">高危调用（shell、应用管理）在外部内容后立即执行，不询问；仅限交互运行</string>
+    <string name="settings_mode_full_consent_hint">高危调用（shell、应用管理，含子代理调用）在外部内容后立即执行，不询问；会关闭逐次确认；仅限交互运行</string>
     <string name="settings_mode_full_consent_short">完全同意</string>
     <string name="settings_a11y_title">界面自动化</string>
     <string name="settings_a11y_description">允许 AI 看屏并执行点击、滑动与输入</string>

@@ -46,6 +46,7 @@
     <string name="chat_mode_confirm_on">每次工具调用需确认</string>
     <string name="chat_mode_confirm_off">免确认</string>
     <string name="chat_mode_task_on">长任务</string>
+    <string name="chat_mode_full_consent_on">完全同意</string>
     <string name="chat_tool_auto">自动</string>
 
     <string name="chat_menu">更多</string>
