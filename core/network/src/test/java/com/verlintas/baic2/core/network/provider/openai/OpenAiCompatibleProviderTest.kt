@@ -30,6 +30,7 @@ import com.verlintas.baic2.core.model.ToolSpec
 import com.verlintas.baic2.core.network.provider.ProviderException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -301,6 +302,29 @@ class OpenAiCompatibleProviderTest {
         }
 
         assertEquals(ProviderError.Kind.AUTH, exception.error.kind)
+    }
+
+    @Test
+    fun blankApiKeySendsNoAuthorizationHeader() = runTest {
+        enqueueSse("[DONE]")
+
+        provider.stream(request().copy(config = config().copy(apiKey = ""))).toList()
+
+        assertNull(server.takeRequest().getHeader("Authorization"))
+    }
+
+    @Test
+    fun blankApiKeyStillListsModels() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody("""{"data":[{"id":"a"}]}"""),
+        )
+
+        val models = provider.listModels(config().copy(apiKey = ""))
+
+        assertEquals(listOf("a"), models)
+        assertNull(server.takeRequest().getHeader("Authorization"))
     }
 
     @Test
