@@ -71,7 +71,6 @@ import com.verlintas.baic2.core.model.RunBudget
 import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Spacing
-import com.verlintas.baic2.designsystem.component.Baic2ModeChip
 import com.verlintas.baic2.designsystem.component.modeProfileLabel
 
 // ---------------------------------------------------------------- modes
@@ -88,6 +87,7 @@ fun ModeProfilesPage(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val modes by viewModel.modes.collectAsStateWithLifecycle()
+    val tasks by viewModel.scheduledTasks.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<ModeProfile?>(null) }
 
     SettingsPage(
@@ -140,7 +140,13 @@ fun ModeProfilesPage(
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.settings_mode_delete)) },
-            text = { Text(stringResource(R.string.settings_mode_delete_confirm)) },
+            text = {
+                Text(stringResource(R.string.settings_mode_delete_confirm))
+                if (tasks.any { it.mode == mode.id }) {
+                    Spacer(Modifier.height(Baic2Spacing.sm))
+                    Text(stringResource(R.string.settings_mode_delete_confirm_tasks))
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -240,6 +246,7 @@ fun ModeEditorPage(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val modes by viewModel.modes.collectAsStateWithLifecycle()
+    val tasks by viewModel.scheduledTasks.collectAsStateWithLifecycle()
     val existing = modes.firstOrNull { it.id == modeId }
     val isCustom = existing?.stock != true
     val stateKey = modeId ?: "new"
@@ -272,11 +279,6 @@ fun ModeEditorPage(
 
     val access = ToolAccess.valueOf(toolAccess)
     val nameError = isCustom && name.isBlank()
-    val budget = RunBudget(
-        maxRounds = rounds,
-        maxToolCalls = calls,
-        maxWallClockMs = minutes * 60_000L,
-    )
 
     fun save() {
         if (nameError) return
@@ -287,11 +289,17 @@ fun ModeEditorPage(
                 toolAccess = access,
                 // Confirmation only makes sense with full tool access.
                 requiresConfirmation = confirm && access == ToolAccess.FULL,
-                budget = budget,
+                budget = RunBudget(
+                    maxRounds = rounds,
+                    maxToolCalls = calls,
+                    maxWallClockMs = minutes * 60_000L,
+                ),
                 stock = existing?.stock ?: false,
-                taskMode = taskMode,
+                // Long tasks drive plan_update, which needs tool access.
+                taskMode = taskMode && access != ToolAccess.NONE,
                 prompt = prompt.trim().ifBlank { null },
-                fullConsent = fullConsent,
+                // Full consent only makes sense with full tool access.
+                fullConsent = fullConsent && access == ToolAccess.FULL,
             ),
         )
         onBack()
@@ -420,7 +428,11 @@ fun ModeEditorPage(
                                 Text(
                                     text = stringResource(R.string.settings_mode_task_title),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = if (access != ToolAccess.NONE) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    },
                                 )
                                 Text(
                                     text = stringResource(R.string.settings_mode_task_hint),
@@ -428,7 +440,11 @@ fun ModeEditorPage(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Switch(checked = taskMode, onCheckedChange = { taskMode = it })
+                            Switch(
+                                checked = taskMode && access != ToolAccess.NONE,
+                                enabled = access != ToolAccess.NONE,
+                                onCheckedChange = { taskMode = it },
+                            )
                         }
                         Spacer(Modifier.height(Baic2Spacing.md))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -474,6 +490,13 @@ fun ModeEditorPage(
             }
 
             item(key = "budget") {
+                // Built inside this item so slider ticks recompose only it,
+                // not the whole editor page.
+                val budget = RunBudget(
+                    maxRounds = rounds,
+                    maxToolCalls = calls,
+                    maxWallClockMs = minutes * 60_000L,
+                )
                 SettingsSectionLabel(stringResource(R.string.settings_mode_budget))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
@@ -579,7 +602,13 @@ fun ModeEditorPage(
         AlertDialog(
             onDismissRequest = { deleteAsk = false },
             title = { Text(stringResource(R.string.settings_mode_delete)) },
-            text = { Text(stringResource(R.string.settings_mode_delete_confirm)) },
+            text = {
+                Text(stringResource(R.string.settings_mode_delete_confirm))
+                if (tasks.any { it.mode == existing.id }) {
+                    Spacer(Modifier.height(Baic2Spacing.sm))
+                    Text(stringResource(R.string.settings_mode_delete_confirm_tasks))
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

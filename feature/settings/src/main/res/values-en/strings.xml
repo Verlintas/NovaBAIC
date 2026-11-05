@@ -41,6 +41,7 @@
     <string name="settings_mode_save">Save</string>
     <string name="settings_mode_delete">Delete mode</string>
     <string name="settings_mode_delete_confirm">Conversations using this mode will open as plain chat.</string>
+    <string name="settings_mode_delete_confirm_tasks">Scheduled tasks using this mode will keep running, but as plain chat - without tools.</string>
     <string name="settings_mode_behavior">Behavior</string>
     <string name="settings_mode_task_title">Long task</string>
     <string name="settings_mode_task_hint">Plan, completion report and finish banner; leave off for ordinary chat</string>

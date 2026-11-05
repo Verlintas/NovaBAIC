@@ -28,13 +28,14 @@ import com.verlintas.baic2.core.data.repository.PlanRepository
 import com.verlintas.baic2.core.data.repository.RunControlBus
 import com.verlintas.baic2.core.data.repository.RunRepository
 import com.verlintas.baic2.core.model.ChatMessage
-import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.ImpactSummarizer
+import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.Plan
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
+import com.verlintas.baic2.core.model.resolve
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,8 +79,10 @@ class TasksViewModel @Inject constructor(
         filter,
         modeStore.profiles,
     ) { runs, selected, modes ->
+        // Runs list agentic work only: the resolved mode class decides, not the id.
+        val agentRuns = runs.filter { run -> modes.resolve(run.mode).agentic }
         TasksUiState(
-            runs = runs.filter { run ->
+            runs = agentRuns.filter { run ->
                 when (selected) {
                     TaskFilter.ALL -> true
                     TaskFilter.RUNNING -> run.state == RunState.RUNNING
@@ -89,8 +92,8 @@ class TasksViewModel @Inject constructor(
             },
             modes = modes,
             filter = selected,
-            totalCount = runs.size,
-            runningCount = runs.count { it.state == RunState.RUNNING },
+            totalCount = agentRuns.size,
+            runningCount = agentRuns.count { it.state == RunState.RUNNING },
         )
     }.stateIn(
         scope = viewModelScope,
@@ -131,11 +134,12 @@ class RunDetailViewModel @Inject constructor(
                     conversationRepository.observeConversation(run.conversationId),
                     planRepository.observePlan(run.conversationId),
                     conversationRepository.observeMessages(run.conversationId),
-                ) { conversation, plan, messages ->
+                    modeStore.profiles,
+                ) { conversation, plan, messages, modes ->
                     val runMessages = messagesForRun(run, messages)
                     RunDetailState(
                         run = run,
-                        mode = modeStore.resolve(run.mode),
+                        mode = modes.resolve(run.mode),
                         conversationTitle = conversation?.title.orEmpty(),
                         plan = plan,
                         messages = runMessages,

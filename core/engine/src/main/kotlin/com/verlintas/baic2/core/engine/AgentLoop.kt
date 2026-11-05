@@ -291,7 +291,7 @@ class AgentLoop(
                     toolCalls.all { call ->
                         val spec = specs[call]
                         spec?.parallelSafe == true &&
-                            gate(mode, spec, unattended, tainted) is GateResult.Allow
+                            gate(mode, spec, unattended, tainted, runContext.fullConsent) is GateResult.Allow
                     }
 
             if (canParallelize) {

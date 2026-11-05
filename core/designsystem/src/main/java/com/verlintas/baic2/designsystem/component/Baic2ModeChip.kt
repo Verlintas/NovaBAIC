@@ -67,6 +67,8 @@ import kotlinx.coroutines.launch
 fun Baic2ModeChip(
     mode: ModeProfile,
     modifier: Modifier = Modifier,
+    // Lists pass false: the continuous halo/shimmer is for the active chip only.
+    ambient: Boolean = true,
 ) {
     val cls = mode.engineMode
     val container: Color
@@ -100,8 +102,8 @@ fun Baic2ModeChip(
 
     // MAX keeps an ambient shimmer while it is active: a breathing halo, a
     // slow aurora sheen across the pill and a gentle hue drift.
-    val ambient = rememberInfiniteTransition(label = "max-ambient")
-    val sheen by ambient.animateFloat(
+    val ambience = rememberInfiniteTransition(label = "max-ambient")
+    val sheen by ambience.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         // Ping-pong: the sweep turns around instead of snapping back, so the
@@ -112,7 +114,7 @@ fun Baic2ModeChip(
         ),
         label = "max-sheen",
     )
-    val breathe by ambient.animateFloat(
+    val breathe by ambience.animateFloat(
         initialValue = 0.30f,
         targetValue = 0.70f,
         animationSpec = infiniteRepeatable(
@@ -210,8 +212,8 @@ fun Baic2ModeChip(
                         )
                     }
                 }
-                // Ambient halo that never stops while MAX is active.
-                if (strong) {
+                // Ambient halo that never stops while an autonomous mode is active.
+                if (strong && ambient) {
                     val intensity = if (animationsEnabled) breathe else 0.5f
                     drawRect(
                         brush = Brush.radialGradient(
@@ -269,9 +271,9 @@ fun Baic2ModeChip(
                         blendMode = BlendMode.Plus,
                     )
                 }
-                // Ambient shimmer while MAX stays selected: a slow hue drift
-                // plus a glass glint that keeps crossing the pill.
-                if (strong) {
+                // Ambient shimmer while an autonomous mode stays selected: a slow
+                // hue drift plus a glass glint that keeps crossing the pill.
+                if (strong && ambient) {
                     val t = if (animationsEnabled) sheen else 0.5f
                     val aurora = Baic2Aurora.colors
                     val hueShift = -size.width + t * size.width * 2f

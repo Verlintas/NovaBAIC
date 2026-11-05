@@ -82,7 +82,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.verlintas.baic2.core.model.ConversationPreview
-import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.resolve
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Motion
@@ -312,9 +311,9 @@ private fun ConversationRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (conversation.mode != ModeProfiles.CHAT.id) {
+                if (mode.toolsVisible) {
                     Spacer(Modifier.width(Baic2Spacing.sm))
-                    Baic2ModeChip(mode = mode)
+                    Baic2ModeChip(mode = mode, ambient = false)
                 }
             }
             Spacer(Modifier.height(6.dp))

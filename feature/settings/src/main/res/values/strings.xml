@@ -41,6 +41,7 @@
     <string name="settings_mode_save">保存</string>
     <string name="settings_mode_delete">删除模式</string>
     <string name="settings_mode_delete_confirm">删除后，使用该模式的对话将以纯对话模式打开。</string>
+    <string name="settings_mode_delete_confirm_tasks">使用该模式的定时任务会继续运行，但只能作为纯对话运行（无工具）。</string>
     <string name="settings_mode_behavior">行为</string>
     <string name="settings_mode_task_title">长任务</string>
     <string name="settings_mode_task_hint">计划、完成报告和结束横幅；普通对话请关闭</string>

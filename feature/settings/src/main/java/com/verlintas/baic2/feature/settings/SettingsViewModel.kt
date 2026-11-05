@@ -27,6 +27,7 @@ import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.data.repository.AgentRepository
 import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.RunRepository
+import com.verlintas.baic2.core.data.repository.ScheduledTaskRepository
 import com.verlintas.baic2.core.data.storage.AppStorage
 import com.verlintas.baic2.core.data.storage.StorageUsage
 import com.verlintas.baic2.core.model.AccentColor
@@ -34,6 +35,7 @@ import com.verlintas.baic2.core.model.Agent
 import com.verlintas.baic2.core.model.AppLanguage
 import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.core.model.ModeProfiles
+import com.verlintas.baic2.core.model.ScheduledTask
 import com.verlintas.baic2.core.model.ThemeMode
 import com.verlintas.baic2.core.model.isVersionNewer
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -83,9 +85,13 @@ class SettingsViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val runRepository: RunRepository,
     private val modeStore: ModeProfileStore,
+    private val scheduledTaskRepository: ScheduledTaskRepository,
 ) : ViewModel() {
 
     val modes: StateFlow<List<ModeProfile>> = modeStore.profiles
+
+    val scheduledTasks: StateFlow<List<ScheduledTask>> = scheduledTaskRepository.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val storage = MutableStateFlow<StorageUsage?>(null)
     private val stats = MutableStateFlow<UsageStats?>(null)

@@ -439,9 +439,9 @@ private fun RunRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (run.mode != ModeProfiles.CHAT.id) {
+            if (mode.toolsVisible) {
                 Spacer(Modifier.width(Baic2Spacing.sm))
-                Baic2ModeChip(mode = mode)
+                Baic2ModeChip(mode = mode, ambient = false)
             }
             Icon(
                 imageVector = Icons.Outlined.KeyboardArrowDown,

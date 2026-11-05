@@ -1853,7 +1853,7 @@ private fun ModePickerSheet(
                         .padding(horizontal = Baic2Spacing.lg, vertical = Baic2Spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Baic2ModeChip(mode = mode)
+                    Baic2ModeChip(mode = mode, ambient = false)
                     Spacer(Modifier.width(Baic2Spacing.md))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(

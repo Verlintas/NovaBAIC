@@ -184,6 +184,7 @@
     <string name="settings_mode_save">Сохранить</string>
     <string name="settings_mode_delete">Удалить режим</string>
     <string name="settings_mode_delete_confirm">Беседы с этим режимом откроются как обычный чат.</string>
+    <string name="settings_mode_delete_confirm_tasks">Запланированные задачи с этим режимом продолжат запускаться, но как обычный чат — без инструментов.</string>
     <string name="settings_mode_behavior">Поведение</string>
     <string name="settings_mode_task_title">Длинная задача</string>
     <string name="settings_mode_task_hint">План, отчёт о завершении и баннер статуса; для обычного чата выключено</string>
