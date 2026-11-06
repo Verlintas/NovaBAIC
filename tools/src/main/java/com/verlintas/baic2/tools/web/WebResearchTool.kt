@@ -29,6 +29,7 @@ import com.verlintas.baic2.tools.ToolContext
 import javax.inject.Inject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 /**
  * Read-only web research in an app-owned background browser. Unlike
@@ -44,13 +45,16 @@ class WebResearchTool @Inject constructor(
         untrustedOutput = true,
         description = "Read-only research in a background web browser. Open a web page, take a " +
             "DOM snapshot with stable element refs (w1, w2…), click a ref, type into an input, " +
-            "or scroll. Prefer this over app_research when the target platform has a usable web " +
-            "version (GitHub, X, Reddit, Zhihu…). It never sends messages, posts, orders or pays. " +
-            "If a page needs login or a captcha, call 'show_to_user': it opens the same cookie " +
-            "session in a foreground browser and waits for the user, then returns the post-login " +
-            "snapshot. Use 'open' with an https URL, then 'snapshot', then 'click'/'read'. The " +
-            "background session closes after 5 minutes idle; 'hide' closes it immediately.",
-        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","show_to_user","hide"],"description":"browser action; hide closes the session"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for the type action"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"}},"required":["action"]}""",
+            "scroll, or wait for client-rendered results. Prefer this over app_research when the " +
+            "site has a public web version that works in a standard WebView; platform support " +
+            "varies, and some sites refuse WebView login or require human verification. It never " +
+            "sends messages, posts, orders or pays. If a page needs login or a captcha, call " +
+            "'show_to_user': it opens the same cookie session in a foreground browser and waits " +
+            "for the user, then returns the post-login snapshot; the login is the user's own and " +
+            "credentials are never stored. Use 'open' with an https URL, then 'snapshot', then " +
+            "'click'/'read'; use 'wait' with text or ref for SPA results. The background session " +
+            "closes after 5 minutes idle; 'hide' closes it immediately.",
+        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","wait","show_to_user","hide"],"description":"browser action; wait needs text or ref; hide closes the session"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for type, or the text to wait for"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"},"timeout_ms":{"type":"integer","description":"wait timeout in ms, 500-15000, default 5000"}},"required":["action"]}""",
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = false,
@@ -107,6 +111,31 @@ class WebResearchTool @Inject constructor(
                 )
             }
 
+            "wait" -> {
+                val text = (arguments["text"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                val ref = (arguments["ref"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                if (text.isEmpty() && ref.isEmpty()) {
+                    return ToolResult.Failure("Missing 'text' or 'ref' for wait.")
+                }
+                val timeout = ((arguments["timeout_ms"] as? JsonPrimitive)?.longOrNull ?: 5_000L)
+                    .coerceIn(500L, 15_000L)
+                browser.waitFor(
+                    text = text.takeIf { it.isNotEmpty() },
+                    ref = ref.takeIf { it.isNotEmpty() },
+                    timeoutMs = timeout,
+                ).fold(
+                    onSuccess = { result ->
+                        val prefix = if (result.matched) {
+                            "Wait matched.\n\n"
+                        } else {
+                            "Wait timed out after ${timeout}ms; current page:\n\n"
+                        }
+                        ToolResult.Success(prefix + format(result.snapshot, includeElements = true))
+                    },
+                    onFailure = { failure("wait", it) },
+                )
+            }
+
             "show_to_user" -> browser.showToUser().fold(
                 onSuccess = {
                     browser.snapshot().fold(
@@ -128,7 +157,7 @@ class WebResearchTool @Inject constructor(
             )
 
             else -> ToolResult.Failure(
-                "Unknown action '$action'. Use open|snapshot|read|click|type|scroll|show_to_user|hide.",
+                "Unknown action '$action'. Use open|snapshot|read|click|type|scroll|wait|show_to_user|hide.",
             )
         }
     }

@@ -37,6 +37,12 @@ data class WebSnapshot(
     val elements: List<WebElement>,
 )
 
+/** The snapshot after a wait, plus whether the requested condition appeared. */
+data class WebWaitResult(
+    val snapshot: WebSnapshot,
+    val matched: Boolean,
+)
+
 /**
  * A read-only browser session running in an app-owned virtual display. It is
  * intentionally independent of AccessibilityService, Shizuku and ADB: the
@@ -52,6 +58,12 @@ interface WebBrowser {
     suspend fun type(ref: String, text: String): Result<WebSnapshot>
 
     suspend fun scroll(direction: String): Result<WebSnapshot>
+
+    /**
+     * Poll until [text] appears in the page text or [ref] exists, then return
+     * a snapshot. [timeoutMs] is clamped by the implementation.
+     */
+    suspend fun waitFor(text: String?, ref: String?, timeoutMs: Long): Result<WebWaitResult>
 
     /** Bring the same session to the phone for login or a captcha. */
     suspend fun showToUser(): Result<Unit>

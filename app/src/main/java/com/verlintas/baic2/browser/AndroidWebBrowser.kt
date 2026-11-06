@@ -28,6 +28,7 @@ import android.webkit.WebViewDatabase
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebBrowser
 import com.verlintas.baic2.device.api.WebSnapshot
+import com.verlintas.baic2.device.api.WebWaitResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -76,6 +77,15 @@ class AndroidWebBrowser @Inject constructor(
 
     override suspend fun scroll(direction: String): Result<WebSnapshot> = mutex.withLock {
         session()?.scroll(direction)
+            ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
+    }
+
+    override suspend fun waitFor(
+        text: String?,
+        ref: String?,
+        timeoutMs: Long,
+    ): Result<WebWaitResult> = mutex.withLock {
+        session()?.waitFor(text, ref, timeoutMs)
             ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
     }
 

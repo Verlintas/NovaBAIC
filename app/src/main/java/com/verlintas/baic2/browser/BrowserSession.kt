@@ -28,6 +28,7 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -40,6 +41,7 @@ import androidx.activity.ComponentActivity
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebElement
 import com.verlintas.baic2.device.api.WebSnapshot
+import com.verlintas.baic2.device.api.WebWaitResult
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CompletableDeferred
@@ -228,6 +230,39 @@ class BrowserSession(private val host: ComponentActivity) {
         return snapshot()
     }
 
+    suspend fun waitFor(
+        text: String?,
+        ref: String?,
+        timeoutMs: Long,
+    ): Result<WebWaitResult> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val queryText = text?.trim().orEmpty()
+        val queryRef = ref?.trim().orEmpty()
+        if (queryText.isEmpty() && queryRef.isEmpty()) {
+            return Result.failure(IllegalArgumentException("wait_requires_text_or_ref"))
+        }
+        val limit = timeoutMs.coerceIn(MIN_WAIT_MS, MAX_WAIT_MS)
+        val deadline = SystemClock.elapsedRealtime() + limit
+        var matched = false
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val raw = evaluate(
+                view,
+                "($WAIT_JS)(${JSONObject.quote(queryText)}, ${JSONObject.quote(queryRef)})",
+            )
+            if (raw == "true") {
+                matched = true
+                break
+            }
+            kotlinx.coroutines.delay(WAIT_POLL_MS)
+        }
+        // Let the matching DOM settle before the snapshot.
+        kotlinx.coroutines.delay(350)
+        val snapshot = snapshot().getOrElse { return Result.failure(it) }
+        return Result.success(WebWaitResult(snapshot = snapshot, matched = matched))
+    }
+
     suspend fun showToUser(): Result<Unit> {
         touch()
         val view = awaitReady()
@@ -395,6 +430,18 @@ class BrowserSession(private val host: ComponentActivity) {
         const val NAV_TIMEOUT_MS = 8_000L
         const val HANDOFF_TIMEOUT_MS = 5 * 60_000L
         const val IDLE_TIMEOUT_MS = 5 * 60_000L
+        const val MIN_WAIT_MS = 500L
+        const val MAX_WAIT_MS = 15_000L
+        const val WAIT_POLL_MS = 250L
+
+        const val WAIT_JS = """
+            function(text, ref) {
+              if (ref) return !!document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (!text) return true;
+              var body = document.body ? document.body.innerText : '';
+              return body.toLowerCase().indexOf(text.toLowerCase()) >= 0;
+            }
+        """
 
         const val SNAPSHOT_JS = """
             (function() {
