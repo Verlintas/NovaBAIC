@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file.
 - **调试入口**：`DebugBrowserActivity`（虚拟屏 + WebView 渲染/JS/点击/截图）和 `DebugWebActivity`（`web_research` open/click 冒烟）。
 - **浏览器会话回收与清除**：`web_research` 会话空闲 5 分钟自动释放，`hide` 立即关闭；设置 → 存储新增「清除网页数据」，删除 Cookie、WebStorage、表单数据和 WebView 缓存。
 - **MCP 端点校验**：MCP 服务器 URL 使用 `NetworkEndpointPolicy`（HTTPS 任意，HTTP 仅 localhost/私有 LAN），客户端禁用自动重定向；添加服务器时即时校验并提示。
+- **SPA 等待**：`web_research wait` 等待指定文本或元素出现（默认 5s，最长 15s），再返回快照；用于 HN Algolia、新版 Reddit 等客户端渲染页面。超时返回当前页面而不是硬失败。
 - **用户可管理的对话模式**（PR #4）：设置 → 模式支持新建、编辑、删除和恢复 stock 模式；每个模式可配置工具权限（无 / 只读 / 全部）、逐次确认、运行预算、长任务协议和附加 prompt。聊天顶部芯片与模式选择器显示当前权限；「完全同意」与逐次确认互斥。
 
 ### 修复 Fixed
@@ -28,12 +29,14 @@ All notable changes to this project are documented in this file.
 - 应用自有虚拟屏 `baic2-web` 为 `FLAG_PRIVATE | FLAG_OWN_CONTENT_ONLY`，owner 是 App UID；全程未使用 Shizuku/root/ADB。
 - 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过；DB 21→22 迁移已用 `21.json` 建库模拟验证。
 - 新增 `WebFetcherPolicyTest`（公网/私网 URL）与 `McpClientTest` 公网明文拒绝用例。
+- 模拟器本地延迟渲染页：`open` 后正文为 `loading`；`wait text="Delayed result"` 约 2.2s 匹配并返回渲染后的链接；超时返回当前页面。
 
 ### 已知限制 Known limitations
 
 - X 的 WebView 登录被 X 拦截：Google OAuth 会白屏，Email/username 登录返回 “Sorry, you are not allowed to log in at this time”。X 网页搜索需要已登录会话，因此暂不作为 `web_research` 的承诺范围；需要 X API/token 或用户已有会话。
 - 登录/验证码 handoff 已用公开测试站验证（登录后后台读到 Secure Area）；真实站点的 OAuth/反爬限制由站点决定，不绕过。
 - MVP 先覆盖公开 GitHub 搜索；X / Reddit / 知乎需要各自验证登录与反爬行为。
+- 平台支持以 `docs/WEB_RESEARCH.md` 的矩阵为准；部分站点会拒绝 WebView 登录或要求人工验证，工具不绕过。
 - WebView 后台节流和按站点 Cookie 隔离仍未做；`web_research` 页面共享一个 App WebView profile，可在设置 → 存储一键清除。
 - 全局 `cleartextTrafficPermitted` 仍保留；Agent Base URL / MCP 由 `NetworkEndpointPolicy` 限制，`web_read` 使用 public-host + DNS SSRF 策略（允许公网 HTTP，拒绝私网/回环）。
 - 微信聊天没有可用网页版，继续保留原生 `app_research`，不作为 web_research 的承诺范围。

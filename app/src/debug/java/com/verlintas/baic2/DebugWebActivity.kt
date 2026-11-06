@@ -60,6 +60,9 @@ class DebugWebActivity : ComponentActivity() {
             val reopen = intent.getBooleanExtra("reopen", false)
             val closeAfter = intent.getBooleanExtra("close_after", false)
             val clearAfter = intent.getBooleanExtra("clear_after", false)
+            val waitText = intent.getStringExtra("wait_text")?.trim().orEmpty()
+            val waitRef = intent.getStringExtra("wait_ref")?.trim().orEmpty()
+            val waitTimeout = intent.getLongExtra("wait_timeout_ms", 5_000L)
             val tool = registry.tool("web_research")
             if (tool == null) {
                 Log.e(TAG, "web_research is not registered")
@@ -103,6 +106,15 @@ class DebugWebActivity : ComponentActivity() {
                     put("url", url)
                 }
                 text += "\n\n--- REOPEN ---\n" + execute(reopenArguments)
+            }
+            if (action == "open" && (waitText.isNotEmpty() || waitRef.isNotEmpty())) {
+                val waitArguments = buildJsonObject {
+                    put("action", "wait")
+                    if (waitText.isNotEmpty()) put("text", waitText)
+                    if (waitRef.isNotEmpty()) put("ref", waitRef)
+                    put("timeout_ms", waitTimeout)
+                }
+                text += "\n\n--- WAIT ---\n" + execute(waitArguments)
             }
             if (action == "open" && closeAfter) {
                 val hideArguments = buildJsonObject { put("action", "hide") }

@@ -1,8 +1,10 @@
 # Web research / 内置浏览器
 
-> 状态：GitHub 搜索 MVP + 登录 handoff + 会话回收/清除已验证；X 登录被 X 拦截
+> 状态：GitHub 搜索 MVP + 登录 handoff + 会话回收/清除 + SPA `wait` 已验证（`wait` 用本地延迟渲染页；HN/Reddit 真站待回归）；X 登录被 X 拦截
 > 最后更新：2026-11-06
 > 目标版本：0.5.0
+>
+> 这是通用能力：登录 handoff 使用每个用户自己的账号，不保存密码，不依赖维护者账号或单一设备；设置 → 存储可清除网页数据。平台支持以本文矩阵为准，不承诺所有站点。
 
 ## 1. 结论
 
@@ -52,6 +54,7 @@ web_research snapshot()          # 页面文本 + 可交互元素 + 稳定 ref
 web_research click(ref)
 web_research type(ref, text)
 web_research scroll(up|down)
+web_research wait(text|ref, timeout_ms)  # 等待 SPA 结果出现
 web_research read()
 web_research show_to_user()      # 把当前会话交给前台，用户登录/过验证码
 web_research hide()
@@ -73,7 +76,7 @@ web_research hide()
 2. `web_research` 的 `show_to_user` 打开 `BrowserLoginActivity`；它与后台 WebView 共享同一 cookie/profile。
 3. 用户完成登录/验证码后点顶部“完成”（状态栏 inset + 48dp 触控高度）。
 4. 后台重新加载登录页当前 URL，返回登录后的 DOM 快照。
-5. 不保存密码，不尝试绕过验证码。
+5. 使用每个用户自己的账号；不保存密码，不尝试绕过验证码。
 
 验证：
 
@@ -107,7 +110,7 @@ web_research tool
 
 先做**只读**，不做发送/下单/支付：
 
-1. `open` + `snapshot` + `read` + `scroll`
+1. `open` + `snapshot` + `read` + `scroll` + `wait`
 2. `click` 只允许链接/结果行/搜索框，不允许提交表单
 3. `type` 只允许搜索框，不自动按 Enter 发送消息
 4. 登录/验证码 handoff
@@ -130,7 +133,7 @@ web_research tool
 | Reddit | `old.reddit.com` / `www.reddit.com` | ⚠️ 旧版要求登录；新版 SPA 在 20s 内未完成加载 |
 | Stack Overflow | `stackoverflow.com/search?q=...` | ⚠️ 跳转 `/nocaptcha` 人机验证 |
 | X | `x.com/search?q=...` | ❌ WebView 登录被 X 拦截（Google OAuth 白屏；密码登录返回 not allowed） |
-| HN Algolia | `hn.algolia.com/?query=...` | ⚠️ SPA 结果未进入 body DOM（需要 shadow DOM/接口等待） |
+| HN Algolia | `hn.algolia.com/?query=...` | ⚠️ SPA 结果未进入首屏快照；`wait` 可等待结果（待 HN 回归） |
 
 说明：`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
 
@@ -152,8 +155,8 @@ web_research tool
 
 ## 8. 下一步
 
-1. Reddit `old.reddit.com` 登录 handoff 回归；新版 SPA 等待策略。
-2. HN Algolia 结果等待或公开 JSON API 兜底。
+1. `wait` 已落地；用 HN Algolia / 新版 Reddit 做真实站点回归。
+2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号，不依赖维护者登录。
 3. Stack Overflow 人机验证 handoff 回归。
 4. X 用 API token 或已有会话；不重试 WebView 登录。
 5. 平台回归完成后收 0.5.0。

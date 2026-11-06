@@ -85,6 +85,12 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
   `NetworkEndpointPolicy`: HTTPS anywhere, cleartext HTTP only for loopback,
   RFC1918/link-local hosts and private mDNS names. MCP redirects are disabled
   so a server cannot hop to a public cleartext endpoint after the check.
+- **Web research login handoff.** `show_to_user` opens the user's own
+  foreground WebView and shares the app cookie profile; BAIC2 never reads or
+  stores the password, and the login belongs to the user, not a maintainer or
+  service account. Settings → Storage can clear cookies, WebStorage, form
+  data and the WebView cache. The read-only tool never sends, posts, orders or
+  pays.
 - **Location privacy.** Location is on-demand by default: `get_location` reads
   the last known fix and never starts background tracking, and the tool writes
   nothing to the database. Reverse geocoding is fully offline against a

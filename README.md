@@ -124,7 +124,7 @@ Agent = 服务商 + Key + 模型 + 温度 / 上限 / 深度思考 + 系统提示
 
 **内容与网络**
 
-`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `web_research`（应用自有虚拟屏 + WebView 的后台网页研究：open / snapshot / click ref / type / read / scroll，登录/验证码可交给前台 show_to_user；空闲 5 分钟自动释放，设置 → 存储可清除网页数据；不依赖无障碍、Shizuku 或 ADB）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
+`files`（浏览 / 搜索 / 读取，含 `grep` 全文搜索）· `file_write` · `download_file` · `web_search`（多引擎并发，支持 `freshness` / `engines`）· `web_read`（正文提取 + 分页）· `app_research`（只读 App 内检索，按资源 id 识别搜索入口并记住已学到的结构，支持 `open` / `open_top` 直接读详情，并可用 `session` 复用已打开的搜索页（换 query 时优先在原结果页重设搜索框，必要时在同一虚拟屏上重启目标 App）；输出 `Search state: results / empty / not-found / not-submitted`，用户安装的 App 优先 OCR、系统 App 优先无障碍树；无 Shizuku/root 时走前台无障碍，有则后台虚拟屏）· `web_research`（应用自有虚拟屏 + WebView 的后台网页研究：open / snapshot / click ref / type / read / scroll / wait，登录/验证码可交给前台 show_to_user（使用用户自己的账号，不保存密码）；空闲 5 分钟自动释放，设置 → 存储可清除网页数据；平台支持因站点而异，不依赖无障碍、Shizuku 或 ADB）· `fetch_rss` · `get_weather` · `generate_qr` / `decode_qr` · `ocr_file`
 
 **个人助理**
 
@@ -266,7 +266,7 @@ adb reverse tcp:8765 tcp:8765
 - **已完成 · v0.3.x Agent 效率**：计划一次执行（snapshot / ref / sequence / assert）、后台虚拟屏预热 / 复用 / 保活、内置无线 ADB、自动保存技能、CHAT+ 并行研究子代理
 - **已完成 · v0.4.0 稳定性**：虚拟屏与无线 ADB 独立实现、`app_research` 真机搜索/session 复用、附件生命周期与截图保留、自动保存技能参数化、开机/更新保活
 - **已完成 · v0.4.1 补丁**：修复 release 包 ML Kit OCR 组件注册导致的第三方 App 裸崩溃；`app_research` 增加语义化 `Search state`、OCR-first 第三方 App 路径和搜索入口上半屏过滤；新增俄语与局域网 HTTP（仅私有地址）
-- **进行中 · v0.5.0 Web research**：应用自有虚拟屏 + WebView 的 `web_research` GitHub 搜索 MVP、登录/验证码 handoff、会话回收与清除已验证；下一步 Reddit / HN 覆盖与 0.5.0 收版
+- **进行中 · v0.5.0 Web research**：应用自有虚拟屏 + WebView 的 `web_research` GitHub 搜索 MVP、登录/验证码 handoff、会话回收与清除、SPA `wait` 已验证；下一步 Reddit 登录 handoff 与 0.5.0 收版
 - **进行中**：OEM 矩阵扩展与重启 / 断网恢复验证、Shizuku / 语音 / 录屏全量验收、UI 细节与评测场景扩充
 - **计划中**：更丰富的设备能力与技能生态、更多模型协议跟进
 
