@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.verlintas.baic2.core.model.AppMode
+import com.verlintas.baic2.core.model.ModeProfile
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.R
 import kotlin.math.PI
@@ -64,12 +65,15 @@ import kotlinx.coroutines.launch
 /** Compact monospace badge for the current autonomy mode. */
 @Composable
 fun Baic2ModeChip(
-    mode: AppMode,
+    mode: ModeProfile,
     modifier: Modifier = Modifier,
+    // Lists pass false: the continuous halo/shimmer is for the active chip only.
+    ambient: Boolean = true,
 ) {
+    val cls = mode.engineMode
     val container: Color
     val content: Color
-    when (mode) {
+    when (cls) {
         AppMode.CHAT -> {
             container = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
             content = MaterialTheme.colorScheme.onSurfaceVariant
@@ -87,24 +91,19 @@ fun Baic2ModeChip(
             content = MaterialTheme.colorScheme.onPrimary
         }
     }
-    val label = when (mode) {
-        AppMode.CHAT -> stringResource(R.string.mode_chat)
-        AppMode.CHAT_PLUS -> stringResource(R.string.mode_chat_plus)
-        AppMode.ACT -> stringResource(R.string.mode_act)
-        AppMode.MAX -> stringResource(R.string.mode_max)
-    }
+    val label = modeProfileLabel(mode)
     val animatedContainer by animateColorAsState(container, tween(220), label = "mode-container")
     val animatedContent by animateColorAsState(content, tween(220), label = "mode-content")
     val glintColor = MaterialTheme.colorScheme.primary
     val animationsEnabled = rememberBaic2AnimationsEnabled()
     // Entering MAX earns the loud version of the effect: a longer sweep,
     // a second coloured band, a bigger halo and a burst of sparkles.
-    val strong = mode == AppMode.MAX
+    val strong = mode.autonomous
 
     // MAX keeps an ambient shimmer while it is active: a breathing halo, a
     // slow aurora sheen across the pill and a gentle hue drift.
-    val ambient = rememberInfiniteTransition(label = "max-ambient")
-    val sheen by ambient.animateFloat(
+    val ambience = rememberInfiniteTransition(label = "max-ambient")
+    val sheen by ambience.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         // Ping-pong: the sweep turns around instead of snapping back, so the
@@ -115,7 +114,7 @@ fun Baic2ModeChip(
         ),
         label = "max-sheen",
     )
-    val breathe by ambient.animateFloat(
+    val breathe by ambience.animateFloat(
         initialValue = 0.30f,
         targetValue = 0.70f,
         animationSpec = infiniteRepeatable(
@@ -213,8 +212,8 @@ fun Baic2ModeChip(
                         )
                     }
                 }
-                // Ambient halo that never stops while MAX is active.
-                if (strong) {
+                // Ambient halo that never stops while an autonomous mode is active.
+                if (strong && ambient) {
                     val intensity = if (animationsEnabled) breathe else 0.5f
                     drawRect(
                         brush = Brush.radialGradient(
@@ -272,9 +271,9 @@ fun Baic2ModeChip(
                         blendMode = BlendMode.Plus,
                     )
                 }
-                // Ambient shimmer while MAX stays selected: a slow hue drift
-                // plus a glass glint that keeps crossing the pill.
-                if (strong) {
+                // Ambient shimmer while an autonomous mode stays selected: a slow
+                // hue drift plus a glass glint that keeps crossing the pill.
+                if (strong && ambient) {
                     val t = if (animationsEnabled) sheen else 0.5f
                     val aurora = Baic2Aurora.colors
                     val hueShift = -size.width + t * size.width * 2f
@@ -317,6 +316,26 @@ fun Baic2ModeChip(
         )
     }
 }
+
+/**
+ * Badge label for a mode profile: the user-supplied name when set, the
+ * localized stock label otherwise (unknown ids degrade to their class label).
+ */
+@Composable
+fun modeProfileLabel(mode: ModeProfile): String = mode.name ?: stringResource(
+    when (mode.id) {
+        "CHAT" -> R.string.mode_chat
+        "CHAT_PLUS" -> R.string.mode_chat_plus
+        "ACT" -> R.string.mode_act
+        "MAX" -> R.string.mode_max
+        else -> when (mode.engineMode) {
+            AppMode.CHAT -> R.string.mode_chat
+            AppMode.CHAT_PLUS -> R.string.mode_chat_plus
+            AppMode.ACT -> R.string.mode_act
+            AppMode.MAX -> R.string.mode_max
+        }
+    },
+)
 
 private data class ModeSpark(
     val x: Float,

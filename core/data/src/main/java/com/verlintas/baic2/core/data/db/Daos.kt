@@ -378,18 +378,25 @@ interface RunDao {
     @Query("SELECT COALESCE(SUM(toolCallsUsed), 0) FROM runs")
     suspend fun totalToolCalls(): Int
 
+    @Query("SELECT COUNT(*) FROM runs")
+    fun observeTotalCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM runs WHERE state = 'RUNNING'")
+    fun observeRunningCount(): Flow<Int>
+
     @Query(
         """
         SELECT r.id AS id, r.conversationId AS conversationId, c.title AS conversationTitle,
-               r.mode AS mode, r.state AS state, r.startedAt AS startedAt, r.updatedAt AS updatedAt
+               r.mode AS mode, r.toolAccess AS toolAccess, r.state AS state,
+               r.startedAt AS startedAt, r.updatedAt AS updatedAt
         FROM runs r
         INNER JOIN conversations c ON c.id = r.conversationId
-        WHERE r.mode IN ('ACT', 'MAX')
+        WHERE r.state IN (:states)
         ORDER BY r.id DESC
         LIMIT :limit
         """,
     )
-    fun observeSummaries(limit: Int = 100): Flow<List<RunSummaryRow>>
+    fun observeSummaries(states: List<String>, limit: Int = 100): Flow<List<RunSummaryRow>>
 }
 
 data class RunSummaryRow(
@@ -397,6 +404,7 @@ data class RunSummaryRow(
     val conversationId: Long,
     val conversationTitle: String,
     val mode: String,
+    val toolAccess: String,
     val state: String,
     val startedAt: Long,
     val updatedAt: Long,

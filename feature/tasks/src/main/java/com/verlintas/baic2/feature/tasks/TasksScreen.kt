@@ -103,21 +103,23 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.verlintas.baic2.core.model.AppMode
+import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.PlanStepStatus
 import com.verlintas.baic2.core.model.Run
-import com.verlintas.baic2.core.model.RunBudget
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
 import com.verlintas.baic2.core.model.ScheduledTask
+import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.core.model.nextScheduledTrigger
 import com.verlintas.baic2.designsystem.Baic2Mono
 import com.verlintas.baic2.designsystem.Baic2Spacing
 import com.verlintas.baic2.designsystem.component.Baic2EmptyState
 import com.verlintas.baic2.designsystem.component.AuroraSurface
 import com.verlintas.baic2.designsystem.component.Baic2ModeChip
+import com.verlintas.baic2.designsystem.component.modeProfileLabel
 import com.verlintas.baic2.designsystem.component.ThinkingOrb
 import com.verlintas.baic2.designsystem.component.pressScale
 import kotlinx.coroutines.delay
@@ -204,6 +206,7 @@ private fun TasksListPage(
     if (editorOpen) {
         ScheduledTaskEditor(
             initial = editorTask,
+            modes = state.modes,
             onDismiss = { editorOpen = false },
             onSave = { task ->
                 scheduledViewModel.save(task)
@@ -393,13 +396,37 @@ private fun TasksListPage(
                     )
                 }
             } else {
-                items(state.runs, key = { it.id }) { run ->
-                    RunRow(
-                        run = run,
-                        onClick = { onOpenRun(run.id) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
+                listOf(ToolAccess.FULL, ToolAccess.READ_ONLY, ToolAccess.NONE)
+                    .forEach { access ->
+                        val grouped = state.runs.filter { it.toolAccess == access }
+                        if (grouped.isEmpty()) return@forEach
+                        item(key = "group-$access") {
+                            Text(
+                                text = stringResource(
+                                    when (access) {
+                                        ToolAccess.FULL -> R.string.tasks_group_agent
+                                        ToolAccess.READ_ONLY -> R.string.tasks_group_research
+                                        ToolAccess.NONE -> R.string.tasks_group_chat
+                                    },
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(
+                                    top = Baic2Spacing.md,
+                                    bottom = Baic2Spacing.xs,
+                                ),
+                            )
+                        }
+                        items(grouped, key = { it.id }) { run ->
+                            RunRow(
+                                run = run,
+                                mode = state.modes.firstOrNull { it.id == run.mode }
+                                    ?: ModeProfiles.fallback(run.mode, run.toolAccess),
+                                onClick = { onOpenRun(run.id) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
             }
         }
     }
@@ -408,6 +435,7 @@ private fun TasksListPage(
 @Composable
 private fun RunRow(
     run: RunSummary,
+    mode: ModeProfile,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -434,9 +462,9 @@ private fun RunRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (run.mode != AppMode.CHAT) {
+            if (mode.toolsVisible) {
                 Spacer(Modifier.width(Baic2Spacing.sm))
-                Baic2ModeChip(mode = run.mode)
+                Baic2ModeChip(mode = mode, ambient = false)
             }
             Icon(
                 imageVector = Icons.Outlined.KeyboardArrowDown,
@@ -613,7 +641,7 @@ private fun RunDetailContent(
                         color = stateColor(run.state),
                         modifier = Modifier.weight(1f),
                     )
-                    Baic2ModeChip(mode = run.mode)
+                    Baic2ModeChip(mode = detail.mode)
                 }
                 Spacer(Modifier.height(Baic2Spacing.sm))
                 Text(
@@ -642,7 +670,7 @@ private fun RunDetailContent(
         }
 
         item(key = "budget") {
-            val budget = RunBudget.forMode(run.mode)
+            val budget = detail.mode.budget
             DetailCard {
                 MonoLabel(stringResource(R.string.tasks_budget_title))
                 Spacer(Modifier.height(Baic2Spacing.sm))
@@ -1151,13 +1179,14 @@ private fun weekdayLabelRes(day: Int): Int = when (day) {
 @Composable
 private fun ScheduledTaskEditor(
     initial: ScheduledTask?,
+    modes: List<ModeProfile>,
     onDismiss: () -> Unit,
     onSave: (ScheduledTask) -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf(initial?.name.orEmpty()) }
     var prompt by rememberSaveable { mutableStateOf(initial?.prompt.orEmpty()) }
     var time by rememberSaveable { mutableStateOf(initial?.timeOfDay ?: "08:00") }
-    var modeName by rememberSaveable { mutableStateOf((initial?.mode ?: AppMode.MAX).name) }
+    var modeName by rememberSaveable { mutableStateOf(initial?.mode ?: ModeProfiles.MAX.id) }
     var daysCsv by rememberSaveable { mutableStateOf(initial?.daysOfWeek?.sorted()?.joinToString(",") ?: "") }
     var invalid by rememberSaveable { mutableStateOf(false) }
 
@@ -1192,26 +1221,23 @@ private fun ScheduledTaskEditor(
                     shape = RoundedCornerShape(12.dp),
                     label = { Text(stringResource(R.string.tasks_schedule_prompt)) },
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.tasks_schedule_mode),
-                        style = Baic2Mono.label,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    FilterChip(
-                        selected = modeName == AppMode.CHAT_PLUS.name,
-                        onClick = { modeName = AppMode.CHAT_PLUS.name },
-                        shape = RoundedCornerShape(10.dp),
-                        label = { Text("CHAT+") },
-                    )
-                    Spacer(Modifier.width(Baic2Spacing.sm))
-                    FilterChip(
-                        selected = modeName == AppMode.MAX.name,
-                        onClick = { modeName = AppMode.MAX.name },
-                        shape = RoundedCornerShape(10.dp),
-                        label = { Text("MAX") },
-                    )
+                Text(
+                    text = stringResource(R.string.tasks_schedule_mode),
+                    style = Baic2Mono.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(Baic2Spacing.xs),
+                ) {
+                    modes.forEach { mode ->
+                        FilterChip(
+                            selected = modeName == mode.id,
+                            onClick = { modeName = mode.id },
+                            shape = RoundedCornerShape(10.dp),
+                            label = { Text(modeProfileLabel(mode)) },
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = time,
@@ -1276,7 +1302,7 @@ private fun ScheduledTaskEditor(
                             id = initial?.id ?: 0L,
                             name = name.trim(),
                             prompt = prompt.trim(),
-                            mode = AppMode.valueOf(modeName),
+                            mode = modeName,
                             agentId = initial?.agentId,
                             timeOfDay = trimmedTime,
                             daysOfWeek = selectedDays,

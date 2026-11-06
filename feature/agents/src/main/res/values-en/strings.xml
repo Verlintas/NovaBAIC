@@ -31,6 +31,7 @@
     <string name="wizard_step_tuning">Tuning</string>
     <string name="wizard_step_prompt">System prompt</string>
     <string name="wizard_key_hint">Paste the key and the provider is detected automatically</string>
+    <string name="wizard_key_hint_optional">Local servers often need no key; paste one and the provider is detected automatically</string>
     <string name="wizard_detected">Detected: %1$s</string>
     <string name="wizard_or_pick">Or pick a provider</string>
     <string name="wizard_model_pick">Pick a model</string>

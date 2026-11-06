@@ -69,6 +69,8 @@ data class ToolRunContext(
     val primedNoteIds: Set<Long> = emptySet(),
     /** Per-run cache for deterministic reads (see ToolSpec.cacheable). */
     val cache: MutableMap<String, ToolResult> = java.util.concurrent.ConcurrentHashMap(),
+    /** Full-consent mode: tainted HIGH-danger calls run without asking. */
+    val fullConsent: Boolean = false,
 )
 
 /** Executes a single tool call. */
@@ -119,6 +121,8 @@ class AgentLoop(
         unattended: Boolean = false,
         initialTaint: Boolean = false,
         budgetOverride: RunBudget? = null,
+        taskProtocol: Boolean = mode == AppMode.MAX,
+        fullConsent: Boolean = false,
         triggerMessageId: Long? = null,
         primedNoteIds: Set<Long> = emptySet(),
         /** Opt-in scene facts, already fetched/cached by the host. */
@@ -131,6 +135,7 @@ class AgentLoop(
             mode = mode,
             config = config,
             unattended = unattended,
+            fullConsent = fullConsent,
             triggerMessageId = triggerMessageId,
             primedNoteIds = primedNoteIds,
         )
@@ -142,6 +147,7 @@ class AgentLoop(
             custom = customSystemPrompt,
             planContext = planContext,
             memoryContext = memoryContext,
+            taskProtocol = taskProtocol,
             now = startedAt,
         )
         val lastUser = history.lastOrNull { it.role == ChatRole.USER }
@@ -285,7 +291,7 @@ class AgentLoop(
                     toolCalls.all { call ->
                         val spec = specs[call]
                         spec?.parallelSafe == true &&
-                            gate(mode, spec, unattended, tainted) is GateResult.Allow
+                            gate(mode, spec, unattended, tainted, runContext.fullConsent) is GateResult.Allow
                     }
 
             if (canParallelize) {
@@ -354,7 +360,14 @@ class AgentLoop(
                     // whose earlier step read external text, even if a later
                     // step failed). Honour that marker for the next gate.
                     if (runContext.taint.tainted) tainted = true
-                    val finished = call.copy(result = render(result), status = status)
+                    // Parallel batches only carry parallel-safe tools, never
+                    // HIGH-danger ones, so no call here was auto-consented.
+                    val autoConsent = false
+                    val finished = call.copy(
+                        result = render(result),
+                        status = status,
+                        autoConsent = autoConsent,
+                    )
                     emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
                     messages = messages + ChatMessage(
                         role = ChatRole.TOOL,
@@ -366,7 +379,8 @@ class AgentLoop(
             } else {
                 for (call in toolCalls) {
                     val spec = specs[call]
-                    val decision = gate(mode, spec, unattended, tainted)
+                    val taintedAtGate = tainted
+                    val decision = gate(mode, spec, unattended, taintedAtGate, runContext.fullConsent)
                     emit(AgentEvent.ToolCallStarted(call))
 
                     val (status, result) = when {
@@ -425,7 +439,14 @@ class AgentLoop(
                     // Tools can mark the run internally; the next gate must see it.
                     if (runContext.taint.tainted) tainted = true
 
-                    val finished = call.copy(result = render(result), status = status)
+                    val autoConsent = taintedAtGate && fullConsent && !mode.requiresConfirmation &&
+                        spec?.danger == DangerLevel.HIGH &&
+                        (status == ToolCallStatus.DONE || status == ToolCallStatus.FAILED)
+                    val finished = call.copy(
+                        result = render(result),
+                        status = status,
+                        autoConsent = autoConsent,
+                    )
                     emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
                     messages = messages + ChatMessage(
                         role = ChatRole.TOOL,
@@ -561,6 +582,7 @@ class AgentLoop(
         spec: ToolSpec?,
         unattended: Boolean,
         tainted: Boolean,
+        fullConsent: Boolean = false,
     ): GateResult {
         if (spec == null) return GateResult.Denied("Unknown tool")
         // Memory is internal: it works in every mode and never needs
@@ -579,8 +601,12 @@ class AgentLoop(
         if (mode == AppMode.CHAT) return GateResult.Denied("Chat mode does not execute tools")
         if (mode.readOnlyOnly && !spec.readOnly) return GateResult.Denied("This mode only allows read-only tools")
         // Prompt-injection defence: once external text entered this run, a
-        // high-danger call needs explicit human confirmation.
-        if (tainted && spec.danger == DangerLevel.HIGH) return GateResult.NeedsConfirm
+        // high-danger call needs explicit human confirmation - unless the
+        // mode carries full consent, which lifts only this downgrade. The
+        // per-call confirmation of the mode itself still applies below.
+        if (tainted && spec.danger == DangerLevel.HIGH && !fullConsent) {
+            return GateResult.NeedsConfirm
+        }
         if (mode.requiresConfirmation) return GateResult.NeedsConfirm
         return GateResult.Allow
     }
@@ -612,6 +638,7 @@ fun renderSystemPrompt(
     custom: String,
     planContext: String?,
     memoryContext: String? = null,
+    taskProtocol: Boolean = mode == AppMode.MAX,
     now: Long = System.currentTimeMillis(),
     zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
 ): String = PromptCompiler.compile(
@@ -619,6 +646,7 @@ fun renderSystemPrompt(
     custom = custom,
     planContext = planContext,
     memoryContext = memoryContext,
+    taskProtocol = taskProtocol,
     now = now,
     zone = zone,
 ).full

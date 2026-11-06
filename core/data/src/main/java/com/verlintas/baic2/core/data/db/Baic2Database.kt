@@ -43,7 +43,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SnapshotEntity::class,
         ScheduledTaskEntity::class,
     ],
-    version = 21,
+    version = 22,
     exportSchema = true,
 )
 abstract class Baic2Database : RoomDatabase() {
@@ -81,6 +81,20 @@ abstract class Baic2Database : RoomDatabase() {
     abstract fun scheduledTaskDao(): ScheduledTaskDao
 
     companion object {
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Immutable tool class per run so history survives mode edits
+                // and deletes. Stock ids map exactly; custom-mode rows are a
+                // best guess, since the old schema never recorded the class.
+                db.execSQL("ALTER TABLE runs ADD COLUMN toolAccess TEXT NOT NULL DEFAULT 'FULL'")
+                db.execSQL(
+                    "UPDATE runs SET toolAccess = CASE mode " +
+                        "WHEN 'CHAT' THEN 'NONE' WHEN 'CHAT_PLUS' THEN 'READ_ONLY' " +
+                        "WHEN 'ACT' THEN 'FULL' WHEN 'MAX' THEN 'FULL' ELSE 'FULL' END",
+                )
+            }
+        }
+
         val MIGRATION_20_21 = object : Migration(20, 21) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Notification-triggered automations: package + keyword filters.

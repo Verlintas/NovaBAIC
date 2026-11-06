@@ -712,6 +712,64 @@ class AgentLoopTest {
     }
 
     @Test
+    fun fullConsentRunsTaintedHighDangerCallsWithoutAsking() = runTest {
+        val web = ToolCall(id = "c1", name = "web_read", argumentsJson = "{}")
+        val shell = ToolCall(id = "c2", name = "run_shell", argumentsJson = "{}")
+        val provider = ScriptedProvider(
+            listOf(
+                toolRound(web),
+                toolRound(shell),
+                textRound("done"),
+            ),
+        )
+        val asked = mutableListOf<String>()
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(name = "web_read", description = "web", readOnly = true, untrustedOutput = true),
+                    ToolSpec(name = "run_shell", description = "sh", danger = DangerLevel.HIGH),
+                ),
+            ),
+            toolRunner = { _, _ -> ToolResult.Success("ran under full consent") },
+            confirmationGate = ConfirmationGate { call ->
+                asked += call.name
+                true
+            },
+        )
+
+        val events = loop.run(config, AppMode.MAX, history = history, fullConsent = true).toList()
+
+        assertTrue(asked.isEmpty(), "full consent must not ask after external content")
+        val toolMessages = events.filterIsInstance<AgentEvent.ToolCallFinished>()
+        val shellFinished = toolMessages.first { it.call.name == "run_shell" }
+        assertEquals(ToolCallStatus.DONE, shellFinished.call.status)
+        assertTrue(shellFinished.call.autoConsent, "the call must carry the auto-consent marker")
+    }
+
+    @Test
+    fun fullConsentStillAsksWhenTheModeRequiresConfirmation() = runTest {
+        val shell = ToolCall(id = "c1", name = "run_shell", argumentsJson = "{}")
+        val provider = ScriptedProvider(listOf(toolRound(shell), textRound("ok")))
+        val asked = mutableListOf<String>()
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(ToolSpec(name = "run_shell", description = "sh", danger = DangerLevel.HIGH)),
+            ),
+            toolRunner = { _, _ -> ToolResult.Success("ran") },
+            confirmationGate = ConfirmationGate { call ->
+                asked += call.name
+                true
+            },
+        )
+
+        loop.run(config, AppMode.ACT, history = history, initialTaint = true, fullConsent = true).toList()
+
+        assertEquals(listOf("run_shell"), asked, "per-call confirmation is a separate switch")
+    }
+
+    @Test
     fun taintInheritedFromHistoryGatesHighDangerCalls() = runTest {
         val shell = ToolCall(id = "c1", name = "run_shell", argumentsJson = "{}")
         val provider = ScriptedProvider(listOf(toolRound(shell), textRound("gated")))

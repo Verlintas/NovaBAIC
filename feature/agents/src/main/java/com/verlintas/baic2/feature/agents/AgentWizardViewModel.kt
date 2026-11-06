@@ -121,7 +121,10 @@ data class AgentWizardUiState(
     val saving: Boolean = false,
     val saved: Boolean = false,
     val error: SetupError? = null,
-)
+) {
+    /** OpenAI-compatible endpoints often run locally without any key. */
+    val keyOptional: Boolean get() = preset.provider == ProviderId.OPENAI_COMPATIBLE
+}
 
 sealed interface SetupError {
     data object MissingKey : SetupError
@@ -265,7 +268,7 @@ class AgentWizardViewModel @Inject constructor(
                     _uiState.update { it.copy(error = SetupError.InsecureUrl) }
                     return
                 }
-                if (current.apiKey.isBlank() && !current.keyPrefilled) {
+                if (current.apiKey.isBlank() && !current.keyPrefilled && !current.keyOptional) {
                     _uiState.update { it.copy(error = SetupError.MissingKey) }
                     return
                 }
@@ -338,7 +341,7 @@ class AgentWizardViewModel @Inject constructor(
                     null
                 }
                 val apiKey = current.apiKey.trim().ifBlank { storedKey.orEmpty() }
-                if (apiKey.isBlank()) {
+                if (apiKey.isBlank() && !current.keyOptional) {
                     _uiState.update { it.copy(modelsLoading = false, modelsError = "missing_credentials") }
                     return@launch
                 }
@@ -382,7 +385,7 @@ class AgentWizardViewModel @Inject constructor(
     }
 
     private fun hasUsableKey(state: AgentWizardUiState): Boolean =
-        state.apiKey.isNotBlank() || state.keyPrefilled
+        state.apiKey.isNotBlank() || state.keyPrefilled || state.keyOptional
 
     /** Applies a curated catalog entry: model id plus its tuned defaults. */
     fun pickCatalogModel(entry: ModelEntry) {

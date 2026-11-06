@@ -282,7 +282,12 @@ private fun ProviderStep(state: AgentWizardUiState, viewModel: AgentWizardViewMo
                             color = MaterialTheme.colorScheme.primary,
                         )
                     } else {
-                        Text(stringResource(R.string.wizard_key_hint))
+                        val hint = if (state.keyOptional) {
+                            R.string.wizard_key_hint_optional
+                        } else {
+                            R.string.wizard_key_hint
+                        }
+                        Text(stringResource(hint))
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

@@ -31,6 +31,7 @@
     <string name="wizard_step_tuning">Параметры</string>
     <string name="wizard_step_prompt">Системный промпт</string>
     <string name="wizard_key_hint">Вставьте API-ключ — сервис определится автоматически</string>
+    <string name="wizard_key_hint_optional">Локальным серверам ключ часто не нужен — можно оставить пустым; вставьте ключ для авто-определения сервиса</string>
     <string name="wizard_detected">Определено: %1$s</string>
     <string name="wizard_or_pick">Или выберите сервис вручную</string>
     <string name="wizard_model_pick">Выберите модель</string>

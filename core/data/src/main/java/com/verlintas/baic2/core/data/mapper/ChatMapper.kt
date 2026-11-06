@@ -36,7 +36,6 @@ import com.verlintas.baic2.core.model.Agent
 import com.verlintas.baic2.core.model.Automation
 import com.verlintas.baic2.core.model.AutomationAction
 import com.verlintas.baic2.core.model.AutomationTrigger
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.Conversation
@@ -55,6 +54,7 @@ import com.verlintas.baic2.core.model.ProviderId
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
 import com.verlintas.baic2.core.model.RunSummary
+import com.verlintas.baic2.core.model.ToolAccess
 import com.verlintas.baic2.core.model.ToolCall
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -96,7 +96,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = entity.id,
         title = entity.title,
         agentId = entity.agentId,
-        mode = enumOf(entity.mode, AppMode.CHAT),
+        mode = entity.mode,
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
     )
@@ -105,7 +105,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = conversation.id,
         title = conversation.title,
         agentId = conversation.agentId,
-        mode = conversation.mode.name,
+        mode = conversation.mode,
         createdAt = conversation.createdAt,
         updatedAt = conversation.updatedAt,
     )
@@ -205,7 +205,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = entity.id,
         name = entity.name,
         prompt = entity.prompt,
-        mode = enumOf(entity.mode, AppMode.MAX),
+        mode = entity.mode,
         agentId = entity.agentId,
         timeOfDay = entity.timeOfDay,
         daysOfWeek = entity.daysOfWeekJson
@@ -225,7 +225,7 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = task.id,
         name = task.name,
         prompt = task.prompt,
-        mode = task.mode.name,
+        mode = task.mode,
         agentId = task.agentId,
         timeOfDay = task.timeOfDay,
         daysOfWeekJson = task.daysOfWeek.sorted().joinToString(","),
@@ -251,7 +251,8 @@ class ChatMapper @Inject constructor(private val json: Json) {
     fun runToModel(entity: RunEntity): Run = Run(
         id = entity.id,
         conversationId = entity.conversationId,
-        mode = enumOf(entity.mode, AppMode.CHAT),
+        mode = entity.mode,
+        toolAccess = enumOf(entity.toolAccess, ToolAccess.NONE),
         state = enumOf(entity.state, RunState.RUNNING),
         startedAt = entity.startedAt,
         updatedAt = entity.updatedAt,
@@ -263,7 +264,8 @@ class ChatMapper @Inject constructor(private val json: Json) {
         id = row.id,
         conversationId = row.conversationId,
         conversationTitle = row.conversationTitle,
-        mode = enumOf(row.mode, AppMode.CHAT),
+        mode = row.mode,
+        toolAccess = enumOf(row.toolAccess, ToolAccess.NONE),
         state = enumOf(row.state, RunState.RUNNING),
         startedAt = row.startedAt,
         updatedAt = row.updatedAt,

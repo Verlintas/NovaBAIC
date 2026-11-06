@@ -190,6 +190,8 @@ data class RunEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val conversationId: Long,
     val mode: String,
+    /** Tool class recorded at creation; immutable so history survives mode edits and deletes. */
+    val toolAccess: String,
     val state: String,
     val startedAt: Long,
     val updatedAt: Long,

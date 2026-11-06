@@ -26,7 +26,8 @@ data class Conversation(
     val id: Long = 0L,
     val title: String = "",
     val agentId: Long? = null,
-    val mode: AppMode = AppMode.CHAT,
+    /** Mode profile id (ModeProfile.id); stock ids match legacy rows. */
+    val mode: String = "CHAT",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
 )
@@ -73,6 +74,8 @@ data class ToolCall(
     val status: ToolCallStatus = ToolCallStatus.PENDING,
     /** Gemini thought signature that must be echoed with the function call. */
     val signature: String? = null,
+    /** Executed without asking under a full-consent mode (tainted HIGH call). */
+    val autoConsent: Boolean = false,
 )
 
 @Serializable

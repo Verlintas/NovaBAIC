@@ -38,6 +38,7 @@
     <string name="wizard_step_tuning">参数</string>
     <string name="wizard_step_prompt">系统提示词</string>
     <string name="wizard_key_hint">粘贴 API Key 可自动识别服务商</string>
+    <string name="wizard_key_hint_optional">粘贴 API Key 可自动识别服务商；本地服务器可留空</string>
     <string name="wizard_detected">已自动识别：%1$s</string>
     <string name="wizard_or_pick">或手动选择服务商</string>
     <string name="wizard_model_pick">选择模型</string>

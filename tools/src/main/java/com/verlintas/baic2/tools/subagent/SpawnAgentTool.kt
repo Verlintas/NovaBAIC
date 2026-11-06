@@ -127,6 +127,7 @@ class SpawnAgentTool @Inject constructor(
                 budgetOverride = budget,
                 triggerMessageId = run.triggerMessageId,
                 primedNoteIds = run.primedNoteIds,
+                fullConsent = run.fullConsent,
             ).toList()
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e

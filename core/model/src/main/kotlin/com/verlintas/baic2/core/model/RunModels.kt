@@ -50,7 +50,9 @@ enum class RunState {
 data class Run(
     val id: Long = 0L,
     val conversationId: Long,
-    val mode: AppMode,
+    val mode: String,
+    /** The mode's tool access at run time; immutable so history survives mode edits and deletes. */
+    val toolAccess: ToolAccess,
     val state: RunState = RunState.RUNNING,
     val startedAt: Long,
     val updatedAt: Long,

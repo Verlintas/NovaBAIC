@@ -133,7 +133,7 @@ class OpenAiCompatibleProvider(
     override suspend fun listModels(config: ProviderConfig): List<String> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(joinUrl(config.baseUrl, "models"))
-            .header("Authorization", "Bearer ${config.apiKey}")
+            .auth(config.apiKey)
             .get()
             .build()
         val call = client.newCall(request)
@@ -192,11 +192,15 @@ class OpenAiCompatibleProvider(
         return false
     }
 
+    /** A blank key means a keyless local server: send no Authorization at all. */
+    private fun Request.Builder.auth(apiKey: String): Request.Builder =
+        if (apiKey.isBlank()) this else header("Authorization", "Bearer $apiKey")
+
     private fun buildHttpRequest(request: ChatRequest): Request {
         val body = json.encodeToString(WireRequest.serializer(), buildPayload(request))
         return Request.Builder()
             .url(joinUrl(request.config.baseUrl, "chat/completions"))
-            .header("Authorization", "Bearer ${request.config.apiKey}")
+            .auth(request.config.apiKey)
             .header("Accept", "text/event-stream")
             .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .build()

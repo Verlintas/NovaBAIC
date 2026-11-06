@@ -22,6 +22,7 @@ package com.verlintas.baic2.feature.tasks
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.verlintas.baic2.core.data.prefs.ModeProfileStore
 import com.verlintas.baic2.core.data.repository.ConversationRepository
 import com.verlintas.baic2.core.data.repository.PlanRepository
 import com.verlintas.baic2.core.data.repository.RunControlBus
@@ -29,6 +30,8 @@ import com.verlintas.baic2.core.data.repository.RunRepository
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.ImpactSummarizer
+import com.verlintas.baic2.core.model.ModeProfile
+import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.Plan
 import com.verlintas.baic2.core.model.Run
 import com.verlintas.baic2.core.model.RunState
@@ -46,8 +49,22 @@ import kotlinx.coroutines.launch
 
 enum class TaskFilter { ALL, RUNNING, COMPLETED, FAILED }
 
+/** Run states behind each tab; the filtering itself runs in SQL. */
+private fun TaskFilter.toStates(): List<String> = when (this) {
+    TaskFilter.ALL -> listOf(
+        RunState.RUNNING.name,
+        RunState.COMPLETED.name,
+        RunState.FAILED.name,
+        RunState.CANCELLED.name,
+    )
+    TaskFilter.RUNNING -> listOf(RunState.RUNNING.name)
+    TaskFilter.COMPLETED -> listOf(RunState.COMPLETED.name)
+    TaskFilter.FAILED -> listOf(RunState.FAILED.name, RunState.CANCELLED.name)
+}
+
 data class TasksUiState(
     val runs: List<RunSummary> = emptyList(),
+    val modes: List<ModeProfile> = emptyList(),
     val filter: TaskFilter = TaskFilter.ALL,
     val totalCount: Int = 0,
     val runningCount: Int = 0,
@@ -55,6 +72,7 @@ data class TasksUiState(
 
 data class RunDetailState(
     val run: Run,
+    val mode: ModeProfile,
     val conversationTitle: String,
     val plan: Plan?,
     val messages: List<ChatMessage>,
@@ -64,26 +82,26 @@ data class RunDetailState(
 @HiltViewModel
 class TasksViewModel @Inject constructor(
     private val runRepository: RunRepository,
+    private val modeStore: ModeProfileStore,
 ) : ViewModel() {
 
     private val filter = MutableStateFlow(TaskFilter.ALL)
 
     val uiState: StateFlow<TasksUiState> = combine(
-        runRepository.observeSummaries(),
+        filter.flatMapLatest { selected -> runRepository.observeSummaries(selected.toStates()) },
         filter,
-    ) { runs, selected ->
+        modeStore.profiles,
+        runRepository.observeTotalCount(),
+        runRepository.observeRunningCount(),
+    ) { runs, selected, modes, totalCount, runningCount ->
+        // The run journal keeps every execution: agent work plus scheduled
+        // task runs in any mode. Ordinary chat sends are not runs at all.
         TasksUiState(
-            runs = runs.filter { run ->
-                when (selected) {
-                    TaskFilter.ALL -> true
-                    TaskFilter.RUNNING -> run.state == RunState.RUNNING
-                    TaskFilter.COMPLETED -> run.state == RunState.COMPLETED
-                    TaskFilter.FAILED -> run.state == RunState.FAILED || run.state == RunState.CANCELLED
-                }
-            },
+            runs = runs,
+            modes = modes,
             filter = selected,
-            totalCount = runs.size,
-            runningCount = runs.count { it.state == RunState.RUNNING },
+            totalCount = totalCount,
+            runningCount = runningCount,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -108,6 +126,7 @@ class RunDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val runRepository: RunRepository,
     private val runControlBus: RunControlBus,
+    private val modeStore: ModeProfileStore,
     planRepository: PlanRepository,
     conversationRepository: ConversationRepository,
 ) : ViewModel() {
@@ -123,10 +142,15 @@ class RunDetailViewModel @Inject constructor(
                     conversationRepository.observeConversation(run.conversationId),
                     planRepository.observePlan(run.conversationId),
                     conversationRepository.observeMessages(run.conversationId),
-                ) { conversation, plan, messages ->
+                    modeStore.profiles,
+                ) { conversation, plan, messages, modes ->
                     val runMessages = messagesForRun(run, messages)
                     RunDetailState(
                         run = run,
+                        // Deleted modes keep the tool class the run was made
+                        // under, so its history is still labeled truthfully.
+                        mode = modes.firstOrNull { it.id == run.mode }
+                            ?: ModeProfiles.fallback(run.mode, run.toolAccess),
                         conversationTitle = conversation?.title.orEmpty(),
                         plan = plan,
                         messages = runMessages,

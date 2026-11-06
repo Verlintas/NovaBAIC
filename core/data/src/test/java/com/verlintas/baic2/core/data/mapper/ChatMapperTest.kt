@@ -23,7 +23,6 @@ import com.verlintas.baic2.core.data.db.AgentEntity
 import com.verlintas.baic2.core.data.db.ConversationEntity
 import com.verlintas.baic2.core.data.db.MessageEntity
 import com.verlintas.baic2.core.model.Agent
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatRole
 import com.verlintas.baic2.core.model.ProviderId
@@ -117,7 +116,7 @@ class ChatMapperTest {
     }
 
     @Test
-    fun unknownEnumValuesFallBack() {
+    fun unknownModeIdIsPreservedVerbatim() {
         val entity = ConversationEntity(
             id = 1,
             title = "t",
@@ -127,7 +126,8 @@ class ChatMapperTest {
             updatedAt = 0,
         )
 
-        assertEquals(AppMode.CHAT, mapper.conversationToModel(entity).mode)
+        // Mode ids pass through; ModeProfileStore.resolve degrades unknown ones.
+        assertEquals("FUTURE_MODE", mapper.conversationToModel(entity).mode)
     }
 
     @Test

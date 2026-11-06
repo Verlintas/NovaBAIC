@@ -62,7 +62,9 @@ data class RunSummary(
     val id: Long,
     val conversationId: Long,
     val conversationTitle: String,
-    val mode: AppMode,
+    val mode: String,
+    /** The mode's tool access at run time; immutable so history survives mode edits and deletes. */
+    val toolAccess: ToolAccess,
     val state: RunState,
     val startedAt: Long,
     val updatedAt: Long,

@@ -25,7 +25,6 @@ import com.verlintas.baic2.core.data.db.Baic2Database
 import com.verlintas.baic2.core.data.db.MessageSearchRow
 import com.verlintas.baic2.core.data.db.SnapshotEntity
 import com.verlintas.baic2.core.data.mapper.ChatMapper
-import com.verlintas.baic2.core.model.AppMode
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.MessageSnapshot
 import com.verlintas.baic2.core.model.ChatRole
@@ -85,7 +84,7 @@ class ConversationRepository @Inject constructor(
     suspend fun tokenTotals(): Pair<Long, Long> =
         db.messageDao().totalInputTokens() to db.messageDao().totalOutputTokens()
 
-    suspend fun create(agentId: Long?, mode: AppMode, title: String): Long {
+    suspend fun create(agentId: Long?, mode: String, title: String): Long {
         val now = System.currentTimeMillis()
         return db.conversationDao().insert(
             mapper.conversationToEntity(
@@ -122,8 +121,8 @@ class ConversationRepository @Inject constructor(
         db.conversationDao().updateTitle(id, title, System.currentTimeMillis())
     }
 
-    suspend fun updateMeta(id: Long, agentId: Long?, mode: AppMode) {
-        db.conversationDao().updateMeta(id, agentId, mode.name, System.currentTimeMillis())
+    suspend fun updateMeta(id: Long, agentId: Long?, mode: String) {
+        db.conversationDao().updateMeta(id, agentId, mode, System.currentTimeMillis())
     }
 
     suspend fun delete(id: Long) {

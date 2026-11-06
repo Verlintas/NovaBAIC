@@ -3,7 +3,10 @@
     <string name="feature_tasks_title">任务</string>
     <string name="tasks_subtitle">%1$d 条运行记录</string>
     <string name="tasks_empty_title">还没有运行记录</string>
-    <string name="tasks_empty_description">在 Act / Max 模式下发一条消息，运行记录会出现在这里</string>
+    <string name="tasks_group_agent">代理运行</string>
+    <string name="tasks_group_research">研究运行</string>
+    <string name="tasks_group_chat">对话运行</string>
+    <string name="tasks_empty_description">运行一次代理对话或定时任务，运行记录会出现在这里</string>
     <string name="tasks_untitled">未命名对话</string>
     <string name="tasks_state_running">运行中</string>
     <string name="tasks_state_completed">已完成</string>
