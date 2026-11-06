@@ -422,7 +422,13 @@ fun ModeEditorPage(
                             Switch(
                                 checked = confirm && access == ToolAccess.FULL,
                                 enabled = access == ToolAccess.FULL,
-                                onCheckedChange = { confirm = it },
+                                onCheckedChange = {
+                                    confirm = it
+                                    // Full consent and per-call confirmation are
+                                    // mutually exclusive; turning confirmation
+                                    // back on releases full consent.
+                                    if (it) fullConsent = false
+                                },
                             )
                         }
                         Spacer(Modifier.height(Baic2Spacing.md))

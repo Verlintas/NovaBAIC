@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## [0.5.0-alpha] - 2026-11-02
 
-> 0.5.0 的第一块：应用自有虚拟屏 + WebView 的只读网页研究。它不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB。GitHub 搜索 MVP 已在真机验证。
+> 0.5.0 包含两块：应用自有虚拟屏 + WebView 的只读网页研究，以及用户可管理的对话模式。网页研究不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB；GitHub 搜索 MVP 已在真机验证。
 
 ### 新增 Added
 
@@ -13,13 +13,18 @@ All notable changes to this project are documented in this file.
 - **应用自有虚拟屏**：`BrowserHostActivity` + `BrowserSession` 用 `DisplayManager.createVirtualDisplay(..., VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY)` 创建仅属于本 App 的虚拟屏，`Presentation + WebView` 渲染网页。不需要 shell 传输，不会把第三方 App 带到手机主屏。
 - **URL 策略**：`NetworkEndpointPolicy` 继续限制 Agent Base URL；`web_research` 只接受 HTTPS 或私有 LAN HTTP，WebView 拦截非 http/https scheme。
 - **调试入口**：`DebugBrowserActivity`（虚拟屏 + WebView 渲染/JS/点击/截图）和 `DebugWebActivity`（`web_research` open/click 冒烟）。
+- **用户可管理的对话模式**（PR #4）：设置 → 模式支持新建、编辑、删除和恢复 stock 模式；每个模式可配置工具权限（无 / 只读 / 全部）、逐次确认、运行预算、长任务协议和附加 prompt。聊天顶部芯片与模式选择器显示当前权限；「完全同意」与逐次确认互斥。
+
+### 修复 Fixed
+
+- **模式编辑器一致性**：逐次确认与「完全同意」改为双向互斥；打开逐次确认时会自动关闭完全同意，避免界面显示与实际保存不一致。旧配置在读取时自动归一化。
 
 ### 测试 Tests
 
 - 真机 Xiaomi 17 Pro Max：GitHub 搜索页 `open` + snapshot 约 0.9–3.4s，返回 80 个可交互元素；点击 `w7` 后导航到 `openai/openai-cookbook`，快照约 1.5s。
 - 其他平台：Wikipedia 10.4s、arXiv 23s 可读取；Reddit 旧版要求登录、新版 SPA 超时；Stack Overflow 跳转人机验证；X 拒绝 WebView 登录；HN Algolia 结果未进入 body DOM。`open` 超时提高到 35s，页面完成后等待 900ms 让 SPA 渲染。
 - 应用自有虚拟屏 `baic2-web` 为 `FLAG_PRIVATE | FLAG_OWN_CONTENT_ONLY`，owner 是 App UID；全程未使用 Shizuku/root/ADB。
-- 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过。
+- 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过；DB 21→22 迁移已用 `21.json` 建库模拟验证。
 
 ### 已知限制 Known limitations
 
