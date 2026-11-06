@@ -48,11 +48,13 @@ class BrowserHostActivity : ComponentActivity() {
         val created = BrowserSession(this)
         session = created
         current = created
+        host = this
         created.start()
         Log.i(TAG, "browser host started")
     }
 
     override fun onDestroy() {
+        if (host === this) host = null
         if (current === session) current = null
         session?.close()
         session = null
@@ -65,5 +67,15 @@ class BrowserHostActivity : ComponentActivity() {
         @Volatile
         var current: BrowserSession? = null
             private set
+
+        @Volatile
+        private var host: BrowserHostActivity? = null
+
+        /** Finish the host activity; onDestroy closes the session. */
+        fun closeCurrent() {
+            val activity = host
+            current = null
+            activity?.runOnUiThread { activity.finish() }
+        }
     }
 }

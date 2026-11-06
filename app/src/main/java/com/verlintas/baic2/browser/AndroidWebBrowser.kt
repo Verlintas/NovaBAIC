@@ -21,15 +21,23 @@ package com.verlintas.baic2.browser
 
 import android.content.Context
 import android.content.Intent
+import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
+import android.webkit.WebViewDatabase
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebBrowser
 import com.verlintas.baic2.device.api.WebSnapshot
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 @Singleton
 class AndroidWebBrowser @Inject constructor(
@@ -78,9 +86,38 @@ class AndroidWebBrowser @Inject constructor(
     }
 
     override suspend fun hide(): Result<Unit> = mutex.withLock {
-        // The MVP keeps the session alive for follow-up reads. Closing it is a
-        // separate action once the host can be safely torn down.
+        BrowserHostActivity.closeCurrent()
         Result.success(Unit)
+    }
+
+    override suspend fun clearData(): Result<Unit> = mutex.withLock {
+        runCatching {
+            withContext(Dispatchers.Main) {
+                // Close the live page first so an authenticated DOM cannot
+                // outlive the cookies it was loaded with.
+                val session = BrowserHostActivity.current
+                session?.clearCache()
+                BrowserHostActivity.closeCurrent()
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    CookieManager.getInstance().removeAllCookies { continuation.resume(Unit) }
+                }
+                CookieManager.getInstance().flush()
+                WebStorage.getInstance().deleteAllData()
+                WebViewDatabase.getInstance(context).clearFormData()
+                WebViewDatabase.getInstance(context).clearHttpAuthUsernamePassword()
+                if (session == null) {
+                    // No live WebView to clear; a throwaway instance still
+                    // clears the on-disk HTTP cache.
+                    runCatching {
+                        WebView(context).apply {
+                            clearCache(true)
+                            destroy()
+                        }
+                    }
+                }
+                Unit
+            }
+        }
     }
 
     private fun session(): BrowserSession? = BrowserHostActivity.current

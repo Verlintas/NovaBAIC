@@ -56,5 +56,9 @@ interface WebBrowser {
     /** Bring the same session to the phone for login or a captcha. */
     suspend fun showToUser(): Result<Unit>
 
+    /** Close the background session; the next [open] starts a fresh one. */
     suspend fun hide(): Result<Unit>
+
+    /** Clear cookies, WebStorage, form data and the WebView cache. */
+    suspend fun clearData(): Result<Unit>
 }

@@ -29,6 +29,7 @@ import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.McpServer
 import com.verlintas.baic2.core.model.MemoryHold
 import com.verlintas.baic2.core.model.MemoryText
+import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.core.model.Note
 import com.verlintas.baic2.core.model.NoteRevision
 import com.verlintas.baic2.core.model.Skill
@@ -69,6 +70,7 @@ class LibraryViewModel @Inject constructor(
 
     fun addMcpServer(name: String, url: String) {
         if (name.isBlank() || url.isBlank()) return
+        if (!NetworkEndpointPolicy.validateBaseUrl(url)) return
         viewModelScope.launch {
             mcpServerRepository.add(name.trim(), url.trim())
             mcpManager.refresh()

@@ -79,7 +79,12 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
   private ranges; redirects are followed manually, and every hop is re-checked
   before a connection is opened. Host names are resolved and every address is
   validated (loopback / site-local / link-local / CGNAT), so DNS tricks like
-  `localtest.me` are refused too.
+  `localtest.me` are refused too. Public HTTP remains allowed for web content;
+  this guard is about SSRF, not scheme enforcement.
+- **Endpoint policy.** User-configured Agent base URLs and MCP servers use
+  `NetworkEndpointPolicy`: HTTPS anywhere, cleartext HTTP only for loopback,
+  RFC1918/link-local hosts and private mDNS names. MCP redirects are disabled
+  so a server cannot hop to a public cleartext endpoint after the check.
 - **Location privacy.** Location is on-demand by default: `get_location` reads
   the last known fix and never starts background tracking, and the tool writes
   nothing to the database. Reverse geocoding is fully offline against a

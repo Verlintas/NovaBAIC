@@ -21,6 +21,7 @@ package com.verlintas.baic2.mcp
 
 import com.verlintas.baic2.core.model.McpServer
 import com.verlintas.baic2.core.model.McpToolInfo
+import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.core.network.sse.SseParser
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
@@ -63,6 +64,10 @@ class McpClient @Inject constructor(
         .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .callTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+        // Every hop would need its own policy check; an MCP server should be
+        // configured with its final URL instead.
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     private val nextId = AtomicLong(1)
@@ -180,6 +185,9 @@ class McpClient @Inject constructor(
         sessionId: String?,
         includeId: Boolean,
     ): RpcResponse {
+        if (!NetworkEndpointPolicy.validateBaseUrl(server.url)) {
+            throw IOException("blocked_url: use HTTPS or a private LAN HTTP address")
+        }
         val body = buildJsonObject {
             put("jsonrpc", "2.0")
             if (includeId) put("id", nextId.getAndIncrement())

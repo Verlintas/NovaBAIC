@@ -38,6 +38,7 @@ import com.verlintas.baic2.core.model.ModeProfiles
 import com.verlintas.baic2.core.model.ScheduledTask
 import com.verlintas.baic2.core.model.ThemeMode
 import com.verlintas.baic2.core.model.isVersionNewer
+import com.verlintas.baic2.device.api.WebBrowser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +87,7 @@ class SettingsViewModel @Inject constructor(
     private val runRepository: RunRepository,
     private val modeStore: ModeProfileStore,
     private val scheduledTaskRepository: ScheduledTaskRepository,
+    private val webBrowser: WebBrowser,
 ) : ViewModel() {
 
     val modes: StateFlow<List<ModeProfile>> = modeStore.profiles
@@ -233,6 +235,14 @@ class SettingsViewModel @Inject constructor(
             appStorage.clearConversations()
             refreshStorage()
             onDone()
+        }
+    }
+
+    fun clearWebData() {
+        viewModelScope.launch {
+            webBrowser.clearData().onFailure {
+                android.util.Log.w("SettingsViewModel", "clear web data failed", it)
+            }
         }
     }
 }

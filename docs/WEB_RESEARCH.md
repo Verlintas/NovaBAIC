@@ -1,7 +1,7 @@
 # Web research / 内置浏览器
 
-> 状态：GitHub 搜索 MVP + 登录 handoff 已验证；X 登录被 X 拦截
-> 最后更新：2026-11-02
+> 状态：GitHub 搜索 MVP + 登录 handoff + 会话回收/清除已验证；X 登录被 X 拦截
+> 最后更新：2026-11-06
 > 目标版本：0.5.0
 
 ## 1. 结论
@@ -80,6 +80,13 @@ web_research hide()
 - 公开测试站 `the-internet.herokuapp.com`：登录后后台读取 `/secure`，显示 “Secure Area”，说明 Cookie 共享成功。
 - X：Google OAuth 在 WebView 白屏；Email/username 登录返回 “Sorry, you are not allowed to log in at this time”。这是 X 对 WebView 登录的限制，不是 handoff 机制问题。X 网页搜索需要已有会话/API token，暂不作为承诺范围。
 
+### 会话回收与清除
+
+- 空闲 5 分钟自动释放虚拟屏 / WebView；每次 `open` / `snapshot` / `click` / `type` / `scroll` / `show_to_user` 都会重置计时。
+- `hide` 立即关闭会话；下一次 `open` 新建。
+- 登录 handoff 期间暂停空闲计时，避免用户还在前台登录时后台会话被回收。
+- 设置 → 存储 →「清除网页数据」删除 Cookie、WebStorage、表单数据和 WebView 缓存；登录态不写入模型上下文。
+
 ## 4. 架构
 
 ```text
@@ -93,7 +100,7 @@ web_research tool
 
 - **BrowserHost**：应用自己的虚拟屏，不需要 shell。用前台服务 + 唤醒锁保持进程和渲染。
 - **DomBridge**：`snapshot` 时给元素分配短期 ref（例如 `w1`、`w2`），`click`/`type` 前按 DOM 重新校验；页面导航后 ref 失效。
-- **CookieStore**：独立 WebView profile；设置里提供「清除浏览器数据」。
+- **CookieStore**：App 共享的 WebView profile；设置 → 存储提供「清除网页数据」。
 - **Handoff**：前台 Activity 复用同一个 WebView 或共享 Cookie 的第二个 WebView；登录完成后后台 WebView reload。
 
 ## 5. MVP 范围
@@ -132,7 +139,7 @@ web_research tool
 - **WebView 后台节流**：虚拟屏上的 WebView 可能被系统降频；需要前台服务/保持显示 active，实测再定。
 - **反爬 / 风控**：验证码、登录墙、WebView 指纹；只能人工接管，不绕过。X 已明确拒绝 WebView 登录。
 - **账号风险**：自动化操作可能触发平台风控；默认低频、只读、可随时停止。
-- **安全**：浏览器里有登录态；独立 profile、可清除、不保存密码；不把 Cookie 写进模型上下文。
+- **安全**：浏览器里有登录态；App 共享 WebView profile，可一键清除，不保存密码；不把 Cookie 写进模型上下文。
 - **WebView 兼容性**：部分站点要求 Chrome 内核/DRM；必要时只把前台 handoff 交给 Custom Tabs，后台自动化仍用 WebView。
 - **平台条款**：只做用户授权范围内的读取；不承诺绕过任何平台限制。
 
@@ -145,8 +152,8 @@ web_research tool
 
 ## 8. 下一步
 
-1. 把 `DebugBrowserActivity` 提取成 `BrowserHost` + `BrowserSession`。
-2. 实现 `snapshot` / `click(ref)` / `type(ref)` 的 DOM 桥。
-3. 做一个 `web_research` 只读工具，先接 GitHub 搜索。
-4. 扩展 Reddit / 知乎等可公开读取或可密码登录的站点；X 需要 API/token 或已有会话。
-5. 做空闲会话回收、Cookie 清除入口，再考虑 0.5.0 发布。
+1. Reddit `old.reddit.com` 登录 handoff 回归；新版 SPA 等待策略。
+2. HN Algolia 结果等待或公开 JSON API 兜底。
+3. Stack Overflow 人机验证 handoff 回归。
+4. X 用 API token 或已有会话；不重试 WebView 登录。
+5. 平台回归完成后收 0.5.0。

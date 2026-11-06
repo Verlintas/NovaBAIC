@@ -63,6 +63,7 @@
     <string name="library_mcp_add">Добавить сервер</string>
     <string name="library_mcp_name">Название</string>
     <string name="library_mcp_url">Адрес (Streamable HTTP)</string>
+    <string name="library_mcp_url_invalid">Используйте HTTPS или HTTP на localhost / в частной локальной сети</string>
     <string name="library_mcp_empty">MCP-серверов пока нет. Добавьте удалённый MCP-эндпоинт — его инструменты автоматически попадут в арсенал ИИ</string>
     <string name="library_mcp_connected">Подключено · инструментов: %1$d</string>
     <string name="library_mcp_failed">Ошибка подключения: %1$s</string>
