@@ -24,6 +24,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.verlintas.baic2.core.model.ToolResult
+import com.verlintas.baic2.device.api.WebBrowser
 import com.verlintas.baic2.tools.ToolContext
 import com.verlintas.baic2.tools.ToolRegistry
 import dagger.hilt.android.AndroidEntryPoint
@@ -43,6 +44,9 @@ class DebugWebActivity : ComponentActivity() {
     @Inject
     lateinit var toolContext: ToolContext
 
+    @Inject
+    lateinit var browser: WebBrowser
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
@@ -54,6 +58,8 @@ class DebugWebActivity : ComponentActivity() {
                 .ifEmpty { intent.getStringExtra("ref")?.trim().orEmpty() }
             val handoff = intent.getBooleanExtra("handoff", false)
             val reopen = intent.getBooleanExtra("reopen", false)
+            val closeAfter = intent.getBooleanExtra("close_after", false)
+            val clearAfter = intent.getBooleanExtra("clear_after", false)
             val tool = registry.tool("web_research")
             if (tool == null) {
                 Log.e(TAG, "web_research is not registered")
@@ -97,6 +103,15 @@ class DebugWebActivity : ComponentActivity() {
                     put("url", url)
                 }
                 text += "\n\n--- REOPEN ---\n" + execute(reopenArguments)
+            }
+            if (action == "open" && closeAfter) {
+                val hideArguments = buildJsonObject { put("action", "hide") }
+                text += "\n\n--- HIDE ---\n" + execute(hideArguments)
+                val snapshotArguments = buildJsonObject { put("action", "snapshot") }
+                text += "\n\n--- AFTER HIDE ---\n" + execute(snapshotArguments)
+            }
+            if (action == "open" && clearAfter) {
+                text += "\n\n--- CLEAR ---\n" + runCatching { browser.clearData() }
             }
             File(getExternalDir(), "debug-web.txt").writeText(text)
             finish()

@@ -94,6 +94,8 @@
     <string name="settings_storage_clear_attachments_desc">Удалить кэш изображений и файлы из всех диалогов</string>
     <string name="settings_storage_clear_screenshots">Очистить скриншоты</string>
     <string name="settings_storage_clear_screenshots_desc">Удалить скриншоты, сохранённые при анализе экрана</string>
+    <string name="settings_storage_clear_web">Очистить веб-данные</string>
+    <string name="settings_storage_clear_web_desc">Удалить cookie, сеансы входа, данные форм и кэш web_research</string>
     <string name="settings_storage_clear_all">Очистить все диалоги</string>
     <string name="settings_storage_clear_all_desc">Удалить все диалоги, сообщения и записи задач</string>
     <string name="settings_storage_confirm">Это действие нельзя отменить. Продолжить?</string>

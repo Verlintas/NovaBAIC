@@ -516,6 +516,13 @@ fun StoragePage(
                 onClick = { confirm = "screenshots" },
             )
         }
+        item(key = "clear-web") {
+            SettingsRow(
+                title = stringResource(R.string.settings_storage_clear_web),
+                summary = stringResource(R.string.settings_storage_clear_web_desc),
+                onClick = { confirm = "web" },
+            )
+        }
         item(key = "clear-conversations") {
             SettingsRow(
                 title = stringResource(R.string.settings_storage_clear_all),
@@ -533,6 +540,7 @@ fun StoragePage(
                     when (action) {
                         "conversations" -> stringResource(R.string.settings_storage_clear_all)
                         "screenshots" -> stringResource(R.string.settings_storage_clear_screenshots)
+                        "web" -> stringResource(R.string.settings_storage_clear_web)
                         else -> stringResource(R.string.settings_storage_clear_attachments)
                     },
                 )
@@ -544,6 +552,7 @@ fun StoragePage(
                         when (action) {
                             "conversations" -> viewModel.clearConversations {}
                             "screenshots" -> viewModel.clearScreenshots {}
+                            "web" -> viewModel.clearWebData()
                             else -> viewModel.clearAttachments {}
                         }
                         confirm = null

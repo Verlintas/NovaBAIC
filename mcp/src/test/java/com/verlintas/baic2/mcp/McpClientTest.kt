@@ -122,6 +122,16 @@ class McpClientTest {
     }
 
     @Test
+    fun rejectsPublicCleartextEndpoint() = runTest {
+        val bad = McpServer(id = 2, name = "bad", url = "http://example.com/mcp")
+
+        val failure = client.initialize(bad).exceptionOrNull()
+
+        assertTrue(failure is java.io.IOException)
+        assertTrue(failure.message.orEmpty().contains("blocked_url"))
+    }
+
+    @Test
     fun surfacesJsonRpcErrors() = runTest {
         val session = McpSession(mcpServer(), null, "2025-03-26")
         server.enqueue(

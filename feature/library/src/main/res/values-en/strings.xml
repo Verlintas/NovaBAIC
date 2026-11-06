@@ -63,6 +63,7 @@
     <string name="library_mcp_add">Add server</string>
     <string name="library_mcp_name">Name</string>
     <string name="library_mcp_url">URL (Streamable HTTP)</string>
+    <string name="library_mcp_url_invalid">Use HTTPS, or HTTP on localhost / a private LAN</string>
     <string name="library_mcp_empty">No MCP servers yet. Add a remote MCP endpoint and its tools join the AI toolbox automatically</string>
     <string name="library_mcp_connected">Connected · %1$d tools</string>
     <string name="library_mcp_failed">Connection failed: %1$s</string>

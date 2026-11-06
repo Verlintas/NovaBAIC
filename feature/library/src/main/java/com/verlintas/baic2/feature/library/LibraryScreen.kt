@@ -103,6 +103,7 @@ import com.verlintas.baic2.core.model.CuratorRun
 import com.verlintas.baic2.core.model.McpServer
 import com.verlintas.baic2.core.model.MemoryHold
 import com.verlintas.baic2.core.model.MemoryText
+import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.core.model.Note
 import com.verlintas.baic2.core.model.NoteKind
 import com.verlintas.baic2.core.model.NoteRevision
@@ -722,6 +723,7 @@ private fun McpPage(
     if (mcpDialogOpen) {
         var name by rememberSaveable { mutableStateOf("") }
         var url by rememberSaveable { mutableStateOf("https://") }
+        val urlValid = NetworkEndpointPolicy.validateBaseUrl(url)
         AlertDialog(
             onDismissRequest = { mcpDialogOpen = false },
             title = { Text(stringResource(R.string.library_mcp_add)) },
@@ -740,6 +742,12 @@ private fun McpPage(
                         onValueChange = { url = it },
                         singleLine = true,
                         label = { Text(stringResource(R.string.library_mcp_url)) },
+                        isError = url.isNotBlank() && !urlValid,
+                        supportingText = if (url.isNotBlank() && !urlValid) {
+                            { Text(stringResource(R.string.library_mcp_url_invalid)) }
+                        } else {
+                            null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -750,7 +758,7 @@ private fun McpPage(
                         viewModel.addMcpServer(name, url)
                         mcpDialogOpen = false
                     },
-                    enabled = name.isNotBlank() && url.startsWith("http"),
+                    enabled = name.isNotBlank() && urlValid,
                 ) {
                     Text(stringResource(R.string.library_mcp_save))
                 }

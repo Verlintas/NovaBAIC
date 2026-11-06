@@ -48,8 +48,9 @@ class WebResearchTool @Inject constructor(
             "version (GitHub, X, Reddit, Zhihu…). It never sends messages, posts, orders or pays. " +
             "If a page needs login or a captcha, call 'show_to_user': it opens the same cookie " +
             "session in a foreground browser and waits for the user, then returns the post-login " +
-            "snapshot. Use 'open' with an https URL, then 'snapshot', then 'click'/'read'.",
-        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","show_to_user","hide"],"description":"browser action"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for the type action"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"}},"required":["action"]}""",
+            "snapshot. Use 'open' with an https URL, then 'snapshot', then 'click'/'read'. The " +
+            "background session closes after 5 minutes idle; 'hide' closes it immediately.",
+        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","show_to_user","hide"],"description":"browser action; hide closes the session"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for the type action"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"}},"required":["action"]}""",
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = false,
@@ -122,7 +123,7 @@ class WebResearchTool @Inject constructor(
             )
 
             "hide" -> browser.hide().fold(
-                onSuccess = { ToolResult.Success("Browser session hidden.") },
+                onSuccess = { ToolResult.Success("Browser session closed.") },
                 onFailure = { failure("hide", it) },
             )
 

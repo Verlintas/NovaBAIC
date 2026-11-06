@@ -149,6 +149,8 @@
     <string name="settings_storage_clear_attachments_desc">Delete cached images and files from all conversations</string>
     <string name="settings_storage_clear_screenshots">Clear screenshots</string>
     <string name="settings_storage_clear_screenshots_desc">Delete screenshots saved during screen analysis</string>
+    <string name="settings_storage_clear_web">Clear web data</string>
+    <string name="settings_storage_clear_web_desc">Delete cookies, sign-ins, form data and cache used by web_research</string>
     <string name="settings_storage_clear_all">Delete all conversations</string>
     <string name="settings_storage_clear_all_desc">Remove every conversation, message and task record</string>
     <string name="settings_storage_confirm">This cannot be undone. Continue?</string>

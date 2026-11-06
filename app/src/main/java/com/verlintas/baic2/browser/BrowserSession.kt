@@ -67,6 +67,8 @@ class BrowserSession(private val host: ComponentActivity) {
     private var lastUrl: String? = null
     private val ready = CompletableDeferred<Unit>()
     private val closed = AtomicBoolean(false)
+    private var idleRunnable: Runnable? = null
+    private var idlePaused = false
 
     fun start() {
         if (webView != null) return
@@ -153,9 +155,11 @@ class BrowserSession(private val host: ComponentActivity) {
                     ready.completeExceptionally(error)
                 }
         }, 700L)
+        touch()
     }
 
     suspend fun open(url: String): Result<WebSnapshot> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         lastUrl = url
@@ -171,6 +175,7 @@ class BrowserSession(private val host: ComponentActivity) {
     }
 
     suspend fun snapshot(): Result<WebSnapshot> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         val raw = evaluate(view, SNAPSHOT_JS)
@@ -179,6 +184,7 @@ class BrowserSession(private val host: ComponentActivity) {
     }
 
     suspend fun click(ref: String): Result<WebSnapshot> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         val before = withContext(Dispatchers.Main) { view.url }
@@ -199,6 +205,7 @@ class BrowserSession(private val host: ComponentActivity) {
     }
 
     suspend fun type(ref: String, text: String): Result<WebSnapshot> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         val result = evaluate(
@@ -213,6 +220,7 @@ class BrowserSession(private val host: ComponentActivity) {
     }
 
     suspend fun scroll(direction: String): Result<WebSnapshot> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         evaluate(view, "($SCROLL_JS)(${JSONObject.quote(direction)})")
@@ -221,30 +229,37 @@ class BrowserSession(private val host: ComponentActivity) {
     }
 
     suspend fun showToUser(): Result<Unit> {
+        touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
         val url = withContext(Dispatchers.Main) { view.url } ?: lastUrl
             ?: return Result.failure(IllegalStateException("no_page_to_show"))
         val deferred = CompletableDeferred<Result<Unit>>()
         handoff = deferred
-        val started = runCatching {
-            host.startActivity(
-                Intent(host, BrowserLoginActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(BrowserLoginActivity.EXTRA_URL, url),
-            )
-        }.isSuccess
-        if (!started) {
-            handoff = null
-            return Result.failure(IllegalStateException("handoff_activity_failed"))
+        pauseIdle()
+        try {
+            val started = runCatching {
+                host.startActivity(
+                    Intent(host, BrowserLoginActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra(BrowserLoginActivity.EXTRA_URL, url),
+                )
+            }.isSuccess
+            if (!started) {
+                handoff = null
+                return Result.failure(IllegalStateException("handoff_activity_failed"))
+            }
+            return withTimeoutOrNull(HANDOFF_TIMEOUT_MS) { deferred.await() }
+                ?: Result.failure(IllegalStateException("handoff_timeout"))
+        } finally {
+            resumeIdle()
         }
-        return withTimeoutOrNull(HANDOFF_TIMEOUT_MS) { deferred.await() }
-            ?: Result.failure(IllegalStateException("handoff_timeout"))
     }
 
     fun completeHandoff(cancelled: Boolean, currentUrl: String? = null) {
         val deferred = handoff ?: return
         handoff = null
+        touch()
         val reloadUrl = currentUrl?.takeIf { it.startsWith("http") }
             ?: lastUrl
             ?: webView?.url
@@ -272,8 +287,53 @@ class BrowserSession(private val host: ComponentActivity) {
         }
     }
 
+    /** Reset the idle-release timer after any browser operation. */
+    fun touch() {
+        main.post {
+            if (closed.get() || idlePaused) return@post
+            scheduleIdle()
+        }
+    }
+
+    private fun scheduleIdle() {
+        idleRunnable?.let { main.removeCallbacks(it) }
+        val runnable = Runnable {
+            if (closed.get() || idlePaused) return@Runnable
+            Log.i(TAG, "idle release")
+            runCatching { host.finish() }
+        }
+        idleRunnable = runnable
+        main.postDelayed(runnable, IDLE_TIMEOUT_MS)
+    }
+
+    private fun pauseIdle() {
+        main.post {
+            idlePaused = true
+            idleRunnable?.let { main.removeCallbacks(it) }
+            idleRunnable = null
+        }
+    }
+
+    private fun resumeIdle() {
+        main.post {
+            idlePaused = false
+            if (!closed.get()) scheduleIdle()
+        }
+    }
+
+    suspend fun clearCache() = withContext(Dispatchers.Main) {
+        webView?.clearCache(true)
+        webView?.clearHistory()
+        webView?.clearFormData()
+    }
+
     fun close() {
         if (!closed.compareAndSet(false, true)) return
+        idlePaused = true
+        idleRunnable?.let { main.removeCallbacks(it) }
+        idleRunnable = null
+        // Keep login cookies across a session release.
+        runCatching { CookieManager.getInstance().flush() }
         runCatching { presentation?.dismiss() }
         runCatching { webView?.destroy() }
         runCatching { virtualDisplay?.release() }
@@ -334,6 +394,7 @@ class BrowserSession(private val host: ComponentActivity) {
         const val PAGE_TIMEOUT_MS = 35_000L
         const val NAV_TIMEOUT_MS = 8_000L
         const val HANDOFF_TIMEOUT_MS = 5 * 60_000L
+        const val IDLE_TIMEOUT_MS = 5 * 60_000L
 
         const val SNAPSHOT_JS = """
             (function() {

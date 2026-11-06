@@ -63,6 +63,7 @@
     <string name="library_mcp_add">添加服务器</string>
     <string name="library_mcp_name">名称</string>
     <string name="library_mcp_url">地址（Streamable HTTP）</string>
+    <string name="library_mcp_url_invalid">仅支持 HTTPS，或 localhost / 私有局域网的 HTTP</string>
     <string name="library_mcp_empty">还没有 MCP 服务器。添加远程 MCP 端点后，它的工具会自动并入 AI 的工具箱</string>
     <string name="library_mcp_connected">已连接 · %1$d 个工具</string>
     <string name="library_mcp_failed">连接失败：%1$s</string>

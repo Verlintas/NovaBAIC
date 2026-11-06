@@ -149,6 +149,8 @@
     <string name="settings_storage_clear_attachments_desc">删除所有对话中缓存的图片与文件</string>
     <string name="settings_storage_clear_screenshots">清理截图</string>
     <string name="settings_storage_clear_screenshots_desc">删除 AI 分析屏幕时保存的截图</string>
+    <string name="settings_storage_clear_web">清除网页数据</string>
+    <string name="settings_storage_clear_web_desc">删除 web_research 的 Cookie、登录状态、表单数据和缓存</string>
     <string name="settings_storage_clear_all">清空全部对话</string>
     <string name="settings_storage_clear_all_desc">删除全部会话、消息与任务记录</string>
     <string name="settings_storage_confirm">此操作不可撤销，确定继续吗？</string>
