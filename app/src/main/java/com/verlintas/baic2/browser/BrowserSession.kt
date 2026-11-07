@@ -214,7 +214,7 @@ class BrowserSession(private val host: ComponentActivity) {
 
             "ok" -> Unit
             "blocked" -> return Result.failure(
-                IllegalStateException("blocked_read_only: ${result.optString("reason")}"),
+                IllegalStateException("action_blocked: ${result.optString("reason")}"),
             )
             "stale" -> return Result.failure(IllegalStateException("element_stale: take a fresh snapshot"))
             "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
@@ -235,7 +235,7 @@ class BrowserSession(private val host: ComponentActivity) {
         when (result?.optString("status")) {
             "ok" -> Unit
             "blocked" -> return Result.failure(
-                IllegalStateException("blocked_read_only: ${result.optString("reason")}"),
+                IllegalStateException("action_blocked: ${result.optString("reason")}"),
             )
             "stale" -> return Result.failure(IllegalStateException("element_stale: take a fresh snapshot"))
             "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
@@ -269,7 +269,7 @@ class BrowserSession(private val host: ComponentActivity) {
             when (guard?.optString("status")) {
                 "ok" -> Unit
                 "blocked" -> return Result.failure(
-                    IllegalStateException("blocked_read_only: ${guard.optString("reason")}"),
+                    IllegalStateException("action_blocked: ${guard.optString("reason")}"),
                 )
                 else -> return Result.failure(IllegalStateException("key_guard_failed"))
             }
@@ -870,15 +870,6 @@ class BrowserSession(private val host: ComponentActivity) {
               if (tag === 'input' && type === 'file') {
                 return JSON.stringify({status: 'blocked', reason: 'file upload is not supported'});
               }
-              var label = '';
-              if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-                label = String(el.getAttribute('aria-label') || el.getAttribute('placeholder') ||
-                  el.getAttribute('title') || el.name || el.id || el.value || '');
-              } else {
-                label = String(el.innerText || el.getAttribute('aria-label') ||
-                  el.getAttribute('title') || el.getAttribute('alt') || '');
-              }
-              var danger = /(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|unfollow|unlike|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i;
               if (tag === 'a' && el.href) {
                 if (el.download) {
                   return JSON.stringify({status: 'blocked', reason: 'downloads are not supported'});
@@ -892,16 +883,9 @@ class BrowserSession(private val host: ComponentActivity) {
                 if (!/^https?:/i.test(el.href)) {
                   return JSON.stringify({status: 'blocked', reason: 'unsupported link scheme'});
                 }
-                var actionLink = /([?&](action|do|cmd|op)=(like|unlike|follow|unfollow|vote|favorite|subscribe|unsubscribe|delete|remove|report|block|logout|signout))|(\/(like|unlike|follow|unfollow|vote|favorite|subscribe|unsubscribe|delete|remove|report|block|logout|signout)(\/|\?|#|$))/i;
-                if (actionLink.test(el.href)) {
-                  return JSON.stringify({status: 'blocked', reason: 'state-changing link'});
-                }
                 // Load links from the host so the WebView records back/forward
                 // history; JS el.click() can replace the current entry.
                 return JSON.stringify({status: 'navigate', url: el.href});
-              }
-              if (danger.test(label)) {
-                return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + label});
               }
               el.scrollIntoView({block: 'center', inline: 'center'});
               el.focus();
@@ -990,35 +974,9 @@ class BrowserSession(private val host: ComponentActivity) {
             (function() {
               var el = document.activeElement;
               if (!el) return JSON.stringify({status: 'ok'});
-              var tag = el.tagName.toLowerCase();
               var type = (el.getAttribute('type') || '').toLowerCase();
               if (type === 'password') {
-                return JSON.stringify({status: 'blocked', reason: 'password field; use show_to_user'});
-              }
-              if (tag === 'textarea' || el.isContentEditable) {
-                return JSON.stringify({status: 'blocked', reason: 'draft editor'});
-              }
-              var form = el.form || (el.closest ? el.closest('form') : null);
-              if (form) {
-                if (form.querySelector('input[type="password"]')) {
-                  return JSON.stringify({status: 'blocked', reason: 'password form; use show_to_user'});
-                }
-                if (form.querySelector('textarea,[contenteditable="true"]')) {
-                  return JSON.stringify({status: 'blocked', reason: 'draft form'});
-                }
-                var submit = form.querySelector('button[type="submit"],input[type="submit"],button:not([type])');
-                if (submit) {
-                  var label = String(submit.innerText || submit.value || submit.getAttribute('aria-label') || '');
-                  if (/(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i.test(label)) {
-                    return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + label});
-                  }
-                }
-              }
-              if (tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'button'))) {
-                var buttonLabel = String(el.innerText || el.value || el.getAttribute('aria-label') || '');
-                if (/(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i.test(buttonLabel)) {
-                  return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + buttonLabel});
-                }
+                return JSON.stringify({status: 'blocked', reason: 'password_handoff'});
               }
               return JSON.stringify({status: 'ok'});
             })()
