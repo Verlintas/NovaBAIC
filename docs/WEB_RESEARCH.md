@@ -1,7 +1,7 @@
 # Web research / 内置浏览器
 
-> 状态：GitHub 搜索 MVP + 登录 handoff + 会话回收/清除 + SPA `wait` 已验证（`wait` 用本地延迟渲染页；HN/Reddit 真站待回归）；X 登录被 X 拦截
-> 最后更新：2026-11-06
+> 状态：通用只读 Web Agent v2（shadow DOM / 同源 iframe / press / select / check / 前进后退 / network / 状态提示）已在模拟器验证；GitHub 等公开站点与登录 handoff 已真机验证；HN/Reddit 真站待回归；X 登录被 X 拦截
+> 最后更新：2026-11-07
 > 目标版本：0.5.0
 >
 > 这是通用能力：登录 handoff 使用每个用户自己的账号，不保存密码，不依赖维护者账号或单一设备；设置 → 存储可清除网页数据。平台支持以本文矩阵为准，不承诺所有站点。
@@ -16,6 +16,7 @@
 - 网页端有 DOM：文本、链接、输入框、按钮、`aria-label` 都是结构化的，选择器比 OCR 坐标稳定得多。
 - 浏览器是我们自己的 Activity / WebView，不需要把别人的 App 塞进虚拟屏，也不需要 `am start --display`。
 - 登录 / 验证码可以自然交还前台：同一个会话、同一份 Cookie，用户完成后再回到后台。
+- 不做平台白名单：通用 DOM / 键盘 / 表单 / 历史 / network 能力 + 状态提示，让模型自己决定怎么用；平台矩阵只是回归样例。
 
 ## 2. 已验证的原型与 MVP
 
@@ -50,17 +51,32 @@ DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
 
 ```text
 web_research open(url)
-web_research snapshot()          # 页面文本 + 可交互元素 + 稳定 ref
+web_research snapshot()          # 页面文本 + 可交互元素 + 稳定 ref + 状态/滚动/frame
+web_research read()              # article/main 正文提取
 web_research click(ref)
 web_research type(ref, text)
-web_research scroll(up|down)
+web_research press(key)          # Enter / Tab / Escape / 方向键等
+web_research select(ref, option)
+web_research check(ref, checked?)
+web_research scroll(up|down, ref?)  # ref = 内部滚动容器
 web_research wait(text|ref, timeout_ms)  # 等待 SPA 结果出现
-web_research read()
+web_research back() / forward() / reload()
+web_research network()           # 最近 fetch/XHR/API URL
 web_research show_to_user()      # 把当前会话交给前台，用户登录/过验证码
 web_research hide()
 ```
 
 实现上不需要把动作暴露给模型做坐标点击：工具内部用 DOM 选择器和 ref 完成，模型只看到结构化结果。
+
+### 通用能力
+
+- **不是平台白名单**：只要站点能在标准 WebView 里打开，模型就可以用同一组动作浏览；下面的平台矩阵只是回归样例。
+- **DOM 覆盖**：开放 shadow DOM、同源 iframe、链接/按钮/输入/select/checkbox/radio/contenteditable；跨域 iframe 只列出 URL。
+- **自动等待**：open/click/type/back/forward/reload 后按 `document.readyState` + 文本/节点数稳定等待，SPA 不再依赖固定 sleep；仍可用 `wait` 等异步结果。
+- **真实按键**：`press` 走 `WebView.dispatchKeyEvent`，Enter 可提交搜索表单；`type` 只写值，不自动提交。
+- **状态提示**：`READY / LOGIN_REQUIRED / CAPTCHA / CONSENT_REQUIRED / BLOCKED / EMPTY`，并给出下一步建议。
+- **只读守卫**：普通链接导航允许；按钮/Enter/GET 链接命中 send/post/buy/delete/follow 等词或路径时返回 `Denied`。这是 best-effort，不是浏览器沙箱。
+- **跨域 iframe / closed shadow root**：不可读 DOM，只给出来源；需要时直接 `open` iframe 的 URL。
 
 ### snapshot 返回什么
 
@@ -135,7 +151,17 @@ web_research tool
 | X | `x.com/search?q=...` | ❌ WebView 登录被 X 拦截（Google OAuth 白屏；密码登录返回 not allowed） |
 | HN Algolia | `hn.algolia.com/?query=...` | ⚠️ SPA 结果未进入首屏快照；`wait` 可等待结果（待 HN 回归） |
 
-说明：`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
+说明：矩阵是回归样例，不是支持白名单；通用能力见第 3 节。`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
+
+### 5.2 通用能力回归（API 35 模拟器，本地页面）
+
+- shadow DOM 按钮、同源 iframe 链接：snapshot 可见，click 可执行。
+- 搜索表单：type + press Enter 提交到 `/search.html?q=openai`；wait 匹配结果页。
+- checkbox / select：check 后 `(checked)`，select 后 `value=Two`；back 后状态保留。
+- 链接 click → back → forward → reload；read 提取 article 正文，忽略 nav/footer。
+- network：列出 `/api/data.json`；wait：匹配 1.5s 后出现的 `Delayed result`。
+- 状态：login/captcha/consent/blocked 分别输出 `LOGIN_REQUIRED / CAPTCHA / CONSENT_REQUIRED / BLOCKED`。
+- 只读守卫：点击 `Post` 返回 `DENIED: web_research is read-only: state-changing control: Post`。
 
 ## 6. 风险
 
@@ -144,6 +170,8 @@ web_research tool
 - **账号风险**：自动化操作可能触发平台风控；默认低频、只读、可随时停止。
 - **安全**：浏览器里有登录态；App 共享 WebView profile，可一键清除，不保存密码；不把 Cookie 写进模型上下文。
 - **WebView 兼容性**：部分站点要求 Chrome 内核/DRM；必要时只把前台 handoff 交给 Custom Tabs，后台自动化仍用 WebView。
+- **只读守卫边界**：守卫按按钮/Enter 的可见标签、表单结构和 GET 链接路径判断，不是浏览器沙箱；无标签图标按钮或页面脚本自动提交仍可能绕过。工具描述、`Denied` 提示和用户确认共同约束。
+- **DOM 边界**：开放 shadow DOM 和同源 iframe 可读；closed shadow root、跨域 iframe 只能列出来源，不能读内容。
 - **平台条款**：只做用户授权范围内的读取；不承诺绕过任何平台限制。
 
 ## 7. 非目标
@@ -155,8 +183,8 @@ web_research tool
 
 ## 8. 下一步
 
-1. `wait` 已落地；用 HN Algolia / 新版 Reddit 做真实站点回归。
+1. 通用 Web Agent v2 已落地（shadow/iframe/press/select/check/history/network/state/read-only guard）；继续用 HN / 新版 Reddit 做真站回归。
 2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号，不依赖维护者登录。
 3. Stack Overflow 人机验证 handoff 回归。
 4. X 用 API token 或已有会话；不重试 WebView 登录。
-5. 平台回归完成后收 0.5.0。
+5. 平台回归完成后收 0.5.0；不把维护者账号/单一设备作为发布门槛。

@@ -27,6 +27,25 @@ data class WebElement(
     val tag: String,
     val href: String? = null,
     val editable: Boolean = false,
+    val inputType: String = "",
+    val disabled: Boolean = false,
+    val checked: Boolean = false,
+    val value: String? = null,
+    val frameUrl: String? = null,
+)
+
+/** An iframe visible on the page; cross-origin frames cannot be read as DOM. */
+data class WebFrame(
+    val url: String,
+    val sameOrigin: Boolean,
+)
+
+/** A resource request observed through the Web Performance API. */
+data class WebResource(
+    val url: String,
+    val type: String,
+    val durationMs: Long = 0,
+    val bytes: Long = 0,
 )
 
 /** A compact view of the current page plus stable element refs. */
@@ -35,6 +54,13 @@ data class WebSnapshot(
     val title: String,
     val text: String,
     val elements: List<WebElement>,
+    val frames: List<WebFrame> = emptyList(),
+    val scrollY: Int = 0,
+    val scrollHeight: Int = 0,
+    val viewportHeight: Int = 0,
+    val hasPasswordField: Boolean = false,
+    val hasCaptchaFrame: Boolean = false,
+    val hasConsentBanner: Boolean = false,
 )
 
 /** The snapshot after a wait, plus whether the requested condition appeared. */
@@ -57,13 +83,35 @@ interface WebBrowser {
 
     suspend fun type(ref: String, text: String): Result<WebSnapshot>
 
-    suspend fun scroll(direction: String): Result<WebSnapshot>
+    /** Dispatch a real key event to the focused element (Enter, Tab, Escape…). */
+    suspend fun press(key: String): Result<WebSnapshot>
+
+    /** Choose an option in a native <select>. */
+    suspend fun selectOption(ref: String, option: String): Result<WebSnapshot>
+
+    /** Set a checkbox/radio; null toggles it. */
+    suspend fun setChecked(ref: String, checked: Boolean?): Result<WebSnapshot>
+
+    /** Scroll the window, or the scrollable container referenced by [ref]. */
+    suspend fun scroll(direction: String, ref: String? = null): Result<WebSnapshot>
 
     /**
      * Poll until [text] appears in the page text or [ref] exists, then return
      * a snapshot. [timeoutMs] is clamped by the implementation.
      */
     suspend fun waitFor(text: String?, ref: String?, timeoutMs: Long): Result<WebWaitResult>
+
+    suspend fun back(): Result<WebSnapshot>
+
+    suspend fun forward(): Result<WebSnapshot>
+
+    suspend fun reload(): Result<WebSnapshot>
+
+    /** Article-focused text, ignoring nav/footer when possible. */
+    suspend fun readArticle(): Result<WebSnapshot>
+
+    /** Recent fetch/XHR/API resources observed by the page. */
+    suspend fun resources(): Result<List<WebResource>>
 
     /** Bring the same session to the phone for login or a captcha. */
     suspend fun showToUser(): Result<Unit>
