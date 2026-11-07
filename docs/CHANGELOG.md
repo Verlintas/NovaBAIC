@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## [0.5.0-alpha] - 2026-11-02
 
-> 0.5.0 包含两块：应用自有虚拟屏 + WebView 的只读网页研究，以及用户可管理的对话模式。网页研究不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB；GitHub 搜索 MVP 已在真机验证。
+> 0.5.0 包含两块：应用自有虚拟屏 + WebView 的通用网页研究（默认只读，状态变更由模型按用户意图判断），以及用户可管理的对话模式。网页研究不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB；GitHub 搜索 MVP 已在真机验证。
 
 ### 新增 Added
 
@@ -21,12 +21,17 @@ All notable changes to this project are documented in this file.
   - 新增 `press`（Enter/Tab/Escape/方向键等）、`select`、`check`、`back` / `forward` / `reload`、`network`（fetch/XHR/API URL）和正文提取 `read`；
   - 导航和操作后按 DOM 稳定自动等待，SPA 不再依赖固定 sleep；
   - 输出 `State: READY / LOGIN_REQUIRED / CAPTCHA / CONSENT_REQUIRED / BLOCKED / EMPTY` 及下一步提示；
-  - 只读守卫：按钮/Enter/GET 链接命中发送、发布、购买、删除、关注等 state-changing 词或路径时返回 `Denied`；普通链接导航仍允许。
+  - 模型判断：端侧不再对按钮/GET 链接做正则硬拦；是否发送、发布、关注等由模型根据用户意图决定。
+
 - **用户可管理的对话模式**（PR #4）：设置 → 模式支持新建、编辑、删除和恢复 stock 模式；每个模式可配置工具权限（无 / 只读 / 全部）、逐次确认、运行预算、长任务协议和附加 prompt。聊天顶部芯片与模式选择器显示当前权限；「完全同意」与逐次确认互斥。
 
 ### 修复 Fixed
 
 - **模式编辑器一致性**：逐次确认与「完全同意」改为双向互斥；打开逐次确认时会自动关闭完全同意，避免界面显示与实际保存不一致。旧配置在读取时自动归一化。
+
+### 变更 Changed
+
+- **Web Agent 端侧策略**：移除按钮/GET 链接的只读正则拦截，改由模型根据用户请求判断是否执行状态变更操作；密码仍交给 `show_to_user`，文件上传/下载仍不支持。
 
 ### 测试 Tests
 
@@ -36,7 +41,7 @@ All notable changes to this project are documented in this file.
 - 全量 `test` / `lintDebug` / `assembleDebug` / `assembleRelease`、58 工具 schema、许可证头、字符串同步通过；DB 21→22 迁移已用 `21.json` 建库模拟验证。
 - 新增 `WebFetcherPolicyTest`（公网/私网 URL）与 `McpClientTest` 公网明文拒绝用例。
 - 模拟器本地延迟渲染页：`open` 后正文为 `loading`；`wait text="Delayed result"` 约 2.2s 匹配并返回渲染后的链接；超时返回当前页面。
-- 模拟器本地 Web Agent 套件：shadow DOM、同源 iframe、搜索表单 Enter、checkbox/select、链接前进/后退/reload、文章正文提取、network 资源、wait、登录/验证码/consent/blocked 状态、Post 按钮只读拒绝均通过。
+- 模拟器本地 Web Agent 套件：shadow DOM、同源 iframe、搜索表单 Enter、checkbox/select、链接前进/后退/reload、文章正文提取、network 资源、wait、登录/验证码/consent/blocked 状态均通过；状态变更控件不再端侧硬拦（Post 由模型决定时执行），密码输入仍交给 show_to_user。
 
 ### 已知限制 Known limitations
 
@@ -44,7 +49,7 @@ All notable changes to this project are documented in this file.
 - 登录/验证码 handoff 已用公开测试站验证（登录后后台读到 Secure Area）；真实站点的 OAuth/反爬限制由站点决定，不绕过。
 - MVP 先覆盖公开 GitHub 搜索；X / Reddit / 知乎需要各自验证登录与反爬行为。
 - 平台支持以 `docs/WEB_RESEARCH.md` 的矩阵为准；部分站点会拒绝 WebView 登录或要求人工验证，工具不绕过。
-- 只读守卫是 best-effort，不是浏览器沙箱；无标签图标按钮或页面脚本自动提交仍可能绕过，工具描述和 `Denied` 提示共同约束。
+- 模型判断边界：端侧不做“哪些按钮能点”的正则硬拦；网页内容可能诱导模型点击状态变更控件，需靠工具描述、用户意图和确认机制约束。
 - 跨域 iframe 只能列出 URL，不能读 DOM；需要时用 `open` 打开 iframe URL。开放 shadow DOM 可读，closed shadow root 不可读。
 - WebView 后台节流和按站点 Cookie 隔离仍未做；`web_research` 页面共享一个 App WebView profile，可在设置 → 存储一键清除。
 - 全局 `cleartextTrafficPermitted` 仍保留；Agent Base URL / MCP 由 `NetworkEndpointPolicy` 限制，`web_read` 使用 public-host + DNS SSRF 策略（允许公网 HTTP，拒绝私网/回环）。
