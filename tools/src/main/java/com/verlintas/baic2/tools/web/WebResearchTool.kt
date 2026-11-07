@@ -23,18 +23,22 @@ import com.verlintas.baic2.core.model.DangerLevel
 import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.core.model.ToolSpec
 import com.verlintas.baic2.device.api.WebBrowser
+import com.verlintas.baic2.device.api.WebResource
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.tools.DeviceTool
 import com.verlintas.baic2.tools.ToolContext
 import javax.inject.Inject
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
 /**
- * Read-only web research in an app-owned background browser. Unlike
- * app_research, this does not depend on another app's accessibility tree: it
- * reads the page DOM and clicks stable refs.
+ * Read-only research in an app-owned background browser. The goal is a small
+ * general-purpose web agent, not a set of site-specific connectors: stable
+ * DOM refs, shadow DOM and same-origin iframes, client-render settling, native
+ * keys, selects/checkboxes, history, network hints and a best-effort read-only
+ * guard for state-changing controls.
  */
 class WebResearchTool @Inject constructor(
     private val browser: WebBrowser,
@@ -43,18 +47,20 @@ class WebResearchTool @Inject constructor(
     override val spec = ToolSpec(
         name = "web_research",
         untrustedOutput = true,
-        description = "Read-only research in a background web browser. Open a web page, take a " +
-            "DOM snapshot with stable element refs (w1, w2…), click a ref, type into an input, " +
-            "scroll, or wait for client-rendered results. Prefer this over app_research when the " +
-            "site has a public web version that works in a standard WebView; platform support " +
-            "varies, and some sites refuse WebView login or require human verification. It never " +
-            "sends messages, posts, orders or pays. If a page needs login or a captcha, call " +
-            "'show_to_user': it opens the same cookie session in a foreground browser and waits " +
-            "for the user, then returns the post-login snapshot; the login is the user's own and " +
-            "credentials are never stored. Use 'open' with an https URL, then 'snapshot', then " +
-            "'click'/'read'; use 'wait' with text or ref for SPA results. The background session " +
-            "closes after 5 minutes idle; 'hide' closes it immediately.",
-        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","scroll","wait","show_to_user","hide"],"description":"browser action; wait needs text or ref; hide closes the session"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for type, or the text to wait for"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"},"timeout_ms":{"type":"integer","description":"wait timeout in ms, 500-15000, default 5000"}},"required":["action"]}""",
+        description = "Read-only research in a general-purpose background web browser. Snapshot " +
+            "returns visible text plus stable refs (w1, w2…) for links, buttons, inputs, selects, " +
+            "checkboxes, open shadow DOM and same-origin iframes. Actions: open, snapshot, read " +
+            "(article text), click, type, press (Enter/Tab/Escape/arrows…), select, check, scroll, " +
+            "wait (text or ref), back, forward, reload, network (recent fetch/XHR/API URLs), " +
+            "show_to_user and hide. Navigation/actions wait for the document to settle, so SPAs " +
+            "usually need no manual sleep. This is a read-only tool: the click/Enter/GET-link " +
+            "guard refuses obvious state-changing controls, and it does not submit messages, " +
+            "posts, orders or payments. If a page needs login or " +
+            "a captcha, call 'show_to_user': it opens the same cookie session in a foreground " +
+            "browser and waits for the user, then returns the post-login snapshot; the login is " +
+            "the user's own and credentials are never stored. The background session closes " +
+            "after 5 minutes idle; 'hide' closes it immediately.",
+        parametersJson = """{"type":"object","properties":{"action":{"type":"string","enum":["open","snapshot","read","click","type","press","select","check","scroll","wait","back","forward","reload","network","show_to_user","hide"],"description":"browser action; hide closes the session"},"url":{"type":"string","description":"https URL for open; HTTP is only accepted for localhost/private LAN"},"ref":{"type":"string","description":"element ref from a snapshot, e.g. w3"},"text":{"type":"string","description":"text for type, or the text to wait for"},"key":{"type":"string","description":"key for press: Enter, Tab, Escape, ArrowDown, ArrowUp, PageDown, PageUp, Home, End, Backspace"},"option":{"type":"string","description":"option label or value for select"},"checked":{"type":"boolean","description":"true/false for check; omit to toggle"},"direction":{"type":"string","enum":["up","down"],"description":"scroll direction, default down"},"timeout_ms":{"type":"integer","description":"wait timeout in ms, 500-15000, default 5000"}},"required":["action"]}""",
         readOnly = true,
         danger = DangerLevel.LOW,
         parallelSafe = false,
@@ -78,7 +84,7 @@ class WebResearchTool @Inject constructor(
                 onFailure = { failure("snapshot", it) },
             )
 
-            "read" -> browser.snapshot().fold(
+            "read" -> browser.readArticle().fold(
                 onSuccess = { ToolResult.Success(format(it, includeElements = false)) },
                 onFailure = { failure("read", it) },
             )
@@ -88,7 +94,7 @@ class WebResearchTool @Inject constructor(
                 if (ref.isEmpty()) return ToolResult.Failure("Missing 'ref' for click.")
                 browser.click(ref).fold(
                     onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
-                    onFailure = { failure("click $ref", it) },
+                    onFailure = { actionFailure("click $ref", it) },
                 )
             }
 
@@ -98,14 +104,46 @@ class WebResearchTool @Inject constructor(
                 if (ref.isEmpty()) return ToolResult.Failure("Missing 'ref' for type.")
                 browser.type(ref, text).fold(
                     onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
-                    onFailure = { failure("type $ref", it) },
+                    onFailure = { actionFailure("type $ref", it) },
+                )
+            }
+
+            "press" -> {
+                val key = (arguments["key"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                if (key.isEmpty()) return ToolResult.Failure("Missing 'key' for press.")
+                browser.press(key).fold(
+                    onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                    onFailure = { actionFailure("press $key", it) },
+                )
+            }
+
+            "select" -> {
+                val ref = (arguments["ref"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                val option = (arguments["option"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                if (ref.isEmpty() || option.isEmpty()) {
+                    return ToolResult.Failure("Missing 'ref' or 'option' for select.")
+                }
+                browser.selectOption(ref, option).fold(
+                    onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                    onFailure = { failure("select $ref", it) },
+                )
+            }
+
+            "check" -> {
+                val ref = (arguments["ref"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                if (ref.isEmpty()) return ToolResult.Failure("Missing 'ref' for check.")
+                val checked = (arguments["checked"] as? JsonPrimitive)?.booleanOrNull
+                browser.setChecked(ref, checked).fold(
+                    onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                    onFailure = { failure("check $ref", it) },
                 )
             }
 
             "scroll" -> {
                 val direction = (arguments["direction"] as? JsonPrimitive)?.content
                     ?.trim()?.lowercase()?.takeIf { it == "up" || it == "down" } ?: "down"
-                browser.scroll(direction).fold(
+                val ref = (arguments["ref"] as? JsonPrimitive)?.content?.trim().orEmpty()
+                browser.scroll(direction, ref.takeIf { it.isNotEmpty() }).fold(
                     onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
                     onFailure = { failure("scroll", it) },
                 )
@@ -136,6 +174,26 @@ class WebResearchTool @Inject constructor(
                 )
             }
 
+            "back" -> browser.back().fold(
+                onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                onFailure = { failure("back", it) },
+            )
+
+            "forward" -> browser.forward().fold(
+                onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                onFailure = { failure("forward", it) },
+            )
+
+            "reload" -> browser.reload().fold(
+                onSuccess = { ToolResult.Success(format(it, includeElements = true)) },
+                onFailure = { failure("reload", it) },
+            )
+
+            "network" -> browser.resources().fold(
+                onSuccess = { ToolResult.Success(formatResources(it)) },
+                onFailure = { failure("network", it) },
+            )
+
             "show_to_user" -> browser.showToUser().fold(
                 onSuccess = {
                     browser.snapshot().fold(
@@ -157,24 +215,44 @@ class WebResearchTool @Inject constructor(
             )
 
             else -> ToolResult.Failure(
-                "Unknown action '$action'. Use open|snapshot|read|click|type|scroll|wait|show_to_user|hide.",
+                "Unknown action '$action'. Use open|snapshot|read|click|type|press|select|check|" +
+                    "scroll|wait|back|forward|reload|network|show_to_user|hide.",
             )
         }
     }
 
     private fun format(snapshot: WebSnapshot, includeElements: Boolean): String = buildString {
+        val state = WebPageStateDetector.detect(snapshot)
         append("URL: ").append(snapshot.url).append('\n')
         append("Title: ").append(snapshot.title).append('\n')
+        append("State: ").append(state.name).append('\n')
+        stateHint(state)?.let { append("Hint: ").append(it).append('\n') }
+        if (snapshot.scrollHeight > snapshot.viewportHeight && snapshot.viewportHeight > 0) {
+            append("Scroll: ").append(snapshot.scrollY).append('/').append(snapshot.scrollHeight)
+            append(" (viewport ").append(snapshot.viewportHeight).append(")\n")
+        }
+        if (snapshot.frames.isNotEmpty()) {
+            append("Frames:\n")
+            snapshot.frames.take(5).forEach { frame ->
+                append("- ").append(if (frame.sameOrigin) "same-origin " else "cross-origin ")
+                append(frame.url.take(200)).append('\n')
+            }
+        }
         if (includeElements) {
             append("\nInteractive elements (").append(snapshot.elements.size).append("):\n")
-            snapshot.elements.take(60).forEach { element ->
+            snapshot.elements.take(80).forEach { element ->
                 append("- ").append(element.ref)
                 append(" [").append(element.tag)
+                if (element.inputType.isNotBlank()) append(':').append(element.inputType)
                 if (element.role.isNotBlank()) append('/').append(element.role)
                 append("] ")
-                append(element.label.ifBlank { "(no label)" }.take(120))
+                append(element.label.ifBlank { "(no label)" }.take(140))
+                element.value?.let { if (it.isNotBlank()) append(" value=").append(it.take(80)) }
                 element.href?.let { append(" -> ").append(it.take(200)) }
                 if (element.editable) append("  (editable)")
+                if (element.disabled) append("  (disabled)")
+                if (element.checked) append("  (checked)")
+                element.frameUrl?.let { append("  (frame: ").append(it.take(120)).append(')') }
                 append('\n')
             }
         }
@@ -186,6 +264,48 @@ class WebResearchTool @Inject constructor(
         }
         append("\n\nRead-only: no message, post, like, follow, order or payment was made.")
     }.trimEnd()
+
+    private fun formatResources(resources: List<WebResource>): String = buildString {
+        append("Recent fetch/XHR/API resources (newest first):\n")
+        if (resources.isEmpty()) {
+            append("(none captured)\n")
+        } else {
+            resources.take(25).forEach { resource ->
+                append("- [").append(resource.type.ifBlank { "resource" }).append("] ")
+                append(resource.url.take(300))
+                val details = buildList {
+                    if (resource.durationMs > 0) add("${resource.durationMs}ms")
+                    if (resource.bytes > 0) add("${resource.bytes}B")
+                }
+                if (details.isNotEmpty()) append(" (").append(details.joinToString(", ")).append(')')
+                append('\n')
+            }
+        }
+        append("\nHint: open a JSON/API URL directly to read its response.")
+    }.trimEnd()
+
+    private fun stateHint(state: WebPageState): String? = when (state) {
+        WebPageState.READY -> null
+        WebPageState.LOGIN_REQUIRED ->
+            "Login required. Call show_to_user so the user can sign in; do not type credentials."
+        WebPageState.CAPTCHA ->
+            "Captcha or human verification. Call show_to_user; do not bypass the challenge."
+        WebPageState.CONSENT_REQUIRED ->
+            "A consent banner is present. Click its accept/close control if the page needs it."
+        WebPageState.BLOCKED ->
+            "The site refused the request. Try another source or hand off to the user."
+        WebPageState.EMPTY ->
+            "The page looks empty; it may still be loading. Use wait or snapshot again."
+    }
+
+    private fun actionFailure(action: String, error: Throwable): ToolResult {
+        val message = error.message.orEmpty()
+        if (message.startsWith("blocked_read_only:")) {
+            val reason = message.removePrefix("blocked_read_only:").trim()
+            return ToolResult.Denied("web_research is read-only: $reason")
+        }
+        return failure(action, error)
+    }
 
     private fun failure(action: String, error: Throwable): ToolResult.Failure =
         ToolResult.Failure(

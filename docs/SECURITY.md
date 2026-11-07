@@ -89,8 +89,12 @@ reviewer can check them against `AgentLoop.kt`, `ConfirmationQueue.kt`,
   foreground WebView and shares the app cookie profile; BAIC2 never reads or
   stores the password, and the login belongs to the user, not a maintainer or
   service account. Settings → Storage can clear cookies, WebStorage, form
-  data and the WebView cache. The read-only tool never sends, posts, orders or
-  pays.
+  data and the WebView cache. The tool's read-only guard refuses buttons,
+  Enter presses, and GET links whose visible label/form/path looks like send/
+  post/buy/delete/follow, while ordinary links and search remain usable; it is
+  best-effort and not a browser sandbox. Open shadow roots and same-origin iframes are readable;
+  cross-origin iframes and closed shadow roots only expose their URL. The
+  `network` action lists resource URLs, not response bodies or cookies.
 - **Location privacy.** Location is on-demand by default: `get_location` reads
   the last known fix and never starts background tracking, and the tool writes
   nothing to the database. Reverse geocoding is fully offline against a

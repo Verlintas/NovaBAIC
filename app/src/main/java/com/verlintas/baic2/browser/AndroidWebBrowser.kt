@@ -27,6 +27,7 @@ import android.webkit.WebView
 import android.webkit.WebViewDatabase
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebBrowser
+import com.verlintas.baic2.device.api.WebResource
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.device.api.WebWaitResult
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -75,9 +76,40 @@ class AndroidWebBrowser @Inject constructor(
             ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
     }
 
-    override suspend fun scroll(direction: String): Result<WebSnapshot> = mutex.withLock {
-        session()?.scroll(direction)
-            ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
+    override suspend fun press(key: String): Result<WebSnapshot> = mutex.withLock {
+        session()?.press(key) ?: noSession()
+    }
+
+    override suspend fun selectOption(ref: String, option: String): Result<WebSnapshot> = mutex.withLock {
+        session()?.selectOption(ref, option) ?: noSession()
+    }
+
+    override suspend fun setChecked(ref: String, checked: Boolean?): Result<WebSnapshot> = mutex.withLock {
+        session()?.setChecked(ref, checked) ?: noSession()
+    }
+
+    override suspend fun scroll(direction: String, ref: String?): Result<WebSnapshot> = mutex.withLock {
+        session()?.scroll(direction, ref) ?: noSession()
+    }
+
+    override suspend fun back(): Result<WebSnapshot> = mutex.withLock {
+        session()?.back() ?: noSession()
+    }
+
+    override suspend fun forward(): Result<WebSnapshot> = mutex.withLock {
+        session()?.forward() ?: noSession()
+    }
+
+    override suspend fun reload(): Result<WebSnapshot> = mutex.withLock {
+        session()?.reload() ?: noSession()
+    }
+
+    override suspend fun readArticle(): Result<WebSnapshot> = mutex.withLock {
+        session()?.readArticle() ?: noSession()
+    }
+
+    override suspend fun resources(): Result<List<WebResource>> = mutex.withLock {
+        session()?.resources() ?: noSession()
     }
 
     override suspend fun waitFor(
@@ -129,6 +161,9 @@ class AndroidWebBrowser @Inject constructor(
             }
         }
     }
+
+    private fun <T> noSession(): Result<T> =
+        Result.failure(IllegalStateException("no_browser_session: open a URL first"))
 
     private fun session(): BrowserSession? = BrowserHostActivity.current
 

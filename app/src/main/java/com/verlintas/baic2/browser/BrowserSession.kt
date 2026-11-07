@@ -30,6 +30,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebResourceError
@@ -40,6 +41,8 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebElement
+import com.verlintas.baic2.device.api.WebFrame
+import com.verlintas.baic2.device.api.WebResource
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.device.api.WebWaitResult
 import java.util.concurrent.atomic.AtomicBoolean
@@ -171,8 +174,8 @@ class BrowserSession(private val host: ComponentActivity) {
         val loaded = withTimeoutOrNull(PAGE_TIMEOUT_MS) { load.await() }
             ?: return Result.failure(IllegalStateException("page_load_timeout"))
         loaded.getOrElse { return Result.failure(it) }
-        // Give client-rendered search pages a beat to paint their results.
-        kotlinx.coroutines.delay(900)
+        // Wait for client-rendered pages to settle instead of a fixed sleep.
+        settle(view)
         return snapshot()
     }
 
@@ -189,20 +192,36 @@ class BrowserSession(private val host: ComponentActivity) {
         touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
-        val before = withContext(Dispatchers.Main) { view.url }
-        val result = evaluate(view, "($CLICK_JS)(${JSONObject.quote(ref)})")
-        if (result == null || !result.contains("\"ok\"")) {
-            return Result.failure(IllegalStateException("element_not_found: $ref"))
-        }
-        val navigated = withTimeoutOrNull(NAV_TIMEOUT_MS) {
-            while (withContext(Dispatchers.Main) { view.url } == before) {
-                kotlinx.coroutines.delay(200)
+        val result = parseJsObject(evaluate(view, "($CLICK_JS)(${JSONObject.quote(ref)})"))
+        when (result?.optString("status")) {
+            "navigate" -> {
+                val url = result.optString("url")
+                if (!NetworkEndpointPolicy.validateBaseUrl(url)) {
+                    return Result.failure(IllegalStateException("url_not_allowed: $url"))
+                }
+                val load = CompletableDeferred<Result<Unit>>()
+                pageLoad = load
+                val started = runCatching {
+                    withContext(Dispatchers.Main) { view.loadUrl(url) }
+                }.isSuccess
+                if (!started) {
+                    return Result.failure(IllegalStateException("navigation_failed: $url"))
+                }
+                withTimeoutOrNull(PAGE_TIMEOUT_MS) { load.await() }
+                settle(view, CLICK_SETTLE_MS)
+                return snapshot()
             }
-            true
-        } ?: false
-        // Give the new document a beat to render. A SPA may update the URL
-        // before its DOM settles; a full navigation may still be painting.
-        kotlinx.coroutines.delay(if (navigated) 1_000 else 500)
+
+            "ok" -> Unit
+            "blocked" -> return Result.failure(
+                IllegalStateException("blocked_read_only: ${result.optString("reason")}"),
+            )
+            "stale" -> return Result.failure(IllegalStateException("element_stale: take a fresh snapshot"))
+            "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
+            "disabled" -> return Result.failure(IllegalStateException("element_disabled: $ref"))
+            else -> return Result.failure(IllegalStateException("click_failed: $ref"))
+        }
+        settle(view, CLICK_SETTLE_MS)
         return snapshot()
     }
 
@@ -210,23 +229,202 @@ class BrowserSession(private val host: ComponentActivity) {
         touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
-        val result = evaluate(
-            view,
-            "($TYPE_JS)(${JSONObject.quote(ref)}, ${JSONObject.quote(text)})",
+        val result = parseJsObject(
+            evaluate(view, "($TYPE_JS)(${JSONObject.quote(ref)}, ${JSONObject.quote(text)})"),
         )
-        if (result == null || !result.contains("\"ok\"")) {
-            return Result.failure(IllegalStateException("element_not_found: $ref"))
+        when (result?.optString("status")) {
+            "ok" -> Unit
+            "blocked" -> return Result.failure(
+                IllegalStateException("blocked_read_only: ${result.optString("reason")}"),
+            )
+            "stale" -> return Result.failure(IllegalStateException("element_stale: take a fresh snapshot"))
+            "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
+            "disabled" -> return Result.failure(IllegalStateException("element_disabled: $ref"))
+            else -> return Result.failure(IllegalStateException("type_failed: $ref"))
         }
-        kotlinx.coroutines.delay(350)
+        settle(view, TYPE_SETTLE_MS)
         return snapshot()
     }
 
-    suspend fun scroll(direction: String): Result<WebSnapshot> {
+    suspend fun press(key: String): Result<WebSnapshot> {
         touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
-        evaluate(view, "($SCROLL_JS)(${JSONObject.quote(direction)})")
-        kotlinx.coroutines.delay(450)
+        val normalized = key.trim().lowercase()
+        val keyCode = when (normalized) {
+            "enter" -> KeyEvent.KEYCODE_ENTER
+            "tab" -> KeyEvent.KEYCODE_TAB
+            "escape", "esc" -> KeyEvent.KEYCODE_ESCAPE
+            "arrowdown", "down" -> KeyEvent.KEYCODE_DPAD_DOWN
+            "arrowup", "up" -> KeyEvent.KEYCODE_DPAD_UP
+            "pagedown" -> KeyEvent.KEYCODE_PAGE_DOWN
+            "pageup" -> KeyEvent.KEYCODE_PAGE_UP
+            "home" -> KeyEvent.KEYCODE_MOVE_HOME
+            "end" -> KeyEvent.KEYCODE_MOVE_END
+            "backspace" -> KeyEvent.KEYCODE_DEL
+            else -> return Result.failure(IllegalArgumentException("unsupported_key: $key"))
+        }
+        if (normalized == "enter") {
+            val guard = parseJsObject(evaluate(view, ACTIVE_GUARD_JS))
+            when (guard?.optString("status")) {
+                "ok" -> Unit
+                "blocked" -> return Result.failure(
+                    IllegalStateException("blocked_read_only: ${guard.optString("reason")}"),
+                )
+                else -> return Result.failure(IllegalStateException("key_guard_failed"))
+            }
+        }
+        withContext(Dispatchers.Main) {
+            view.requestFocus()
+            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            view.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+        }
+        settle(view, KEY_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun selectOption(ref: String, option: String): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val result = parseJsObject(
+            evaluate(
+                view,
+                "($SELECT_JS)(${JSONObject.quote(ref)}, ${JSONObject.quote(option)})",
+            ),
+        )
+        when (result?.optString("status")) {
+            "ok" -> Unit
+            "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
+            "not_select" -> return Result.failure(IllegalStateException("element_not_select: $ref"))
+            "option_not_found" -> return Result.failure(
+                IllegalStateException(
+                    "option_not_found: $option (options: ${result.optString("options")})",
+                ),
+            )
+            else -> return Result.failure(IllegalStateException("select_failed: $ref"))
+        }
+        settle(view, TYPE_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun setChecked(ref: String, checked: Boolean?): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val result = parseJsObject(
+            evaluate(
+                view,
+                "($CHECK_JS)(${JSONObject.quote(ref)}, ${checked?.toString() ?: "null"})",
+            ),
+        )
+        when (result?.optString("status")) {
+            "ok" -> Unit
+            "missing" -> return Result.failure(IllegalStateException("element_not_found: $ref"))
+            "not_checkable" -> return Result.failure(
+                IllegalStateException("element_not_checkable: $ref"),
+            )
+            else -> return Result.failure(IllegalStateException("check_failed: $ref"))
+        }
+        settle(view, TYPE_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun back(): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val canGoBack = withContext(Dispatchers.Main) { view.canGoBack() }
+        Log.i(TAG, "back canGoBack=$canGoBack")
+        if (!canGoBack) return Result.failure(IllegalStateException("no_back_history"))
+        withContext(Dispatchers.Main) { view.goBack() }
+        settle(view, NAV_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun forward(): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val canGoForward = withContext(Dispatchers.Main) { view.canGoForward() }
+        if (!canGoForward) return Result.failure(IllegalStateException("no_forward_history"))
+        withContext(Dispatchers.Main) { view.goForward() }
+        settle(view, NAV_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun reload(): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        withContext(Dispatchers.Main) { view.reload() }
+        settle(view, NAV_SETTLE_MS)
+        return snapshot()
+    }
+
+    suspend fun readArticle(): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val json = parseJsObject(evaluate(view, ARTICLE_JS))
+            ?: return Result.failure(IllegalStateException("article_failed"))
+        val text = json.optString("text").take(8_000)
+        if (text.isBlank()) return snapshot()
+        return Result.success(
+            WebSnapshot(
+                url = json.optString("url"),
+                title = json.optString("title"),
+                text = text,
+                elements = emptyList(),
+            ),
+        )
+    }
+
+    suspend fun resources(): Result<List<WebResource>> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val json = parseJsObject(evaluate(view, RESOURCE_JS))
+            ?: return Result.failure(IllegalStateException("resources_failed"))
+        val array = json.optJSONArray("entries") ?: return Result.success(emptyList())
+        val out = buildList {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val url = item.optString("url")
+                if (url.isBlank()) continue
+                add(
+                    WebResource(
+                        url = url,
+                        type = item.optString("type"),
+                        durationMs = item.optLong("duration"),
+                        bytes = item.optLong("size"),
+                    ),
+                )
+            }
+        }
+        return Result.success(out)
+    }
+
+    suspend fun scroll(direction: String, ref: String? = null): Result<WebSnapshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        val result = parseJsObject(
+            evaluate(
+                view,
+                "($SCROLL_JS)(${JSONObject.quote(direction)}, ${JSONObject.quote(ref.orEmpty())})",
+            ),
+        )
+        val status = result?.optString("status").orEmpty()
+        if (status != "ok") {
+            return Result.failure(
+                IllegalStateException(
+                    if (status == "missing") "element_not_found: ${ref.orEmpty()}"
+                    else "scroll_failed",
+                ),
+            )
+        }
+        settle(view, SCROLL_SETTLE_MS)
         return snapshot()
     }
 
@@ -258,7 +456,7 @@ class BrowserSession(private val host: ComponentActivity) {
             kotlinx.coroutines.delay(WAIT_POLL_MS)
         }
         // Let the matching DOM settle before the snapshot.
-        kotlinx.coroutines.delay(350)
+        settle(view, 1_500L)
         val snapshot = snapshot().getOrElse { return Result.failure(it) }
         return Result.success(WebWaitResult(snapshot = snapshot, matched = matched))
     }
@@ -395,6 +593,42 @@ class BrowserSession(private val host: ComponentActivity) {
             }
         }
 
+    private fun parseJsObject(raw: String?): JSONObject? {
+        val decoded = raw
+            ?.let { runCatching { JSONTokener(it).nextValue() as? String }.getOrNull() }
+            ?: return null
+        return runCatching { JSONObject(decoded) }.getOrNull()
+    }
+
+    /**
+     * Wait until the document is complete and its text/node counts have been
+     * stable for two polls. This covers both full navigations and SPA route
+     * changes without a fixed sleep.
+     */
+    private suspend fun settle(view: WebView, maxMs: Long = SETTLE_MAX_MS) {
+        val deadline = SystemClock.elapsedRealtime() + maxMs
+        var lastText = -1
+        var lastNodes = -1
+        var stable = 0
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val state = parseJsObject(runCatching { evaluate(view, SETTLE_JS) }.getOrNull())
+            if (state != null) {
+                val ready = state.optString("ready")
+                val text = state.optInt("text", -1)
+                val nodes = state.optInt("nodes", -1)
+                if (ready == "complete" && text == lastText && nodes == lastNodes) {
+                    stable++
+                    if (stable >= 2) return
+                } else {
+                    stable = 0
+                }
+                lastText = text
+                lastNodes = nodes
+            }
+            kotlinx.coroutines.delay(SETTLE_POLL_MS)
+        }
+    }
+
     private fun parseSnapshot(raw: String): WebSnapshot {
         val decoded = JSONTokener(raw).nextValue() as? String
             ?: error("snapshot_not_string")
@@ -411,15 +645,36 @@ class BrowserSession(private val host: ComponentActivity) {
                         tag = item.optString("tag"),
                         href = item.optString("href").takeIf { it.isNotBlank() },
                         editable = item.optBoolean("editable"),
+                        inputType = item.optString("inputType"),
+                        disabled = item.optBoolean("disabled"),
+                        checked = item.optBoolean("checked"),
+                        value = item.optString("value").takeIf { it.isNotBlank() },
+                        frameUrl = item.optString("frameUrl").takeIf { it.isNotBlank() },
                     ),
                 )
+            }
+        }
+        val frames = buildList {
+            val array = json.optJSONArray("frames") ?: return@buildList
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val url = item.optString("url")
+                if (url.isBlank()) continue
+                add(WebFrame(url = url, sameOrigin = item.optBoolean("sameOrigin")))
             }
         }
         return WebSnapshot(
             url = json.optString("url"),
             title = json.optString("title"),
-            text = json.optString("text").take(6_000),
+            text = json.optString("text").take(8_000),
             elements = elements,
+            frames = frames,
+            scrollY = json.optInt("scrollY"),
+            scrollHeight = json.optInt("scrollHeight"),
+            viewportHeight = json.optInt("viewportHeight"),
+            hasPasswordField = json.optBoolean("hasPasswordField"),
+            hasCaptchaFrame = json.optBoolean("hasCaptchaFrame"),
+            hasConsentBanner = json.optBoolean("hasConsentBanner"),
         )
     }
 
@@ -427,16 +682,36 @@ class BrowserSession(private val host: ComponentActivity) {
         const val TAG = "BAIC2WEB"
         const val READY_TIMEOUT_MS = 8_000L
         const val PAGE_TIMEOUT_MS = 35_000L
-        const val NAV_TIMEOUT_MS = 8_000L
         const val HANDOFF_TIMEOUT_MS = 5 * 60_000L
         const val IDLE_TIMEOUT_MS = 5 * 60_000L
         const val MIN_WAIT_MS = 500L
         const val MAX_WAIT_MS = 15_000L
         const val WAIT_POLL_MS = 250L
+        const val SETTLE_MAX_MS = 6_000L
+        const val SETTLE_POLL_MS = 250L
+        const val CLICK_SETTLE_MS = 8_000L
+        const val TYPE_SETTLE_MS = 2_500L
+        const val KEY_SETTLE_MS = 2_500L
+        const val NAV_SETTLE_MS = 8_000L
+        const val SCROLL_SETTLE_MS = 1_500L
+
+        const val SETTLE_JS = """
+            (function() {
+              return JSON.stringify({
+                ready: document.readyState,
+                text: document.body ? document.body.innerText.length : 0,
+                nodes: document.querySelectorAll('*').length
+              });
+            })()
+        """
 
         const val WAIT_JS = """
             function(text, ref) {
-              if (ref) return !!document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (ref) {
+                var entry = window.__baic2RefMap && window.__baic2RefMap[ref];
+                if (entry && entry.el && entry.el.isConnected) return true;
+                return !!document.querySelector('[data-baic2-ref="' + ref + '"]');
+              }
               if (!text) return true;
               var body = document.body ? document.body.innerText : '';
               return body.toLowerCase().indexOf(text.toLowerCase()) >= 0;
@@ -445,77 +720,372 @@ class BrowserSession(private val host: ComponentActivity) {
 
         const val SNAPSHOT_JS = """
             (function() {
-              document.querySelectorAll('[data-baic2-ref]').forEach(
-                function(el) { el.removeAttribute('data-baic2-ref'); }
-              );
+              var MAX = 120;
+              var map = {};
+              window.__baic2RefMap = map;
+              var elements = [];
+              var frames = [];
+              var hasPassword = false;
+              var hasCaptcha = false;
+              var hasConsent = false;
               function visible(el) {
+                if (!el || !el.isConnected) return false;
                 var r = el.getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) return false;
                 var s = getComputedStyle(el);
-                return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+                return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
               }
-              function label(el) {
-                return (el.innerText || el.value || el.getAttribute('aria-label') ||
-                  el.getAttribute('placeholder') || el.getAttribute('title') || '')
-                  .trim().replace(/\s+/g, ' ').slice(0, 140);
+              function textOf(el) {
+                return String(el.innerText || el.value || el.getAttribute('aria-label') ||
+                  el.getAttribute('placeholder') || el.getAttribute('title') ||
+                  el.getAttribute('alt') || '').trim().replace(/\s+/g, ' ').slice(0, 160);
               }
-              var nodes = Array.prototype.slice.call(document.querySelectorAll(
-                'a,button,input,textarea,select,[role="button"],[role="link"],[contenteditable="true"]'
-              )).filter(visible).slice(0, 80);
-              var elements = nodes.map(function(el, i) {
-                var ref = 'w' + (i + 1);
-                el.setAttribute('data-baic2-ref', ref);
-                return {
+              function labelOf(el) {
+                var tag = el.tagName.toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+                  return String(el.getAttribute('aria-label') || el.getAttribute('placeholder') ||
+                    el.getAttribute('title') || el.name || el.id || el.value || '')
+                    .trim().replace(/\s+/g, ' ').slice(0, 160);
+                }
+                return textOf(el);
+              }
+              function add(el, frameUrl) {
+                if (elements.length >= MAX || !visible(el)) return;
+                var tag = el.tagName.toLowerCase();
+                var type = (el.getAttribute('type') || '').toLowerCase();
+                var ref = 'w' + (elements.length + 1);
+                map[ref] = { el: el, frame: frameUrl || null };
+                try { el.setAttribute('data-baic2-ref', ref); } catch (e) {}
+                elements.push({
                   ref: ref,
-                  label: label(el),
+                  label: labelOf(el),
                   role: el.getAttribute('role') || '',
-                  tag: el.tagName.toLowerCase(),
+                  tag: tag,
+                  inputType: type,
                   href: el.href || '',
-                  editable: el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
-                };
-              });
+                  editable: !!el.isContentEditable || tag === 'input' || tag === 'textarea',
+                  disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true',
+                  checked: !!el.checked,
+                  value: (tag === 'input' || tag === 'select' || tag === 'textarea')
+                    ? String(el.value || '').slice(0, 120) : '',
+                  frameUrl: frameUrl || ''
+                });
+              }
+              function scan(root, frameUrl) {
+                if (!root || !root.querySelectorAll) return;
+                var nodes = root.querySelectorAll(
+                  'a,button,input,textarea,select,summary,[role="button"],[role="link"],' +
+                  '[role="tab"],[role="menuitem"],[role="checkbox"],[role="radio"],' +
+                  '[role="combobox"],[contenteditable="true"]'
+                );
+                for (var i = 0; i < nodes.length; i++) add(nodes[i], frameUrl);
+                var all = root.querySelectorAll('*');
+                for (var j = 0; j < all.length; j++) {
+                  var el = all[j];
+                  if (el.shadowRoot) scan(el.shadowRoot, frameUrl);
+                  if (el.tagName === 'IFRAME') {
+                    var src = el.src || '';
+                    var same = false;
+                    try {
+                      var doc = el.contentDocument;
+                      if (doc) { same = true; scan(doc, src); }
+                    } catch (e) { same = false; }
+                    if (frames.length < 10) {
+                      frames.push({ url: src, sameOrigin: same });
+                    }
+                    if (!same && /recaptcha|hcaptcha|challenges\.cloudflare|turnstile/i.test(src)) {
+                      hasCaptcha = true;
+                    }
+                  }
+                }
+                if (root.querySelector && root.querySelector('input[type="password"]')) {
+                  hasPassword = true;
+                }
+                if (root.querySelector && root.querySelector(
+                  '[class*="g-recaptcha"],[id*="captcha"],[class*="h-captcha"],[class*="cf-turnstile"]'
+                )) {
+                  hasCaptcha = true;
+                }
+              }
+              function collectText(root) {
+                var out = '';
+                try {
+                  out += (root.body ? root.body.innerText : (root.innerText || root.textContent || ''));
+                } catch (e) {}
+                var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
+                for (var i = 0; i < all.length; i++) {
+                  if (all[i].shadowRoot) {
+                    try { out += '\n' + (all[i].shadowRoot.textContent || ''); } catch (e) {}
+                  }
+                  if (all[i].tagName === 'IFRAME') {
+                    try {
+                      var doc = all[i].contentDocument;
+                      if (doc && doc.body) {
+                        out += '\n[frame: ' + (all[i].src || '') + ']\n' + doc.body.innerText;
+                      }
+                    } catch (e) {}
+                  }
+                }
+                return out;
+              }
+              scan(document, '');
+              var fixed = document.querySelectorAll(
+                '[id*="cookie" i],[class*="cookie" i],[id*="consent" i],[class*="consent" i]'
+              );
+              for (var k = 0; k < fixed.length; k++) {
+                var s = getComputedStyle(fixed[k]);
+                if ((s.position === 'fixed' || s.position === 'sticky') && visible(fixed[k])) {
+                  hasConsent = true;
+                  break;
+                }
+              }
+              var text = collectText(document);
               return JSON.stringify({
                 url: location.href,
                 title: document.title,
-                text: document.body ? document.body.innerText.slice(0, 6000) : '',
-                elements: elements
+                text: text.slice(0, 8000),
+                elements: elements,
+                frames: frames,
+                scrollY: window.scrollY || 0,
+                scrollHeight: document.documentElement ? document.documentElement.scrollHeight : 0,
+                viewportHeight: window.innerHeight || 0,
+                hasPasswordField: hasPassword,
+                hasCaptchaFrame: hasCaptcha,
+                hasConsentBanner: hasConsent
               });
             })()
         """
 
         const val CLICK_JS = """
             function(ref) {
-              var el = document.querySelector('[data-baic2-ref="' + ref + '"]');
-              if (!el) return 'missing';
-              el.scrollIntoView({block: 'center'});
+              var entry = window.__baic2RefMap && window.__baic2RefMap[ref];
+              var el = entry && entry.el ? entry.el : document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (!el) return JSON.stringify({status: 'missing'});
+              if (!el.isConnected) return JSON.stringify({status: 'stale'});
+              var tag = el.tagName.toLowerCase();
+              var type = (el.getAttribute('type') || '').toLowerCase();
+              if (el.disabled || el.getAttribute('aria-disabled') === 'true') {
+                return JSON.stringify({status: 'disabled'});
+              }
+              if (tag === 'input' && type === 'file') {
+                return JSON.stringify({status: 'blocked', reason: 'file upload is not supported'});
+              }
+              var label = '';
+              if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+                label = String(el.getAttribute('aria-label') || el.getAttribute('placeholder') ||
+                  el.getAttribute('title') || el.name || el.id || el.value || '');
+              } else {
+                label = String(el.innerText || el.getAttribute('aria-label') ||
+                  el.getAttribute('title') || el.getAttribute('alt') || '');
+              }
+              var danger = /(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|unfollow|unlike|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i;
+              if (tag === 'a' && el.href) {
+                if (el.download) {
+                  return JSON.stringify({status: 'blocked', reason: 'downloads are not supported'});
+                }
+                var rawHref = el.getAttribute('href') || '';
+                if (rawHref === '' || rawHref.charAt(0) === '#') {
+                  el.scrollIntoView({block: 'center'});
+                  el.click();
+                  return JSON.stringify({status: 'ok'});
+                }
+                if (!/^https?:/i.test(el.href)) {
+                  return JSON.stringify({status: 'blocked', reason: 'unsupported link scheme'});
+                }
+                var actionLink = /([?&](action|do|cmd|op)=(like|unlike|follow|unfollow|vote|favorite|subscribe|unsubscribe|delete|remove|report|block|logout|signout))|(\/(like|unlike|follow|unfollow|vote|favorite|subscribe|unsubscribe|delete|remove|report|block|logout|signout)(\/|\?|#|$))/i;
+                if (actionLink.test(el.href)) {
+                  return JSON.stringify({status: 'blocked', reason: 'state-changing link'});
+                }
+                // Load links from the host so the WebView records back/forward
+                // history; JS el.click() can replace the current entry.
+                return JSON.stringify({status: 'navigate', url: el.href});
+              }
+              if (danger.test(label)) {
+                return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + label});
+              }
+              el.scrollIntoView({block: 'center', inline: 'center'});
+              el.focus();
               el.click();
-              return 'ok';
+              return JSON.stringify({status: 'ok'});
             }
         """
 
         const val TYPE_JS = """
             function(ref, text) {
-              var el = document.querySelector('[data-baic2-ref="' + ref + '"]');
-              if (!el) return 'missing';
+              var entry = window.__baic2RefMap && window.__baic2RefMap[ref];
+              var el = entry && entry.el ? entry.el : document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (!el) return JSON.stringify({status: 'missing'});
+              if (!el.isConnected) return JSON.stringify({status: 'stale'});
+              var type = (el.getAttribute('type') || '').toLowerCase();
+              if (type === 'password') {
+                return JSON.stringify({status: 'blocked', reason: 'use show_to_user for password fields'});
+              }
+              if (type === 'file') {
+                return JSON.stringify({status: 'blocked', reason: 'file upload is not supported'});
+              }
+              el.scrollIntoView({block: 'center'});
               el.focus();
               if (el.isContentEditable) {
                 el.innerText = text;
                 el.dispatchEvent(new InputEvent('input', {bubbles: true, data: text, inputType: 'insertText'}));
-                return 'ok';
+                return JSON.stringify({status: 'ok'});
               }
               var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
               var setter = Object.getOwnPropertyDescriptor(proto, 'value');
               if (setter && setter.set) setter.set.call(el, text); else el.value = text;
               el.dispatchEvent(new Event('input', {bubbles: true}));
               el.dispatchEvent(new Event('change', {bubbles: true}));
-              return 'ok';
+              return JSON.stringify({status: 'ok'});
             }
         """
 
+        const val SELECT_JS = """
+            function(ref, option) {
+              var entry = window.__baic2RefMap && window.__baic2RefMap[ref];
+              var el = entry && entry.el ? entry.el : document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (!el) return JSON.stringify({status: 'missing'});
+              if (el.tagName.toLowerCase() !== 'select') {
+                return JSON.stringify({status: 'not_select'});
+              }
+              var opts = Array.prototype.slice.call(el.options);
+              var wanted = String(option || '').trim().toLowerCase();
+              var match = null;
+              for (var i = 0; i < opts.length; i++) {
+                var o = opts[i];
+                if (String(o.value).toLowerCase() === wanted ||
+                    String(o.text).trim().toLowerCase() === wanted ||
+                    String(o.text).toLowerCase().indexOf(wanted) >= 0) {
+                  match = o;
+                  break;
+                }
+              }
+              if (!match) {
+                return JSON.stringify({
+                  status: 'option_not_found',
+                  options: opts.map(function(o) { return o.text.trim(); }).slice(0, 20).join(' | ')
+                });
+              }
+              el.value = match.value;
+              el.dispatchEvent(new Event('input', {bubbles: true}));
+              el.dispatchEvent(new Event('change', {bubbles: true}));
+              return JSON.stringify({status: 'ok'});
+            }
+        """
+
+        const val CHECK_JS = """
+            function(ref, checked) {
+              var entry = window.__baic2RefMap && window.__baic2RefMap[ref];
+              var el = entry && entry.el ? entry.el : document.querySelector('[data-baic2-ref="' + ref + '"]');
+              if (!el) return JSON.stringify({status: 'missing'});
+              var type = (el.getAttribute('type') || '').toLowerCase();
+              if (type !== 'checkbox' && type !== 'radio') {
+                return JSON.stringify({status: 'not_checkable'});
+              }
+              if (checked === null || el.checked !== checked) el.click();
+              return JSON.stringify({status: 'ok'});
+            }
+        """
+
+        const val ACTIVE_GUARD_JS = """
+            (function() {
+              var el = document.activeElement;
+              if (!el) return JSON.stringify({status: 'ok'});
+              var tag = el.tagName.toLowerCase();
+              var type = (el.getAttribute('type') || '').toLowerCase();
+              if (type === 'password') {
+                return JSON.stringify({status: 'blocked', reason: 'password field; use show_to_user'});
+              }
+              if (tag === 'textarea' || el.isContentEditable) {
+                return JSON.stringify({status: 'blocked', reason: 'draft editor'});
+              }
+              var form = el.form || (el.closest ? el.closest('form') : null);
+              if (form) {
+                if (form.querySelector('input[type="password"]')) {
+                  return JSON.stringify({status: 'blocked', reason: 'password form; use show_to_user'});
+                }
+                if (form.querySelector('textarea,[contenteditable="true"]')) {
+                  return JSON.stringify({status: 'blocked', reason: 'draft form'});
+                }
+                var submit = form.querySelector('button[type="submit"],input[type="submit"],button:not([type])');
+                if (submit) {
+                  var label = String(submit.innerText || submit.value || submit.getAttribute('aria-label') || '');
+                  if (/(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i.test(label)) {
+                    return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + label});
+                  }
+                }
+              }
+              if (tag === 'button' || (tag === 'input' && (type === 'submit' || type === 'button'))) {
+                var buttonLabel = String(el.innerText || el.value || el.getAttribute('aria-label') || '');
+                if (/(send|post|publish|comment|reply|buy|order|pay|checkout|delete|remove|follow|like|subscribe|upload|share|report|block|退订|发送|发布|评论|回复|购买|下单|支付|删除|关注|点赞|订阅|上传|分享|举报|拉黑)/i.test(buttonLabel)) {
+                  return JSON.stringify({status: 'blocked', reason: 'state-changing control: ' + buttonLabel});
+                }
+              }
+              return JSON.stringify({status: 'ok'});
+            })()
+        """
+
+        const val ARTICLE_JS = """
+            (function() {
+              function textOf(el) { return String(el.innerText || '').trim(); }
+              var candidates = Array.prototype.slice.call(document.querySelectorAll(
+                'article,main,[role="main"],.article,.post,.content,#content,.markdown-body'
+              ));
+              var best = document.body;
+              var bestScore = 0;
+              for (var i = 0; i < candidates.length; i++) {
+                var text = textOf(candidates[i]);
+                if (text.length < 200) continue;
+                var links = candidates[i].querySelectorAll('a').length;
+                var score = text.length - links * 80;
+                if (score > bestScore) { bestScore = score; best = candidates[i]; }
+              }
+              return JSON.stringify({
+                url: location.href,
+                title: document.title,
+                text: best ? textOf(best).slice(0, 12000) : ''
+              });
+            })()
+        """
+
+        const val RESOURCE_JS = """
+            (function() {
+              var entries = performance.getEntriesByType('resource') || [];
+              var out = [];
+              for (var i = entries.length - 1; i >= 0 && out.length < 30; i--) {
+                var e = entries[i];
+                if (e.initiatorType === 'fetch' || e.initiatorType === 'xmlhttprequest' ||
+                    e.name.indexOf('.json') >= 0 || e.name.indexOf('/api/') >= 0) {
+                  out.push({
+                    url: e.name,
+                    type: e.initiatorType || 'resource',
+                    duration: Math.round(e.duration || 0),
+                    size: e.transferSize || 0
+                  });
+                }
+              }
+              return JSON.stringify({entries: out});
+            })()
+        """
+
         const val SCROLL_JS = """
-            function(direction) {
-              var delta = window.innerHeight * 0.8;
-              window.scrollBy(0, direction === 'up' ? -delta : delta);
-              return 'ok';
+            function(direction, ref) {
+              var up = direction === 'up';
+              var entry = ref ? (window.__baic2RefMap && window.__baic2RefMap[ref]) : null;
+              var el = entry && entry.el ? entry.el : null;
+              if (ref && !el) return JSON.stringify({status: 'missing'});
+              var target = el;
+              while (target && target !== document.documentElement && target !== document.body &&
+                     (!target.scrollHeight || target.scrollHeight <= target.clientHeight + 4)) {
+                target = target.parentElement;
+              }
+              if (target && target !== document.documentElement && target !== document.body) {
+                var delta = (target.clientHeight || window.innerHeight) * 0.8;
+                target.scrollTop += up ? -delta : delta;
+              } else {
+                var pageDelta = window.innerHeight * 0.8;
+                window.scrollBy(0, up ? -pageDelta : pageDelta);
+              }
+              return JSON.stringify({status: 'ok'});
             }
         """
     }

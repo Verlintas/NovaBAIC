@@ -31,7 +31,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /** Debug-only smoke test for the app-owned WebView research tool. */
@@ -85,6 +89,27 @@ class DebugWebActivity : ComponentActivity() {
                     is ToolResult.Denied -> "DENIED: ${value.reason}"
                     null -> "CRASH: ${result.exceptionOrNull()?.message}"
                 }
+            }
+            val stepsFile = intent.getStringExtra("steps_file")?.trim().orEmpty()
+            if (stepsFile.isNotEmpty()) {
+                val raw = runCatching { File(getExternalDir(), stepsFile).readText() }.getOrNull()
+                val steps = raw?.let {
+                    runCatching { Json.parseToJsonElement(it).jsonArray }.getOrNull()
+                }
+                if (steps == null) {
+                    Log.e(TAG, "steps file missing or invalid: $stepsFile")
+                    finish()
+                    return@launch
+                }
+                var text = ""
+                steps.forEachIndexed { index, element ->
+                    val args = element.jsonObject
+                    val stepAction = args["action"]?.jsonPrimitive?.content ?: "?"
+                    text += "\n\n--- STEP ${index + 1} $stepAction ---\n" + execute(args)
+                }
+                File(getExternalDir(), "debug-web.txt").writeText(text)
+                finish()
+                return@launch
             }
             var text = execute(arguments)
             if (action == "open" && ref.isNotEmpty()) {
