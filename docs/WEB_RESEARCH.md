@@ -146,12 +146,13 @@ web_research tool
 | GitHub | `github.com/search?q=...` | ✅ `open` + snapshot 0.9–3.4s；点击结果并读取详情 1.5s |
 | Wikipedia | `en.wikipedia.org/w/index.php?search=...` | ✅ 10.4s，返回 OpenAI 条目正文 |
 | arXiv | `arxiv.org/search/?query=...&searchtype=all` | ✅ 23s，返回论文标题/作者/摘要 |
-| Reddit | `old.reddit.com` / `www.reddit.com` | ⚠️ 旧版要求登录；新版 SPA 在 20s 内未完成加载 |
-| Stack Overflow | `stackoverflow.com/search?q=...` | ⚠️ 跳转 `/nocaptcha` 人机验证 |
+| Reddit old | `old.reddit.com/search?q=...` | ⚠️ 登录墙（`LOGIN_REQUIRED`）；用 `show_to_user` 由用户登录 |
+| Reddit new | `www.reddit.com/search/?q=...` | ✅ 公开搜索，自动等待后返回结果标题/链接；无需登录 |
+| Stack Overflow | `stackoverflow.com/search?q=...` | ⚠️ 跳转 `/nocaptcha` 人机验证（`CAPTCHA`）；用 `show_to_user`，不绕过 |
 | X | `x.com/search?q=...` | ❌ WebView 登录被 X 拦截（Google OAuth 白屏；密码登录返回 not allowed） |
-| HN Algolia | `hn.algolia.com/?query=...` | ⚠️ SPA 结果未进入首屏快照；`wait` 可等待结果（待 HN 回归） |
+| HN Algolia | `hn.algolia.com/?query=...` | ✅ `open` + `wait text=...` 12s → 83 个元素/结果标题；`network` 未捕获（worker/SSR） |
 
-说明：矩阵是回归样例，不是支持白名单；通用能力见第 3 节。`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
+说明：以上为 2026-11-08 小米 17 Pro Max（devtest，daily 数据未动）回归结果；旧版 Reddit 登录墙和新版 Reddit 内容页的隐藏 captcha 不再误报。矩阵是回归样例，不是支持白名单；通用能力见第 3 节。`open` + snapshot 成功不代表点击/翻页都已回归；GitHub 已做点击回归，其余先验证读取。登录/验证码由站点策略决定，不绕过。
 
 ### 5.2 通用能力回归（API 35 模拟器，本地页面）
 
@@ -183,8 +184,8 @@ web_research tool
 
 ## 8. 下一步
 
-1. 通用 Web Agent v2 已落地（shadow/iframe/press/select/check/history/network/state/模型判断）；继续用 HN / 新版 Reddit 做真站回归。
-2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号，不依赖维护者登录。
+1. HN Algolia / 新版 Reddit 公开搜索已真机通过；old Reddit 登录 handoff 和 Stack Overflow 验证码 handoff 仍需用户实际操作，不依赖维护者账号。
+2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号。
 3. Stack Overflow 人机验证 handoff 回归。
 4. X 用 API token 或已有会话；不重试 WebView 登录。
-5. 平台回归完成后收 0.5.0；不把维护者账号/单一设备作为发布门槛。
+5. 收 0.5.0；平台矩阵和限制随 release notes 发布，不把单一设备作为发布门槛。

@@ -798,8 +798,14 @@ class BrowserSession(private val host: ComponentActivity) {
                     }
                   }
                 }
-                if (root.querySelector && root.querySelector('input[type="password"]')) {
-                  hasPassword = true;
+                if (root.querySelectorAll) {
+                  var passwords = root.querySelectorAll('input[type="password"]');
+                  for (var p = 0; p < passwords.length; p++) {
+                    if (visible(passwords[p])) {
+                      hasPassword = true;
+                      break;
+                    }
+                  }
                 }
                 if (root.querySelector && root.querySelector(
                   '[class*="g-recaptcha"],[id*="captcha"],[class*="h-captcha"],[class*="cf-turnstile"]'

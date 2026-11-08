@@ -79,6 +79,38 @@ class WebPageStateDetectorTest {
             WebPageState.CAPTCHA,
             WebPageStateDetector.detect(snapshot(hasCaptchaFrame = true)),
         )
+        assertEquals(
+            WebPageState.CAPTCHA,
+            WebPageStateDetector.detect(
+                snapshot(title = "Human verification - Stack Overflow", text = "Human verification"),
+            ),
+        )
+    }
+
+    @Test
+    fun loginWallWithCaptchaFrameIsLoginNotCaptcha() {
+        val state = WebPageStateDetector.detect(
+            snapshot(
+                url = "https://old.reddit.com/login/?reason=lor2",
+                title = "Welcome to Reddit",
+                text = "Log in to use old Reddit. Accounts are required.",
+                elements = List(8) { WebElement("w$it", "link", "", "a") },
+                hasCaptchaFrame = true,
+            ),
+        )
+        assertEquals(WebPageState.LOGIN_REQUIRED, state)
+    }
+
+    @Test
+    fun contentPageWithHiddenCaptchaFrameIsReady() {
+        val state = WebPageStateDetector.detect(
+            snapshot(
+                text = "A public article with plenty of readable text. ".repeat(10),
+                elements = List(10) { WebElement("w$it", "link", "", "a") },
+                hasCaptchaFrame = true,
+            ),
+        )
+        assertEquals(WebPageState.READY, state)
     }
 
     @Test

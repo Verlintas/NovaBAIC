@@ -34,8 +34,9 @@ enum class WebPageState {
 internal object WebPageStateDetector {
 
     private val captcha = Regex(
-        "captcha|recaptcha|hcaptcha|verify you are human|i'm not a robot|" +
-            "人机验证|验证码|checking your browser|attention required",
+        "captcha|recaptcha|hcaptcha|verify you are human|verifying you are human|" +
+            "human verification|i'm not a robot|人机验证|验证码|checking your browser|" +
+            "just a moment|attention required",
         RegexOption.IGNORE_CASE,
     )
 
@@ -50,6 +51,11 @@ internal object WebPageStateDetector {
         RegexOption.IGNORE_CASE,
     )
 
+    private val loginPath = Regex(
+        "/(login|signin|sign-in|auth)(/|\\?|#|\\z)",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val consent = Regex(
         "accept all|accept cookies|we use cookies|cookie consent|" +
             "同意.*cookie|接受.*cookie|принять.*cookie",
@@ -58,14 +64,20 @@ internal object WebPageStateDetector {
 
     fun detect(snapshot: WebSnapshot): WebPageState {
         val haystack = (snapshot.url + "\n" + snapshot.title + "\n" + snapshot.text).take(8_000)
-        if (snapshot.hasCaptchaFrame || captcha.containsMatchIn(haystack)) {
+        if ((snapshot.hasPasswordField || loginPath.containsMatchIn(snapshot.url)) &&
+            login.containsMatchIn(haystack)
+        ) {
+            return WebPageState.LOGIN_REQUIRED
+        }
+        if (captcha.containsMatchIn(haystack) ||
+            (snapshot.hasCaptchaFrame &&
+                snapshot.text.trim().length < 200 &&
+                snapshot.elements.size < 5)
+        ) {
             return WebPageState.CAPTCHA
         }
         if (blocked.containsMatchIn(haystack)) {
             return WebPageState.BLOCKED
-        }
-        if (snapshot.hasPasswordField && login.containsMatchIn(haystack)) {
-            return WebPageState.LOGIN_REQUIRED
         }
         if (snapshot.hasConsentBanner || consent.containsMatchIn(haystack)) {
             return WebPageState.CONSENT_REQUIRED
