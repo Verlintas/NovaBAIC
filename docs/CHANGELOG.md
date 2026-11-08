@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.5.0-alpha] - 2026-11-02
+## [0.5.0] - 2026-11-08
 
 > 0.5.0 包含两块：应用自有虚拟屏 + WebView 的通用网页研究（默认只读，状态变更由模型按用户意图判断），以及用户可管理的对话模式。网页研究不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB；GitHub 搜索 MVP 已在真机验证。
 

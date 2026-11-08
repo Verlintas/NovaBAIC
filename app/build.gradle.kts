@@ -46,8 +46,8 @@ android {
         applicationId = "com.verlintas.baic2"
         minSdk = 26
         targetSdk = 36
-        versionCode = 29
-        versionName = "0.5.0-alpha"
+        versionCode = 30
+        versionName = "0.5.0"
     }
 
     signingConfigs {
