@@ -35,9 +35,9 @@ It is a **local-first** AI agent — API keys are encrypted with the Android Key
 - **Warm background display**: when a transport is available, the app starts the helper at launch and releases it after 10 minutes idle by default, so the first research request avoids the cold start. Settings → Permissions offers an opt-in "Keep background display" service that disables idle release and re-checks every four minutes, so an already-started session survives Wi-Fi/ADB loss (ongoing notification, slight battery cost; after a reboot it still waits for a shell).
 - **Locale-independent controls**: in-app search prefers resource ids and control structure over labels such as “Search”, “Discover” or their translations; localized word lists are only a fallback
 - **No model lock-in**: DeepSeek / OpenAI / Claude / Gemini / Kimi / Qwen / GLM / MiniMax / Ollama / any compatible gateway — switch any time
-- **Four modes**: from plain chat, to read-only research, to per-call confirmation, to budgeted autonomous runs
+- **User-managed modes**: four stock modes (Chat / Chat+ / Act / Max) plus create, edit, delete and restore; configure tool access, per-call confirmation, run budget, long-task protocol and extra prompt
 - **Unattended operation**: scheduled tasks, foreground services, subagents, remote MCP tools, and Skills
-- **Requirements**: Android 8.0 (API 26)+; no GMS dependency; no analytics SDKs; cleartext HTTP is allowed only for loopback addresses
+- **Requirements**: Android 8.0 (API 26)+; no GMS dependency; no analytics SDKs; cleartext HTTP is allowed only for loopback / private LAN addresses
 
 > The previous BetterAIChat is a separate app (different package name and no shared data); both can be installed side by side.
 
@@ -109,6 +109,8 @@ An Agent is provider + key + model + temperature / max tokens / deep thinking + 
 | `Chat+` | Conversation + read-only tools + planning (8 rounds / 25 tool calls) |
 | `Act` | Executes tools, confirming each call |
 | `Max` | Autonomous runs: persistent Run records, budgets (60 rounds / 160 tool calls / 60 minutes), runs in background |
+
+All four stock modes can be created, edited, deleted or restored under **Settings → Modes**; custom modes configure tool access, per-call confirmation, run budget, long-task protocol and extra prompt. Deleting a mode keeps its historical runs in the task list.
 
 ### AI × device (58 built-in tools)
 
@@ -266,7 +268,7 @@ adb reverse tcp:8765 tcp:8765
 - **Done · v0.3.x agent efficiency**: plan-once UI (snapshot / refs / sequence / assert), virtual-display prewarm / reuse / keepalive, built-in wireless ADB, auto-save skills, parallel CHAT+ research subagents
 - **Done · v0.4.0 stability**: independent virtual-display / wireless ADB implementation, real-device `app_research` search and session reuse, attachment lifecycle and screenshot retention, parameterized auto-save skills, boot/update keepalive re-arm
 - **Done · v0.4.1 patch**: fix release-build ML Kit OCR component registration (third-party app NPE); semantic `Search state`, an OCR-first path and top-half search-entry filtering for user-installed apps; Russian localization and LAN HTTP for private addresses
-- **In progress · v0.5.0 Web research**: app-owned virtual display + WebView `web_research` is now a general browser agent (read-only by default; shadow DOM / same-origin iframes / press / select / check / history / network / state hints); login handoff, session release, data clearing and SPA `wait` validated; HN and the new Reddit public search are validated on a real device; old Reddit login walls and Stack Overflow verification go through `show_to_user`; next: the 0.5.0 release
+- **Done · v0.5.0**: `web_research` is now a general browser agent (app-owned virtual display + WebView, read-only by default with model-judged state changes; shadow DOM / same-origin iframes / press / select / check / history / network / state hints), with login handoff, session release and data clearing, SPA `wait`, and HN / new Reddit real-device validation; adds user-managed conversation modes and the MCP endpoint policy
 - **In progress**: OEM matrix expansion and reboot / network-recovery validation, Shizuku / voice / recording acceptance, continuous UI polish and more eval scenarios
 - **Planned**: richer device capabilities and skill ecosystem, more model protocols
 
