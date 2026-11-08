@@ -16,7 +16,7 @@ All notable changes to this project are documented in this file.
 - **浏览器会话回收与清除**：`web_research` 会话空闲 5 分钟自动释放，`hide` 立即关闭；设置 → 存储新增「清除网页数据」，删除 Cookie、WebStorage、表单数据和 WebView 缓存。
 - **MCP 端点校验**：MCP 服务器 URL 使用 `NetworkEndpointPolicy`（HTTPS 任意，HTTP 仅 localhost/私有 LAN），客户端禁用自动重定向；添加服务器时即时校验并提示。
 - **SPA 等待**：`web_research wait` 等待指定文本或元素出现（默认 5s，最长 15s），再返回快照；用于 HN Algolia、新版 Reddit 等客户端渲染页面。超时返回当前页面而不是硬失败。
-- **通用 Web Agent v2**：`web_research` 从平台适配升级为通用只读浏览器代理：
+- **通用 Web Agent v2**：`web_research` 从平台适配升级为通用浏览器代理（默认只读）：
   - snapshot 支持开放 shadow DOM、同源 iframe、滚动状态、表单值/勾选/禁用状态和 frame 来源；
   - 新增 `press`（Enter/Tab/Escape/方向键等）、`select`、`check`、`back` / `forward` / `reload`、`network`（fetch/XHR/API URL）和正文提取 `read`；
   - 导航和操作后按 DOM 稳定自动等待，SPA 不再依赖固定 sleep；
@@ -28,6 +28,7 @@ All notable changes to this project are documented in this file.
 ### 修复 Fixed
 
 - **模式编辑器一致性**：逐次确认与「完全同意」改为双向互斥；打开逐次确认时会自动关闭完全同意，避免界面显示与实际保存不一致。旧配置在读取时自动归一化。
+- **网页状态识别**：登录墙优先于隐藏 captcha iframe；内容页的隐藏 captcha 不再误报；识别 `Just a moment...` / `Human verification`。old Reddit 登录墙显示 `LOGIN_REQUIRED`，新版 Reddit 内容页 `READY`，Stack Overflow `/nocaptcha` 显示 `CAPTCHA`。
 
 ### 变更 Changed
 
@@ -42,6 +43,7 @@ All notable changes to this project are documented in this file.
 - 新增 `WebFetcherPolicyTest`（公网/私网 URL）与 `McpClientTest` 公网明文拒绝用例。
 - 模拟器本地延迟渲染页：`open` 后正文为 `loading`；`wait text="Delayed result"` 约 2.2s 匹配并返回渲染后的链接；超时返回当前页面。
 - 模拟器本地 Web Agent 套件：shadow DOM、同源 iframe、搜索表单 Enter、checkbox/select、链接前进/后退/reload、文章正文提取、network 资源、wait、登录/验证码/consent/blocked 状态均通过；状态变更控件不再端侧硬拦（Post 由模型决定时执行），密码输入仍交给 show_to_user。
+- 真机 Xiaomi 17 Pro Max（devtest）：HN Algolia `open` + `wait` 12s → 83 个结果元素；新版 Reddit 公开搜索 `READY`/结果可读；old Reddit 登录墙 `LOGIN_REQUIRED`；Stack Overflow `/nocaptcha` `CAPTCHA`；Wikipedia `READY`。daily 数据未动。
 
 ### 已知限制 Known limitations
 
@@ -54,7 +56,7 @@ All notable changes to this project are documented in this file.
 - WebView 后台节流和按站点 Cookie 隔离仍未做；`web_research` 页面共享一个 App WebView profile，可在设置 → 存储一键清除。
 - 全局 `cleartextTrafficPermitted` 仍保留；Agent Base URL / MCP 由 `NetworkEndpointPolicy` 限制，`web_read` 使用 public-host + DNS SSRF 策略（允许公网 HTTP，拒绝私网/回环）。
 - 微信聊天没有可用网页版，继续保留原生 `app_research`，不作为 web_research 的承诺范围。
-- Reddit / Stack Overflow / HN Algolia 的登录、验证码或 SPA DOM 仍待单独验证；不把它们的失败算作工具通用失败。
+- old Reddit 需要登录，Stack Overflow 需要人机验证；两者用 `show_to_user` 由用户完成，工具不绕过；新版 Reddit 公开搜索和 HN Algolia 结果读取已真机验证。
 
 ## [0.4.1] - 2026-11-02
 
