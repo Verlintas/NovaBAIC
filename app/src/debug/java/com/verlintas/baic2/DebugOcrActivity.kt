@@ -29,6 +29,7 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.verlintas.baic2.device.impl.ocr.MlKitOcrProvider
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,19 +40,30 @@ class DebugOcrActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
-            val bytes = withContext(Dispatchers.Default) {
-                val bitmap = Bitmap.createBitmap(800, 240, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                canvas.drawColor(Color.WHITE)
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.BLACK
-                    textSize = 72f
+            val path = intent.getStringExtra("path")?.trim().orEmpty()
+            val bytes = if (path.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    File(path).takeIf { it.isFile }?.readBytes()
+                } ?: run {
+                    Log.e(TAG, "file not found: $path")
+                    finish()
+                    return@launch
                 }
-                canvas.drawText("电池 WLAN 设置", 24f, 140f, paint)
-                ByteArrayOutputStream().use { output ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-                    bitmap.recycle()
-                    output.toByteArray()
+            } else {
+                withContext(Dispatchers.Default) {
+                    val bitmap = Bitmap.createBitmap(800, 240, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(Color.WHITE)
+                    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.BLACK
+                        textSize = 72f
+                    }
+                    canvas.drawText("电池 WLAN 设置", 24f, 140f, paint)
+                    ByteArrayOutputStream().use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                        bitmap.recycle()
+                        output.toByteArray()
+                    }
                 }
             }
             val result = runCatching { MlKitOcrProvider().recognize(bytes) }

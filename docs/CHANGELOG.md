@@ -8,7 +8,11 @@ All notable changes to this project are documented in this file.
 
 - **网页视觉通道**：`web_research` 新增 `screenshot`，返回当前视口 PNG + ML Kit OCR；多模态模型通过 `ToolResult.images` 和 synthetic user image message 真正看到网页。支持 CSS 图表、Canvas、图片和视觉布局；文本模型自动只拿 OCR。
 - **视觉能力判断**：`VisionModels` 自动识别 GPT-4o/4.1/5/6、Claude 3/4/5、Gemini、Grok、Qwen-VL、LLaVA、Pixtral 等；`vision=true/false` 可覆盖。截图只用于下一个模型轮次，不写数据库、不在后续轮次重复发送。
-- **浏览器截图回归**：API 35 模拟器本地页验证 720×1600 PNG、OCR 文本、Canvas-only 页面和 `vision=false` 路径；新增 `ToolResult` 图片序列化与 `AgentLoop` 图片生命周期单测。
+- **全页分段截图**：`screenshot(full_page=true)` 用 `capturePicture()` 抓整页并切成最多 6 段可读图片，超出明确标注截断；应用启动时启用 `enableSlowWholeDocumentDraw`。
+- **敏感页默认拦截**：可见密码框、银行卡/支付表单、支付 iframe、checkout/payment 页面和 CAPTCHA 不进入截图通道，返回 `screenshot_blocked` 并引导 `snapshot`/`read`/`show_to_user`。
+- **用户截图回执**：工具截图以 assistant 消息附件显示（受「保留后台执行截图」设置控制），用户能看到 AI 实际看到的画面；回执不进入模型上下文。
+- **主屏视觉通道**：`take_screenshot` / `screen_ocr` 统一返回 OCR，并在 vision 开启时附加图片；`vision=false` 只保留文字。
+- **浏览器截图回归**：API 35 模拟器验证视口 720×1600 PNG、5 段/9 段全页、Canvas-only、`vision=false`、密码页/银行卡页拦截，以及主屏 `take_screenshot` / `screen_ocr` 的图片 + OCR；新增 `ToolResult` 图片序列化、`AgentLoop` 图片生命周期和 `WebScreenshotPolicy` 单测。
 
 ## [0.5.0] - 2026-11-08
 

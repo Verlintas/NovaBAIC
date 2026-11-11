@@ -59,6 +59,7 @@ data class WebSnapshot(
     val scrollHeight: Int = 0,
     val viewportHeight: Int = 0,
     val hasPasswordField: Boolean = false,
+    val hasPaymentField: Boolean = false,
     val hasCaptchaFrame: Boolean = false,
     val hasConsentBanner: Boolean = false,
 )
@@ -75,6 +76,10 @@ data class WebScreenshot(
     val mimeType: String,
     val width: Int,
     val height: Int,
+    /** Set for segmented full-page captures, e.g. "part 2/5". */
+    val label: String? = null,
+    /** True when the page is taller than the captured segment cap. */
+    val truncated: Boolean = false,
 )
 
 /**
@@ -87,8 +92,11 @@ interface WebBrowser {
 
     suspend fun snapshot(): Result<WebSnapshot>
 
-    /** Capture the rendered viewport for a multimodal model or OCR. */
-    suspend fun screenshot(): Result<WebScreenshot>
+    /**
+     * Capture the rendered page for a multimodal model or OCR. A normal call
+     * returns one viewport; [fullPage] returns readable vertical segments.
+     */
+    suspend fun screenshot(fullPage: Boolean = false): Result<List<WebScreenshot>>
 
     suspend fun click(ref: String): Result<WebSnapshot>
 

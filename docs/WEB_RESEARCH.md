@@ -1,6 +1,6 @@
 # Web research / 内置浏览器
 
-> 状态：通用 Web Agent v2 + 视觉通道（默认只读；是否点击状态变更控件由模型按用户意图判断；shadow DOM / 同源 iframe / press / select / check / 前进后退 / network / 状态提示；`screenshot` 返回视口图片 + OCR）已在模拟器验证；GitHub 等公开站点与登录 handoff 已真机验证；HN/Reddit 真站待回归；X 登录被 X 拦截
+> 状态：通用 Web Agent v2 + 视觉通道 Phase 2（默认只读；shadow DOM / 同源 iframe / press / select / check / 前进后退 / network / 状态提示；`screenshot` 支持视口、全页分段、OCR、敏感页拦截和用户回执）已在模拟器验证；GitHub 等公开站点与登录 handoff 已真机验证；HN/Reddit 真站待回归；X 登录被 X 拦截
 > 最后更新：2026-11-11
 > 版本：0.6.0-dev
 >
@@ -34,6 +34,7 @@ Debug-only 的 `DebugBrowserActivity` 已经验证：
 - `open` / `snapshot` / `screenshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll`
 - 真机 GitHub 搜索：open + snapshot 约 0.9–3.4s，点击 `w7` 导航到 `openai/openai-cookbook` 约 1.5s
 - 模拟器本地页：`screenshot` 720×1600，CSS 图表/文字和 Canvas 绘图都能被模型看到；OCR 同时返回可见文字
+- 模拟器全页：5 段 799×1600、9 段页面截到 6 段并标注截断；密码页/银行卡页返回 `screenshot_blocked`；主屏 `take_screenshot` / `screen_ocr` 也返回图片 + OCR
 - 全程不需要 Shizuku / root / 无线 ADB
 
 关键参数：
@@ -54,6 +55,7 @@ DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
 web_research open(url)
 web_research snapshot()          # 页面文本 + 可交互元素 + 稳定 ref + 状态/滚动/frame
 web_research screenshot()        # 当前视口 PNG + OCR；视觉模型可拿到图片
+web_research screenshot(full_page=true)  # 全页分段，最多 6 段，超出标注截断
 web_research read()              # article/main 正文提取
 web_research click(ref)
 web_research type(ref, text)
@@ -91,19 +93,23 @@ web_research hide()
 `screenshot` 解决“DOM 只能读文字，看不见网页”的问题：
 
 - 返回当前**视口**的 PNG（最长边缩到 1600px，控制 token），同时始终做 ML Kit OCR，把可见文字附在工具结果里。
+- `full_page=true` 用 `WebView.capturePicture()` 抓整页，再按视口切成最多 6 段可读图片；超过 6 段会标注“页面更长，剩余未包含”。不再依赖滚动截图（虚拟屏滚动后 `View.draw()` 会返回空白）。
 - 多模态通道：`ToolResult.Success` 新增 `images: List<ToolImage>`；`AgentLoop` 在工具消息批次之后插入一条 synthetic user message，复用 OpenAI / Anthropic / Gemini 现有的 user 图片序列化。
 - 能力判断：`VisionModels.supports(model)` 覆盖 GPT-4o/4.1/5/6、Claude 3/4/5、Gemini、Grok、Qwen-VL、LLaVA、Pixtral、GLM-V 等；未知本地模型默认只返回 OCR。
 - `vision=true` 可给自定义多模态模型强制附加图片；`vision=false` 可在纯文本/隐私场景只保留 OCR。
 - 图片只在**下一个模型轮次**使用；之后只保留文本标记和 OCR，不把 base64 写进数据库或后续上下文，避免重复计费和上下文膨胀。
 - 截图内容按不可信外部数据处理（`ToolTrust` 标记），图片里的文字不能当指令执行。
+- 用户回执：工具截图会作为 assistant 消息附件显示（受设置 → 存储 →「保留后台执行截图」控制），用户可以点开看 AI 实际看到了什么；这些回执不会回传给模型。
+- 敏感页默认拦截：可见密码框、银行卡/支付表单、Stripe/PayPal 等支付 iframe、checkout/payment 页面、CAPTCHA 页面都不会截图，返回 `screenshot_blocked`，让模型改用 `snapshot`/`read` 或 `show_to_user`。
+- 主屏 `take_screenshot` / `screen_ocr` 也接入同一视觉通道：保存/OCR 的同时，vision 开启时附加图片；`vision=false` 只返回文字。
 
 适用场景：CSS 图表、Canvas/信息图、商品图、地图、图片搜索、布局验证，以及 DOM 读不到但视觉可见的页面。DOM 仍是首选；`screenshot` 是补充通道，不是每次操作都截图。
 
 边界：
 
-- 只截当前视口，不做 full-page 滚动拼接（后续再做）。
-- 直接对 WebView 调用 `View.draw()` 抓图；视频/SurfaceView 等独立合成层可能缺失。2D Canvas、HTML/CSS、图片已验证。
-- 截图会发给用户配置的模型服务商（只有 vision 开启时）；密码/支付/验证码页面应先用 `show_to_user` 交给用户，不建议截图。
+- `full_page` 最多 6 段，单段最长边 1600px；超长页面需要滚动或 `read` 继续。
+- 全页截图依赖 `WebView.enableSlowWholeDocumentDraw()`（应用启动时设置）；它会增加长页面的渲染内存/耗时。某些 WebView 版本对视频、WebGL、独立 SurfaceView 的 `capturePicture()` 内容不完整。
+- 截图会发给用户配置的模型服务商（只有 vision 开启时）；密码/支付/验证码页面已被默认拦截，但主屏截图仍可能包含通知或其他敏感内容。
 - 文本模型收到的是 OCR，不是图片；复杂图表可能读错，重要数字应让模型用 DOM/文本交叉验证。
 
 ### 登录 / 验证码 handoff
@@ -187,6 +193,9 @@ web_research tool
 - 状态：login/captcha/consent/blocked 分别输出 `LOGIN_REQUIRED / CAPTCHA / CONSENT_REQUIRED / BLOCKED`。
 - 端侧不硬拦：点击 `Post` 会执行（模型决定）；密码输入仍返回 handoff 提示。
 - 视觉：本地 CSS 图表页 `screenshot` 720×1600 / 135KB，OCR 读到 “cobalt lantern 47” 与柱状图数值；Canvas-only 页（DOM 只有 canvas 元素）截图 76KB，OCR 读到 “31415” 和柱状图数值；`vision=false` 返回同样的 OCR 但 `images=0`。
+- 全页：5 段长页返回 5 张 799×1600、OCR 分别读到 `ALPHA-111`…`ECH0-555`；9 段页面只返回前 6 段并提示截断；`full_page=true&vision=false` 返回 5 段 OCR 但 `images=0`。
+- 敏感页：`password.html`（可见 password 输入）和 `payment.html`（`autocomplete=cc-number/cc-csc`）均返回 `screenshot_blocked`，没有生成图片。
+- 主屏视觉：`take_screenshot` 返回 92KB PNG + OCR + `images=1`；`screen_ocr` 返回 OCR + `images=1`（API 35 模拟器，系统“整个屏幕”共享授权）。
 
 ## 6. 风险
 
@@ -197,7 +206,7 @@ web_research tool
 - **WebView 兼容性**：部分站点要求 Chrome 内核/DRM；必要时只把前台 handoff 交给 Custom Tabs，后台自动化仍用 WebView。
 - **模型判断边界**：端侧不做按钮/GET 链接的“是否状态变更”正则，网页内容可能诱导模型点击发送/发布/关注；工具描述、用户意图和确认机制共同约束，高风险操作前可让模型先 `ask_user`。
 - **DOM 边界**：开放 shadow DOM 和同源 iframe 可读；closed shadow root、跨域 iframe 只能列出来源，不能读内容。
-- **视觉边界**：`screenshot` 只截视口；直接 `View.draw()` 可能漏掉视频/SurfaceView 等独立合成层；图片会发给模型服务商（vision 开启时），密码/支付/验证码页面应避免截图。
+- **视觉边界**：`screenshot` 默认只截视口，`full_page` 最多 6 段；`capturePicture()` 可能漏掉视频/WebGL/SurfaceView 等独立合成层；图片会发给模型服务商（vision 开启时），密码/支付/验证码页默认拦截，但主屏截图仍可能包含其他敏感内容。
 - **平台条款**：只做用户授权范围内的读取；不承诺绕过任何平台限制。
 
 ## 7. 非目标
@@ -213,5 +222,6 @@ web_research tool
 2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号。
 3. Stack Overflow 人机验证 handoff 回归。
 4. X 用 API token 或已有会话；不重试 WebView 登录。
-5. 视觉通道 Phase 2：full-page / 滚动拼接、截图回执给用户看、`take_screenshot`/`screen_ocr` 统一图片通道、敏感页面默认不截图。
-6. 0.6.0 继续做首启/更新/诊断和 Deep Research 结果引用；平台矩阵和限制随 release notes 发布，不把单一设备作为发布门槛。
+5. 视觉通道 Phase 2 已完成：full-page 分段、用户截图回执、主屏工具图片通道、敏感页面默认拦截。
+6. 视觉通道 Phase 3（可选）：视觉描述兜底给文本模型、按截图坐标点击/滚动、full-page 超长页续页。
+7. 0.6.0 继续做首启/更新/诊断和 Deep Research 结果引用；平台矩阵和限制随 release notes 发布，不把单一设备作为发布门槛。

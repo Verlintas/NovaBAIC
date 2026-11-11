@@ -21,6 +21,7 @@ package com.verlintas.baic2.core.engine
 
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ToolCall
+import com.verlintas.baic2.core.model.ToolImage
 import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.core.model.ToolSpec
 
@@ -35,7 +36,12 @@ sealed interface AgentEvent {
 
     data class ToolCallStarted(val call: ToolCall) : AgentEvent
 
-    data class ToolCallFinished(val call: ToolCall, val untrusted: Boolean = false) : AgentEvent
+    data class ToolCallFinished(
+        val call: ToolCall,
+        val untrusted: Boolean = false,
+        /** Ephemeral images for the UI receipt; not part of persisted tool text. */
+        val images: List<ToolImage> = emptyList(),
+    ) : AgentEvent
 
     data class Usage(val promptTokens: Long?, val completionTokens: Long?) : AgentEvent
 

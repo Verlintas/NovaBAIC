@@ -67,9 +67,10 @@ class AndroidWebBrowser @Inject constructor(
             ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
     }
 
-    override suspend fun screenshot(): Result<WebScreenshot> = mutex.withLock {
-        session()?.screenshot() ?: noSession()
-    }
+    override suspend fun screenshot(fullPage: Boolean): Result<List<WebScreenshot>> =
+        mutex.withLock {
+            session()?.screenshot(fullPage) ?: noSession()
+        }
 
     override suspend fun click(ref: String): Result<WebSnapshot> = mutex.withLock {
         session()?.click(ref)
