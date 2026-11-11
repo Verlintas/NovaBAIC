@@ -21,6 +21,8 @@ package com.verlintas.baic2.browser
 
 import android.app.Presentation
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
@@ -43,12 +45,15 @@ import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebElement
 import com.verlintas.baic2.device.api.WebFrame
 import com.verlintas.baic2.device.api.WebResource
+import com.verlintas.baic2.device.api.WebScreenshot
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.device.api.WebWaitResult
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -86,8 +91,8 @@ class BrowserSession(private val host: ComponentActivity) {
         val thread = HandlerThread("baic2-web-frames").apply { start() }
         frameThread = thread
         reader.setOnImageAvailableListener({ source ->
-            // Keep the queue drained; the DOM is the primary interface and we
-            // do not need every frame for this MVP.
+            // Keep the buffer queue drained; DOM and view drawing are the
+            // primary render interfaces for this session.
             runCatching { source.acquireLatestImage()?.close() }
         }, Handler(thread.looper))
         val display = manager.createVirtualDisplay(
@@ -186,6 +191,33 @@ class BrowserSession(private val host: ComponentActivity) {
         val raw = evaluate(view, SNAPSHOT_JS)
             ?: return Result.failure(IllegalStateException("snapshot_failed"))
         return runCatching { parseSnapshot(raw) }
+    }
+
+    suspend fun screenshot(): Result<WebScreenshot> {
+        touch()
+        val view = awaitReady()
+            ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        // Draw the WebView viewport directly. ImageReader frames from the
+        // virtual display can contain only the window background while
+        // Chromium composites the page on a separate layer, so the reader is
+        // not dependable for the visual channel. Chromium may need one draw
+        // to produce content, hence the short retry loop.
+        repeat(4) { attempt ->
+            val frame = captureViewBitmap(view)
+            if (frame != null && !frame.blank) {
+                Log.i(
+                    TAG,
+                    "screenshot ${frame.width}x${frame.height} bytes=${frame.bytes.size}",
+                )
+                return Result.success(
+                    WebScreenshot(frame.bytes, "image/png", frame.width, frame.height),
+                )
+            }
+            if (attempt < 3) delay(120)
+        }
+        return Result.failure(
+            IllegalStateException("screenshot_blank: the page rendered no visible pixels"),
+        )
     }
 
     suspend fun click(ref: String): Result<WebSnapshot> {
@@ -629,6 +661,63 @@ class BrowserSession(private val host: ComponentActivity) {
         }
     }
 
+    private data class CapturedFrame(
+        val bytes: ByteArray,
+        val width: Int,
+        val height: Int,
+        val blank: Boolean,
+    )
+
+    /** Cheap uniformity check for a not-yet-rendered WebView frame. */
+    private fun isBlank(bitmap: Bitmap): Boolean {
+        val stepX = maxOf(1, bitmap.width / 64)
+        val stepY = maxOf(1, bitmap.height / 64)
+        val row = IntArray(bitmap.width)
+        var first = 0
+        var sampled = 0
+        var y = 0
+        while (y < bitmap.height) {
+            bitmap.getPixels(row, 0, bitmap.width, 0, y, bitmap.width, 1)
+            var x = 0
+            while (x < bitmap.width) {
+                val pixel = row[x]
+                if (sampled == 0) first = pixel else if (pixel != first) return false
+                sampled++
+                x += stepX
+            }
+            y += stepY
+        }
+        return true
+    }
+
+    private suspend fun captureViewBitmap(view: WebView): CapturedFrame? =
+        withContext(Dispatchers.Main) {
+            val width = view.width
+            val height = view.height
+            if (width <= 0 || height <= 0) return@withContext null
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bitmap))
+            val scaled = scaleDown(bitmap, MAX_SCREENSHOT_DIMENSION)
+            val blank = isBlank(scaled)
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+            if (scaled !== bitmap) scaled.recycle()
+            bitmap.recycle()
+            CapturedFrame(out.toByteArray(), scaled.width, scaled.height, blank)
+        }
+
+    private fun scaleDown(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val longest = maxOf(bitmap.width, bitmap.height)
+        if (longest <= maxDimension) return bitmap
+        val ratio = maxDimension.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).toInt().coerceAtLeast(1),
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
+    }
+
     private fun parseSnapshot(raw: String): WebSnapshot {
         val decoded = JSONTokener(raw).nextValue() as? String
             ?: error("snapshot_not_string")
@@ -694,6 +783,7 @@ class BrowserSession(private val host: ComponentActivity) {
         const val KEY_SETTLE_MS = 2_500L
         const val NAV_SETTLE_MS = 8_000L
         const val SCROLL_SETTLE_MS = 1_500L
+        const val MAX_SCREENSHOT_DIMENSION = 1600
 
         const val SETTLE_JS = """
             (function() {

@@ -82,7 +82,15 @@ class DebugWebActivity : ComponentActivity() {
             suspend fun execute(args: kotlinx.serialization.json.JsonObject): String {
                 val startedAt = System.currentTimeMillis()
                 val result = runCatching { tool.execute(args, toolContext) }
-                Log.i(TAG, "elapsedMs=${System.currentTimeMillis() - startedAt} result=$result")
+                val summary = when (val value = result.getOrNull()) {
+                    is ToolResult.Success ->
+                        "Success(images=${value.images.size}, output=${value.output.take(300)})"
+                    is ToolResult.Failure ->
+                        "Failure(reason=${value.reason.take(300)}, recoverable=${value.recoverable})"
+                    is ToolResult.Denied -> "Denied(reason=${value.reason.take(300)})"
+                    null -> "CRASH: ${result.exceptionOrNull()?.message}"
+                }
+                Log.i(TAG, "elapsedMs=${System.currentTimeMillis() - startedAt} result=$summary")
                 return when (val value = result.getOrNull()) {
                     is ToolResult.Success -> value.output
                     is ToolResult.Failure -> "FAILURE: ${value.reason}"

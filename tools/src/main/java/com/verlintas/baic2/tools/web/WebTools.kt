@@ -301,7 +301,8 @@ class WebSearchTool @Inject constructor(
             "(read_top). `query` may be an array of up to 3 queries for comparisons. " +
             "Use `freshness` for time-sensitive news and `engines` to restrict or widen " +
             "the engine set (e.g. \"bing,baidu\" for local results). Site: and quotes are " +
-            "passed through to the engines.",
+            "passed through to the engines. Results are text snippets; for the rendered page " +
+            "use web_research open + screenshot (vision or OCR).",
         parametersJson = """{"type":"object","properties":{"query":{"description":"One query string or an array of up to 3 queries"},"max_results":{"type":"integer","description":"1-15, default 10"},"read_top":{"type":"integer","description":"read the full text of the top N results, 0-3, default 1"},"freshness":{"type":"string","enum":["any","day","week","month","year"],"description":"prefer recent results where the engine supports it"},"engines":{"type":"string","description":"comma-separated subset of ddg-lite,ddg,bing,baidu,mojeek,360,sogou"},"refresh":{"type":"boolean","description":"bypass the 5-minute cache"}},"required":["query"]}""",
         readOnly = true,
         danger = DangerLevel.LOW,

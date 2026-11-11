@@ -69,6 +69,14 @@ data class WebWaitResult(
     val matched: Boolean,
 )
 
+/** A rendered viewport image of the current browser page. */
+data class WebScreenshot(
+    val bytes: ByteArray,
+    val mimeType: String,
+    val width: Int,
+    val height: Int,
+)
+
 /**
  * A read-only browser session running in an app-owned virtual display. It is
  * intentionally independent of AccessibilityService, Shizuku and ADB: the
@@ -78,6 +86,9 @@ interface WebBrowser {
     suspend fun open(url: String): Result<WebSnapshot>
 
     suspend fun snapshot(): Result<WebSnapshot>
+
+    /** Capture the rendered viewport for a multimodal model or OCR. */
+    suspend fun screenshot(): Result<WebScreenshot>
 
     suspend fun click(ref: String): Result<WebSnapshot>
 

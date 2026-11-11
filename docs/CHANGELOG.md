@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### 新增 Added
+
+- **网页视觉通道**：`web_research` 新增 `screenshot`，返回当前视口 PNG + ML Kit OCR；多模态模型通过 `ToolResult.images` 和 synthetic user image message 真正看到网页。支持 CSS 图表、Canvas、图片和视觉布局；文本模型自动只拿 OCR。
+- **视觉能力判断**：`VisionModels` 自动识别 GPT-4o/4.1/5/6、Claude 3/4/5、Gemini、Grok、Qwen-VL、LLaVA、Pixtral 等；`vision=true/false` 可覆盖。截图只用于下一个模型轮次，不写数据库、不在后续轮次重复发送。
+- **浏览器截图回归**：API 35 模拟器本地页验证 720×1600 PNG、OCR 文本、Canvas-only 页面和 `vision=false` 路径；新增 `ToolResult` 图片序列化与 `AgentLoop` 图片生命周期单测。
+
 ## [0.5.0] - 2026-11-08
 
 > 0.5.0 包含两块：应用自有虚拟屏 + WebView 的通用网页研究（默认只读，状态变更由模型按用户意图判断），以及用户可管理的对话模式。网页研究不依赖第三方 App 的无障碍树，也不需要 Shizuku、root 或无线 ADB；GitHub 搜索 MVP 已在真机验证。
