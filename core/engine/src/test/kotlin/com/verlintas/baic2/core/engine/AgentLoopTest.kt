@@ -20,6 +20,7 @@
 package com.verlintas.baic2.core.engine
 
 import com.verlintas.baic2.core.model.AppMode
+import com.verlintas.baic2.core.model.AttachmentKind
 import com.verlintas.baic2.core.model.ChatMessage
 import com.verlintas.baic2.core.model.ChatProvider
 import com.verlintas.baic2.core.model.ChatRequest
@@ -31,6 +32,7 @@ import com.verlintas.baic2.core.model.ProviderId
 import com.verlintas.baic2.core.model.StreamEvent
 import com.verlintas.baic2.core.model.ToolCall
 import com.verlintas.baic2.core.model.ToolCallStatus
+import com.verlintas.baic2.core.model.ToolImage
 import com.verlintas.baic2.core.model.ToolResult
 import com.verlintas.baic2.core.model.ToolSpec
 import kotlin.test.Test
@@ -54,8 +56,10 @@ class AgentLoopTest {
 
     private class ScriptedProvider(private val rounds: List<List<StreamEvent>>) : ChatProvider {
         private var cursor = 0
+        val requests = mutableListOf<ChatRequest>()
 
         override fun stream(request: ChatRequest): Flow<StreamEvent> = flow {
+            requests += request
             val script = rounds.getOrElse(cursor) { emptyList() }
             cursor++
             script.forEach { emit(it) }
@@ -92,6 +96,102 @@ class AgentLoopTest {
         val assistant = events.filterIsInstance<AgentEvent.AssistantMessage>().single()
         assertEquals("Hello world", assistant.message.content)
         assertEquals(AgentEvent.Completed, events.last())
+    }
+
+    @Test
+    fun toolImagesRideASyntheticUserMessage() = runTest {
+        val call = ToolCall(id = "v1", name = "web_research", argumentsJson = "{}")
+        val provider = ScriptedProvider(listOf(toolRound(call), textRound("done")))
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(
+                        name = "web_research",
+                        description = "web",
+                        readOnly = true,
+                        untrustedOutput = true,
+                    ),
+                ),
+            ),
+            toolRunner = { _, _ ->
+                ToolResult.Success(
+                    "Screenshot captured",
+                    images = listOf(
+                        ToolImage(
+                            mimeType = "image/png",
+                            base64 = "aGVsbG8=",
+                            fileName = "web.png",
+                            width = 10,
+                            height = 20,
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val events = loop.run(config, AppMode.CHAT_PLUS, history = history).toList()
+
+        assertEquals(AgentEvent.Completed, events.last())
+        val second = provider.requests[1]
+        val imageMessage = second.messages.lastOrNull { message ->
+            message.role == ChatRole.USER &&
+                message.attachments.any { it.kind == AttachmentKind.IMAGE }
+        }
+        val image = requireNotNull(imageMessage)
+        assertEquals("aGVsbG8=", image.attachments.single().base64)
+        assertTrue(image.content.contains("untrusted", ignoreCase = true))
+    }
+
+    @Test
+    fun oldScreenshotsAreNotResentOnLaterRounds() = runTest {
+        val screenshot = ToolCall(
+            id = "v1",
+            name = "web_research",
+            argumentsJson = """{"action":"screenshot"}""",
+        )
+        val snapshot = ToolCall(
+            id = "v2",
+            name = "web_research",
+            argumentsJson = """{"action":"snapshot"}""",
+        )
+        val provider = ScriptedProvider(
+            listOf(toolRound(screenshot), toolRound(snapshot), textRound("done")),
+        )
+        val loop = AgentLoop(
+            providerFactory = { provider },
+            toolCatalog = FakeCatalog(
+                listOf(
+                    ToolSpec(
+                        name = "web_research",
+                        description = "web",
+                        readOnly = true,
+                        untrustedOutput = true,
+                    ),
+                ),
+            ),
+            toolRunner = { call, _ ->
+                if (call.id == "v1") {
+                    ToolResult.Success(
+                        "Screenshot captured",
+                        images = listOf(ToolImage("image/png", "aGVsbG8=")),
+                    )
+                } else {
+                    ToolResult.Success("Snapshot text")
+                }
+            },
+        )
+
+        val events = loop.run(config, AppMode.CHAT_PLUS, history = history).toList()
+
+        assertEquals(AgentEvent.Completed, events.last())
+        assertEquals(3, provider.requests.size)
+        // Round two is the one that must see the screenshot.
+        assertTrue(provider.requests[1].messages.any { it.attachments.isNotEmpty() })
+        // Round three still has the marker but no image bytes.
+        val third = provider.requests[2].messages
+        assertTrue(third.none { it.attachments.isNotEmpty() })
+        assertTrue(third.any { it.role == ChatRole.USER && it.content.contains("visual output") })
     }
 
     @Test

@@ -28,6 +28,7 @@ import android.webkit.WebViewDatabase
 import com.verlintas.baic2.core.model.NetworkEndpointPolicy
 import com.verlintas.baic2.device.api.WebBrowser
 import com.verlintas.baic2.device.api.WebResource
+import com.verlintas.baic2.device.api.WebScreenshot
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.device.api.WebWaitResult
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -64,6 +65,10 @@ class AndroidWebBrowser @Inject constructor(
     override suspend fun snapshot(): Result<WebSnapshot> = mutex.withLock {
         session()?.snapshot()
             ?: Result.failure(IllegalStateException("no_browser_session: open a URL first"))
+    }
+
+    override suspend fun screenshot(): Result<WebScreenshot> = mutex.withLock {
+        session()?.screenshot() ?: noSession()
     }
 
     override suspend fun click(ref: String): Result<WebSnapshot> = mutex.withLock {

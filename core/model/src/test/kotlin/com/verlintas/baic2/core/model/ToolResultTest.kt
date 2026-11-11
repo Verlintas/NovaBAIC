@@ -52,4 +52,24 @@ class ToolResultTest {
 
         assertEquals(original, decoded)
     }
+
+    @Test
+    fun successWithImagesRoundTrip() {
+        val original: ToolResult = ToolResult.Success(
+            "Screenshot captured",
+            images = listOf(
+                ToolImage(
+                    mimeType = "image/png",
+                    base64 = "aGVsbG8=",
+                    fileName = "web.png",
+                    width = 720,
+                    height = 1600,
+                ),
+            ),
+        )
+
+        val decoded = json.decodeFromString<ToolResult>(json.encodeToString(original))
+
+        assertEquals(original, decoded)
+    }
 }

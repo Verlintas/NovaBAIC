@@ -31,7 +31,10 @@ import kotlinx.serialization.Serializable
 sealed interface ToolResult {
 
     @Serializable
-    data class Success(val output: String) : ToolResult
+    data class Success(
+        val output: String,
+        val images: List<ToolImage> = emptyList(),
+    ) : ToolResult
 
     @Serializable
     data class Failure(
@@ -42,3 +45,14 @@ sealed interface ToolResult {
     @Serializable
     data class Denied(val reason: String) : ToolResult
 }
+
+/** One image produced by a tool for the next multimodal model round. */
+@Serializable
+data class ToolImage(
+    val mimeType: String,
+    val base64: String,
+    val fileName: String? = null,
+    val localPath: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+)

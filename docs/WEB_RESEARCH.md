@@ -1,8 +1,8 @@
 # Web research / 内置浏览器
 
-> 状态：通用 Web Agent v2（默认只读；是否点击状态变更控件由模型按用户意图判断；shadow DOM / 同源 iframe / press / select / check / 前进后退 / network / 状态提示）已在模拟器验证；GitHub 等公开站点与登录 handoff 已真机验证；HN/Reddit 真站待回归；X 登录被 X 拦截
-> 最后更新：2026-11-07
-> 版本：0.5.0
+> 状态：通用 Web Agent v2 + 视觉通道（默认只读；是否点击状态变更控件由模型按用户意图判断；shadow DOM / 同源 iframe / press / select / check / 前进后退 / network / 状态提示；`screenshot` 返回视口图片 + OCR）已在模拟器验证；GitHub 等公开站点与登录 handoff 已真机验证；HN/Reddit 真站待回归；X 登录被 X 拦截
+> 最后更新：2026-11-11
+> 版本：0.6.0-dev
 >
 > 这是通用能力：登录 handoff 使用每个用户自己的账号，不保存密码，不依赖维护者账号或单一设备；设置 → 存储可清除网页数据。平台支持以本文矩阵为准，不承诺所有站点。
 
@@ -31,8 +31,9 @@ Debug-only 的 `DebugBrowserActivity` 已经验证：
 `web_research` 已基于同一套架构落地：
 
 - `BrowserHostActivity` + `BrowserSession`（App 自有虚拟屏，`OWN_CONTENT_ONLY`）
-- `open` / `snapshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll`
+- `open` / `snapshot` / `screenshot` / `read` / `click(ref)` / `type(ref, text)` / `scroll`
 - 真机 GitHub 搜索：open + snapshot 约 0.9–3.4s，点击 `w7` 导航到 `openai/openai-cookbook` 约 1.5s
+- 模拟器本地页：`screenshot` 720×1600，CSS 图表/文字和 Canvas 绘图都能被模型看到；OCR 同时返回可见文字
 - 全程不需要 Shizuku / root / 无线 ADB
 
 关键参数：
@@ -52,6 +53,7 @@ DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
 ```text
 web_research open(url)
 web_research snapshot()          # 页面文本 + 可交互元素 + 稳定 ref + 状态/滚动/frame
+web_research screenshot()        # 当前视口 PNG + OCR；视觉模型可拿到图片
 web_research read()              # article/main 正文提取
 web_research click(ref)
 web_research type(ref, text)
@@ -84,6 +86,26 @@ web_research hide()
 - 可交互元素列表：索引、标签、role、tag、placeholder、href、是否可编辑、是否可见
 - 表单 / 搜索框 / 结果列表的语义分组
 
+### 视觉通道：screenshot
+
+`screenshot` 解决“DOM 只能读文字，看不见网页”的问题：
+
+- 返回当前**视口**的 PNG（最长边缩到 1600px，控制 token），同时始终做 ML Kit OCR，把可见文字附在工具结果里。
+- 多模态通道：`ToolResult.Success` 新增 `images: List<ToolImage>`；`AgentLoop` 在工具消息批次之后插入一条 synthetic user message，复用 OpenAI / Anthropic / Gemini 现有的 user 图片序列化。
+- 能力判断：`VisionModels.supports(model)` 覆盖 GPT-4o/4.1/5/6、Claude 3/4/5、Gemini、Grok、Qwen-VL、LLaVA、Pixtral、GLM-V 等；未知本地模型默认只返回 OCR。
+- `vision=true` 可给自定义多模态模型强制附加图片；`vision=false` 可在纯文本/隐私场景只保留 OCR。
+- 图片只在**下一个模型轮次**使用；之后只保留文本标记和 OCR，不把 base64 写进数据库或后续上下文，避免重复计费和上下文膨胀。
+- 截图内容按不可信外部数据处理（`ToolTrust` 标记），图片里的文字不能当指令执行。
+
+适用场景：CSS 图表、Canvas/信息图、商品图、地图、图片搜索、布局验证，以及 DOM 读不到但视觉可见的页面。DOM 仍是首选；`screenshot` 是补充通道，不是每次操作都截图。
+
+边界：
+
+- 只截当前视口，不做 full-page 滚动拼接（后续再做）。
+- 直接对 WebView 调用 `View.draw()` 抓图；视频/SurfaceView 等独立合成层可能缺失。2D Canvas、HTML/CSS、图片已验证。
+- 截图会发给用户配置的模型服务商（只有 vision 开启时）；密码/支付/验证码页面应先用 `show_to_user` 交给用户，不建议截图。
+- 文本模型收到的是 OCR，不是图片；复杂图表可能读错，重要数字应让模型用 DOM/文本交叉验证。
+
 ### 登录 / 验证码 handoff
 
 已实现：
@@ -101,7 +123,7 @@ web_research hide()
 
 ### 会话回收与清除
 
-- 空闲 5 分钟自动释放虚拟屏 / WebView；每次 `open` / `snapshot` / `click` / `type` / `scroll` / `show_to_user` 都会重置计时。
+- 空闲 5 分钟自动释放虚拟屏 / WebView；每次 `open` / `snapshot` / `screenshot` / `click` / `type` / `scroll` / `show_to_user` 都会重置计时。
 - `hide` 立即关闭会话；下一次 `open` 新建。
 - 登录 handoff 期间暂停空闲计时，避免用户还在前台登录时后台会话被回收。
 - 设置 → 存储 →「清除网页数据」删除 Cookie、WebStorage、表单数据和 WebView 缓存；登录态不写入模型上下文。
@@ -113,6 +135,7 @@ web_research tool
   -> BrowserSession (singleton, app process)
        -> BrowserHost (app-owned VirtualDisplay + Presentation + WebView)
        -> DomBridge (evaluateJavascript + ref registry)
+       -> ScreenshotBridge (WebView viewport -> PNG + OCR)
        -> CookieStore (WebView CookieManager / WebStorage)
        -> Handoff (foreground Activity or overlay)
 ```
@@ -126,7 +149,7 @@ web_research tool
 
 默认**只读**：正常研究流程不发送/下单/支付；是否点击发送、发布、关注等状态变更控件由模型根据用户明确请求判断。
 
-1. `open` + `snapshot` + `read` + `scroll` + `wait`
+1. `open` + `snapshot` + `screenshot` + `read` + `scroll` + `wait`
 2. `click` / `press` / `type` 覆盖链接、结果行、搜索框、表单和快捷键；端侧不做按钮正则硬拦
 3. 登录/验证码 handoff；密码交给前台，不由自动化会话输入
 4. `press` 可以提交搜索表单；是否按 Enter 发送消息由模型按用户请求判断
@@ -163,6 +186,7 @@ web_research tool
 - network：列出 `/api/data.json`；wait：匹配 1.5s 后出现的 `Delayed result`。
 - 状态：login/captcha/consent/blocked 分别输出 `LOGIN_REQUIRED / CAPTCHA / CONSENT_REQUIRED / BLOCKED`。
 - 端侧不硬拦：点击 `Post` 会执行（模型决定）；密码输入仍返回 handoff 提示。
+- 视觉：本地 CSS 图表页 `screenshot` 720×1600 / 135KB，OCR 读到 “cobalt lantern 47” 与柱状图数值；Canvas-only 页（DOM 只有 canvas 元素）截图 76KB，OCR 读到 “31415” 和柱状图数值；`vision=false` 返回同样的 OCR 但 `images=0`。
 
 ## 6. 风险
 
@@ -173,6 +197,7 @@ web_research tool
 - **WebView 兼容性**：部分站点要求 Chrome 内核/DRM；必要时只把前台 handoff 交给 Custom Tabs，后台自动化仍用 WebView。
 - **模型判断边界**：端侧不做按钮/GET 链接的“是否状态变更”正则，网页内容可能诱导模型点击发送/发布/关注；工具描述、用户意图和确认机制共同约束，高风险操作前可让模型先 `ask_user`。
 - **DOM 边界**：开放 shadow DOM 和同源 iframe 可读；closed shadow root、跨域 iframe 只能列出来源，不能读内容。
+- **视觉边界**：`screenshot` 只截视口；直接 `View.draw()` 可能漏掉视频/SurfaceView 等独立合成层；图片会发给模型服务商（vision 开启时），密码/支付/验证码页面应避免截图。
 - **平台条款**：只做用户授权范围内的读取；不承诺绕过任何平台限制。
 
 ## 7. 非目标
@@ -188,4 +213,5 @@ web_research tool
 2. Reddit `old.reddit.com` 登录 handoff；每个用户用自己的账号。
 3. Stack Overflow 人机验证 handoff 回归。
 4. X 用 API token 或已有会话；不重试 WebView 登录。
-5. 收 0.5.0；平台矩阵和限制随 release notes 发布，不把单一设备作为发布门槛。
+5. 视觉通道 Phase 2：full-page / 滚动拼接、截图回执给用户看、`take_screenshot`/`screen_ocr` 统一图片通道、敏感页面默认不截图。
+6. 0.6.0 继续做首启/更新/诊断和 Deep Research 结果引用；平台矩阵和限制随 release notes 发布，不把单一设备作为发布门槛。
