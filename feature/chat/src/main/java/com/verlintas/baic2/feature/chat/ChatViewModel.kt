@@ -20,6 +20,7 @@
 package com.verlintas.baic2.feature.chat
 
 import android.content.Context
+import android.util.Base64
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -73,6 +74,7 @@ import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.model.TokenEstimator
 import com.verlintas.baic2.core.model.ToolCall
 import com.verlintas.baic2.core.model.ToolCallStatus
+import com.verlintas.baic2.core.model.ToolImage
 import com.verlintas.baic2.core.model.ToolTrust
 import com.verlintas.baic2.device.api.PdfTextExtractor
 import com.verlintas.baic2.device.api.RunNotifier
@@ -1073,6 +1075,9 @@ class ChatViewModel @Inject constructor(
                         }
                         assistantMessageId?.let { id ->
                             conversationRepository.updateToolCalls(id, pendingCalls)
+                            if (event.images.isNotEmpty()) {
+                                quietly { attachToolImages(id, event.images) }
+                            }
                         }
                         conversationRepository.append(
                             ChatMessage(
@@ -1247,6 +1252,35 @@ class ChatViewModel @Inject constructor(
         val message = conversationRepository.getMessages(conversationId)
             .firstOrNull { it.id == messageId } ?: return
         conversationRepository.updateAttachments(messageId, message.attachments + attachment)
+    }
+
+    /**
+     * Tool screenshots are ephemeral for the model but useful as a UI receipt.
+     * Persist them only when the existing "keep execution screenshots" setting
+     * is on; they are never fed back into later model turns.
+     */
+    private suspend fun attachToolImages(messageId: Long, images: List<ToolImage>) {
+        if (!settingsRepository.keepExecutionScreenshots.first()) return
+        val message = conversationRepository.getMessages(conversationId)
+            .firstOrNull { it.id == messageId } ?: return
+        val existingImages = message.attachments.count { it.kind == AttachmentKind.IMAGE }
+        val remaining = (MAX_RECEIPT_IMAGES - existingImages).coerceAtLeast(0)
+        if (remaining == 0) return
+        val attachments = images.take(remaining).mapNotNull { image ->
+            val bytes = runCatching {
+                Base64.decode(image.base64, Base64.DEFAULT)
+            }.getOrNull() ?: return@mapNotNull null
+            attachmentProcessor.importImageBytes(
+                bytes,
+                image.fileName ?: "screenshot-web-${System.currentTimeMillis()}.png",
+            ).getOrNull()
+        }
+        if (attachments.isNotEmpty()) {
+            conversationRepository.updateAttachments(
+                messageId,
+                message.attachments + attachments,
+            )
+        }
     }
 
     private fun activityHintFor(call: ToolCall): ActivityHint {
@@ -1778,5 +1812,7 @@ class ChatViewModel @Inject constructor(
         private const val STALE_TOOL_RESULT_MS = 3_600_000L
         private const val AUTO_COMPRESS_THRESHOLD = 0.85
         private const val MAX_IMAGE_ATTACHMENTS = 4
+        /** Cap UI-only tool screenshots per assistant message. */
+        private const val MAX_RECEIPT_IMAGES = 8
     }
 }

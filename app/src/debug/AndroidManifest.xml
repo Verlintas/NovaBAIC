@@ -27,6 +27,9 @@
             android:name=".DebugUiActivity"
             android:exported="true" />
         <activity
+            android:name=".DebugToolActivity"
+            android:exported="true" />
+        <activity
             android:name=".DebugSkillActivity"
             android:exported="true" />
         <activity

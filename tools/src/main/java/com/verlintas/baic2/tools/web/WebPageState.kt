@@ -31,6 +31,47 @@ enum class WebPageState {
     EMPTY,
 }
 
+/**
+ * Default screenshot guard for pages where a bitmap would capture secrets.
+ * Password fields, card forms, payment iframes and CAPTCHA challenges stay
+ * out of the vision channel; text snapshots and handoff still work.
+ */
+object WebScreenshotPolicy {
+
+    private val paymentPath = Regex(
+        "/(checkout|payment|billing|pay)(/|\\?|#|\\z)",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val paymentText = Regex(
+        "card number|credit card|debit card|cvv|cvc|security code|payment method|" +
+            "billing address|银行卡|信用卡|付款方式|支付方式|账单地址|结算",
+        RegexOption.IGNORE_CASE,
+    )
+
+    private val paymentFrame = Regex(
+        "stripe|paypal|braintree|checkout\\.|js\\.adyen|squareup",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun blockReason(snapshot: WebSnapshot): String? {
+        if (snapshot.hasPasswordField) return "the page contains a password field"
+        if (snapshot.hasPaymentField) return "the page contains a card/payment form"
+        if (snapshot.frames.any { paymentFrame.containsMatchIn(it.url) }) {
+            return "the page embeds a payment provider"
+        }
+        if (paymentPath.containsMatchIn(snapshot.url) &&
+            paymentText.containsMatchIn(snapshot.text)
+        ) {
+            return "the page looks like a checkout/payment page"
+        }
+        if (WebPageStateDetector.detect(snapshot) == WebPageState.CAPTCHA) {
+            return "the page shows a CAPTCHA challenge"
+        }
+        return null
+    }
+}
+
 internal object WebPageStateDetector {
 
     private val captcha = Regex(

@@ -21,6 +21,7 @@ package com.verlintas.baic2
 
 import android.app.Application
 import android.content.Intent
+import android.webkit.WebView
 import androidx.core.content.ContextCompat
 import com.verlintas.baic2.core.data.prefs.SettingsRepository
 import com.verlintas.baic2.core.data.repository.ConversationRepository
@@ -62,6 +63,10 @@ class Baic2Application : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Must run before the first WebView is loaded. Full-page web research
+        // captures rely on capturePicture() containing the whole document;
+        // without this, tiles below the first viewport are blank.
+        runCatching { WebView.enableSlowWholeDocumentDraw() }
         runCatching { automationBootstrap.start() }
         runCatching { wirelessAdb.start() }
         CoroutineScope(Dispatchers.IO).launch {

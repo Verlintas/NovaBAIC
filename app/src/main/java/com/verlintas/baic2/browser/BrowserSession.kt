@@ -48,9 +48,11 @@ import com.verlintas.baic2.device.api.WebResource
 import com.verlintas.baic2.device.api.WebScreenshot
 import com.verlintas.baic2.device.api.WebSnapshot
 import com.verlintas.baic2.device.api.WebWaitResult
+import com.verlintas.baic2.tools.web.WebScreenshotPolicy
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
+import kotlin.math.ceil
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -193,10 +195,175 @@ class BrowserSession(private val host: ComponentActivity) {
         return runCatching { parseSnapshot(raw) }
     }
 
-    suspend fun screenshot(): Result<WebScreenshot> {
+    suspend fun screenshot(fullPage: Boolean = false): Result<List<WebScreenshot>> {
         touch()
         val view = awaitReady()
             ?: return Result.failure(IllegalStateException("browser_not_ready"))
+        if (!awaitViewSize(view)) {
+            return Result.failure(
+                IllegalStateException("screenshot_not_laid_out: the browser view has no size yet"),
+            )
+        }
+        val snapshot = snapshot().getOrElse {
+            return Result.failure(
+                IllegalStateException(
+                    "screenshot_guard_failed: could not inspect the page (${it.message}); " +
+                        "use snapshot or read instead.",
+                ),
+            )
+        }
+        WebScreenshotPolicy.blockReason(snapshot)?.let { reason ->
+            return Result.failure(
+                IllegalStateException(
+                    "screenshot_blocked: $reason. Use snapshot or read for text, or " +
+                        "show_to_user for credentials/CAPTCHA",
+                ),
+            )
+        }
+        val cssViewport = if (fullPage) cssViewportHeight(view, snapshot) else 0
+        val pageTiles = if (fullPage) pageTileCount(snapshot, cssViewport) else 1
+        val tileCount = pageTiles.coerceAtMost(MAX_FULL_PAGE_TILES)
+        Log.i(
+            TAG,
+            "screenshot fullPage=$fullPage pageTiles=$pageTiles tileCount=$tileCount " +
+                "scroll=${snapshot.scrollY} scrollHeight=${snapshot.scrollHeight} " +
+                "viewportHeight=${snapshot.viewportHeight} cssViewport=$cssViewport",
+        )
+        val frames = if (fullPage) {
+            captureFullPage(view, pageTiles)
+        } else {
+            listOfNotNull(captureViewport(view))
+        }
+        Log.i(TAG, "screenshot frames=${frames.size}")
+        if (frames.isEmpty()) {
+            return Result.failure(
+                IllegalStateException("screenshot_blank: the page rendered no visible pixels"),
+            )
+        }
+        val truncated = fullPage && (pageTiles > tileCount || frames.size < tileCount)
+        return Result.success(
+            frames.mapIndexed { index, frame ->
+                WebScreenshot(
+                    bytes = frame.bytes,
+                    mimeType = "image/png",
+                    width = frame.width,
+                    height = frame.height,
+                    label = if (fullPage) "part ${index + 1}/${frames.size}" else null,
+                    truncated = truncated,
+                )
+            },
+        )
+    }
+
+    private fun pageTileCount(snapshot: WebSnapshot, cssViewport: Int): Int {
+        if (snapshot.scrollHeight <= 0) return 1
+        return ceil(snapshot.scrollHeight.toDouble() / cssViewport.coerceAtLeast(1))
+            .toInt()
+            .coerceAtLeast(1)
+    }
+
+    /**
+     * Some WebView-in-Presentation builds report window.innerHeight == 0 even
+     * though layout used the real viewport. Query again after the view is
+     * laid out, then fall back to the physical size and display density.
+     */
+    private suspend fun cssViewportHeight(view: WebView, snapshot: WebSnapshot): Int {
+        if (snapshot.viewportHeight > 0) return snapshot.viewportHeight
+        val raw = evaluate(
+            view,
+            "(function(){return JSON.stringify({" +
+                "h: window.innerHeight || 0," +
+                "c: document.documentElement ? document.documentElement.clientHeight : 0" +
+                "});})()",
+        )
+        val state = parseJsObject(raw)
+        state?.optInt("h")?.takeIf { it > 0 }?.let { return it }
+        state?.optInt("c")?.takeIf { it > 0 }?.let { return it }
+        val density = host.resources.displayMetrics.density.coerceAtLeast(1f)
+        return (view.height / density).toInt().coerceAtLeast(1)
+    }
+
+    private suspend fun awaitViewSize(view: WebView): Boolean {
+        repeat(20) {
+            val size = withContext(Dispatchers.Main) { view.width to view.height }
+            if (size.first > 0 && size.second > 0) return true
+            delay(50)
+        }
+        return false
+    }
+
+    /**
+     * Full-page capture uses WebView.capturePicture(), which contains the
+     * whole document. Scrolling + View.draw() is not reliable here: the
+     * virtual display's WebView can report the new scroll offset while the
+     * next software/hardware draw is blank. The picture is cropped into
+     * viewport-sized tiles so each remains readable.
+     */
+    private suspend fun captureFullPage(
+        view: WebView,
+        pageTiles: Int,
+    ): List<CapturedFrame> {
+        val tileCount = pageTiles.coerceAtMost(MAX_FULL_PAGE_TILES)
+        val tiles = capturePictureTiles(view, pageTiles, tileCount)
+        if (!tiles.isNullOrEmpty()) return tiles
+        // capturePicture can be viewport-only on some WebView builds; keep a
+        // single readable viewport rather than failing the whole tool.
+        return listOfNotNull(captureViewport(view))
+    }
+
+    private suspend fun capturePictureTiles(
+        view: WebView,
+        pageTiles: Int,
+        tileCount: Int,
+    ): List<CapturedFrame>? = withContext(Dispatchers.Main) {
+        val picture = runCatching { view.capturePicture() }.getOrNull()
+            ?: return@withContext null
+        val rawWidth = picture.width
+        val rawHeight = picture.height
+        if (rawWidth <= 0 || rawHeight <= 0) return@withContext null
+        // Some builds return CSS pixels; render at the view's physical width
+        // so text stays sharp. Do not upscale beyond 3x.
+        val scale = if (rawWidth < view.width * 0.8f) {
+            (view.width.toFloat() / rawWidth).coerceAtMost(3f)
+        } else {
+            1f
+        }
+        val scaledWidth = (rawWidth * scale).toInt().coerceAtLeast(1)
+        val scaledHeight = (rawHeight * scale).toInt().coerceAtLeast(1)
+        Log.i(
+            TAG,
+            "picture raw=${rawWidth}x$rawHeight scaled=${scaledWidth}x$scaledHeight " +
+                "pageTiles=$pageTiles tileCount=$tileCount",
+        )
+        // A viewport-only picture cannot cover a multi-screen page.
+        if (pageTiles > 1 && scaledHeight < view.height * 1.2f) {
+            return@withContext null
+        }
+        val tileHeight = ceil(scaledHeight.toDouble() / pageTiles)
+            .toInt()
+            .coerceAtLeast(1)
+        val frames = mutableListOf<CapturedFrame>()
+        for (index in 0 until tileCount) {
+            val top = index * tileHeight
+            if (top >= scaledHeight) break
+            val height = minOf(tileHeight, scaledHeight - top)
+            val bitmap = Bitmap.createBitmap(scaledWidth, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.scale(scale, scale)
+            canvas.translate(0f, -(top / scale))
+            canvas.drawPicture(picture)
+            val scaled = scaleDown(bitmap, MAX_SCREENSHOT_DIMENSION)
+            val blank = isBlank(scaled)
+            val out = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+            if (scaled !== bitmap) scaled.recycle()
+            bitmap.recycle()
+            frames += CapturedFrame(out.toByteArray(), scaled.width, scaled.height, blank)
+        }
+        frames
+    }
+
+    private suspend fun captureViewport(view: WebView): CapturedFrame? {
         // Draw the WebView viewport directly. ImageReader frames from the
         // virtual display can contain only the window background while
         // Chromium composites the page on a separate layer, so the reader is
@@ -209,15 +376,11 @@ class BrowserSession(private val host: ComponentActivity) {
                     TAG,
                     "screenshot ${frame.width}x${frame.height} bytes=${frame.bytes.size}",
                 )
-                return Result.success(
-                    WebScreenshot(frame.bytes, "image/png", frame.width, frame.height),
-                )
+                return frame
             }
             if (attempt < 3) delay(120)
         }
-        return Result.failure(
-            IllegalStateException("screenshot_blank: the page rendered no visible pixels"),
-        )
+        return null
     }
 
     suspend fun click(ref: String): Result<WebSnapshot> {
@@ -762,6 +925,7 @@ class BrowserSession(private val host: ComponentActivity) {
             scrollHeight = json.optInt("scrollHeight"),
             viewportHeight = json.optInt("viewportHeight"),
             hasPasswordField = json.optBoolean("hasPasswordField"),
+            hasPaymentField = json.optBoolean("hasPaymentField"),
             hasCaptchaFrame = json.optBoolean("hasCaptchaFrame"),
             hasConsentBanner = json.optBoolean("hasConsentBanner"),
         )
@@ -783,6 +947,7 @@ class BrowserSession(private val host: ComponentActivity) {
         const val KEY_SETTLE_MS = 2_500L
         const val NAV_SETTLE_MS = 8_000L
         const val SCROLL_SETTLE_MS = 1_500L
+        const val MAX_FULL_PAGE_TILES = 6
         const val MAX_SCREENSHOT_DIMENSION = 1600
 
         const val SETTLE_JS = """
@@ -816,6 +981,7 @@ class BrowserSession(private val host: ComponentActivity) {
               var elements = [];
               var frames = [];
               var hasPassword = false;
+              var hasPayment = false;
               var hasCaptcha = false;
               var hasConsent = false;
               function visible(el) {
@@ -896,6 +1062,19 @@ class BrowserSession(private val host: ComponentActivity) {
                       break;
                     }
                   }
+                  var fields = root.querySelectorAll('input');
+                  for (var f = 0; f < fields.length; f++) {
+                    var input = fields[f];
+                    if (!visible(input)) continue;
+                    var auto = (input.getAttribute('autocomplete') || '').toLowerCase();
+                    var hint = ((input.name || '') + ' ' + (input.id || '') + ' ' +
+                      (input.placeholder || '')).toLowerCase();
+                    if (auto.indexOf('cc-') === 0 ||
+                        /(card.?number|cc.?num|cvv|cvc|security.?code|expiry|expiration)/.test(hint)) {
+                      hasPayment = true;
+                      break;
+                    }
+                  }
                 }
                 if (root.querySelector && root.querySelector(
                   '[class*="g-recaptcha"],[id*="captcha"],[class*="h-captcha"],[class*="cf-turnstile"]'
@@ -944,8 +1123,10 @@ class BrowserSession(private val host: ComponentActivity) {
                 frames: frames,
                 scrollY: window.scrollY || 0,
                 scrollHeight: document.documentElement ? document.documentElement.scrollHeight : 0,
-                viewportHeight: window.innerHeight || 0,
+                viewportHeight: (document.documentElement && document.documentElement.clientHeight) ||
+                  window.innerHeight || 0,
                 hasPasswordField: hasPassword,
+                hasPaymentField: hasPayment,
                 hasCaptchaFrame: hasCaptcha,
                 hasConsentBanner: hasConsent
               });

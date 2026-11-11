@@ -133,6 +133,10 @@ class AgentLoopTest {
         val events = loop.run(config, AppMode.CHAT_PLUS, history = history).toList()
 
         assertEquals(AgentEvent.Completed, events.last())
+        assertEquals(
+            1,
+            events.filterIsInstance<AgentEvent.ToolCallFinished>().single().images.size,
+        )
         val second = provider.requests[1]
         val imageMessage = second.messages.lastOrNull { message ->
             message.role == ChatRole.USER &&

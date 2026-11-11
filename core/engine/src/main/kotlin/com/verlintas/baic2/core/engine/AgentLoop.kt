@@ -370,7 +370,13 @@ class AgentLoop(
                         status = status,
                         autoConsent = autoConsent,
                     )
-                    emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
+                    emit(
+                        AgentEvent.ToolCallFinished(
+                            finished,
+                            untrustedResult,
+                            images = (result as? ToolResult.Success)?.images.orEmpty(),
+                        ),
+                    )
                     messages = messages + ChatMessage(
                         role = ChatRole.TOOL,
                         content = modelContent(call, specs[call], result),
@@ -453,7 +459,13 @@ class AgentLoop(
                         status = status,
                         autoConsent = autoConsent,
                     )
-                    emit(AgentEvent.ToolCallFinished(finished, untrustedResult))
+                    emit(
+                        AgentEvent.ToolCallFinished(
+                            finished,
+                            untrustedResult,
+                            images = (result as? ToolResult.Success)?.images.orEmpty(),
+                        ),
+                    )
                     messages = messages + ChatMessage(
                         role = ChatRole.TOOL,
                         content = modelContent(call, spec, result),
